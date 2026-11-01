@@ -237,9 +237,12 @@ public sealed class TimelineBar : FrameworkElement
 
 	// ---------------------------------------------------------------- geometry
 
-	/// <summary>Usable track: one pixel inset at both ends so the playhead at 0 and at Maximum is visible.</summary>
+	/// <summary>
+	/// Usable track: frame 0 on the first pixel column inside the bar's outline, the last frame on the last one
+	/// (columns 1 to width − 2), so the playhead and the brackets at either end stay off the outline.
+	/// </summary>
 	private double TrackLeft => 1.0;
-	private double TrackWidth => Math.Max(1.0, ActualWidth - 2.0);
+	private double TrackWidth => Math.Max(1.0, ActualWidth - 3.0);
 	private double BarTop => LabelRowHeight;
 	private double BarHeight => Math.Max(1.0, ActualHeight - LabelRowHeight);
 
@@ -277,33 +280,38 @@ public sealed class TimelineBar : FrameworkElement
 		Pen pen = PenFor(TickBrush);
 		var bar = new Rect(0.5, BarTop + 0.5, w - 1.0, BarHeight - 1.0);
 		dc.DrawRectangle(Background, pen, bar);
+		// fills and ticks lie on whole pixels inside the outline, whose rectangle runs through the centres of its pixels:
+		// on those half-pixel edges a fill is smeared over one row or column more (2026-11-01, the in point's bracket)
+		var inner = new Rect(1.0, BarTop + 1.0, w - 2.0, BarHeight - 2.0);
 
-		// the frames a run has produced so far, as a band from the start
+		// the frames a run has produced so far, as a band from the start to the newest frame's column
 		if (Available > 0 && Available <= Maximum)
 		{
-			double xa = Math.Round(XOf(Available - 1)) + 0.5;
-			dc.DrawRectangle(AvailableBrush, null, new Rect(bar.Left + 1, bar.Top + 1, Math.Max(0, xa - bar.Left - 1), bar.Height - 2));
+			double xa = Math.Round(XOf(Available - 1)) + 1.0;
+			dc.DrawRectangle(AvailableBrush, null, new Rect(inner.Left, inner.Top, Math.Max(0, xa - inner.Left), inner.Height));
 		}
 
-		// the in/out range: two brackets, plus a translucent band once it is narrower than the run
-		double x0 = Math.Round(XOf(RangeStart)) + 0.5;
-		double x1 = Math.Round(XOf(RangeEnd)) + 0.5;
-		if (x1 > x0 && (RangeStart > 0 || RangeEnd < Maximum))
+		// the in/out range: a translucent band over both points' columns once it is narrower than the run
+		double c0 = Math.Round(XOf(RangeStart));
+		double c1 = Math.Round(XOf(RangeEnd));
+		if (c1 > c0 && (RangeStart > 0 || RangeEnd < Maximum))
 		{
 			dc.PushOpacity(0.25);
-			dc.DrawRectangle(AccentBrush, null, new Rect(x0, bar.Top + 1, x1 - x0, bar.Height - 2));
+			dc.DrawRectangle(AccentBrush, null, new Rect(c0, inner.Top, c1 + 1.0 - c0, inner.Height));
 			dc.Pop();
 		}
-		DrawBracket(dc, x0, bar, open: true);
-		DrawBracket(dc, x1, bar, open: false);
 
 		// ticks and labels, from a cached drawing (2026-10-16): laid out afresh they cost over a millisecond per draw,
 		// and the bar is drawn on every position change, sixty times a second during playback; the drawing is rebuilt
 		// only when the width, the range, the brushes, the culture or the DPI change
 		if (Maximum > 0)
 		{
-			dc.DrawDrawing(TicksDrawing(w, bar, pen));
+			dc.DrawDrawing(TicksDrawing(w, inner, pen));
 		}
+
+		// the brackets over the ticks: a tick on a point's frame (frame 0 always has one) cut a notch into its bracket
+		DrawBracket(dc, c0, inner, open: true);
+		DrawBracket(dc, c1, inner, open: false);
 
 		// the frame under the mouse
 		if (_hoverFrame is int hover && _drag == DragMode.None && hover != Value)
@@ -336,14 +344,17 @@ public sealed class TimelineBar : FrameworkElement
 		}
 	}
 
-	/// <summary>A bracket at x: a 2 px vertical bar with feet pointing into the range.</summary>
-	private void DrawBracket(DrawingContext dc, double x, Rect bar, bool open)
+	/// <summary>
+	/// A bracket on the frame's pixel <paramref name="column"/> (its left edge): a 2 px bar over that column and its
+	/// neighbour inside the range, with 6 px feet 2 px thick pointing into the range, filling <paramref name="inner"/>'s height.
+	/// </summary>
+	private void DrawBracket(DrawingContext dc, double column, Rect inner, bool open)
 	{
-		double foot = open ? 4 : -4;
-		double left = open ? x - 0.5 : x - 1.5;
-		dc.DrawRectangle(AccentBrush, null, new Rect(left, bar.Top, 2, bar.Height));
-		dc.DrawRectangle(AccentBrush, null, new Rect(Math.Min(left, left + foot), bar.Top, Math.Abs(foot) + 2, 2));
-		dc.DrawRectangle(AccentBrush, null, new Rect(Math.Min(left, left + foot), bar.Bottom - 2, Math.Abs(foot) + 2, 2));
+		double left = open ? column : column - 1.0;
+		double feet = open ? left : left - 4.0;
+		dc.DrawRectangle(AccentBrush, null, new Rect(left, inner.Top, 2.0, inner.Height));
+		dc.DrawRectangle(AccentBrush, null, new Rect(feet, inner.Top, 6.0, 2.0));
+		dc.DrawRectangle(AccentBrush, null, new Rect(feet, inner.Bottom - 2.0, 6.0, 2.0));
 	}
 
 	// the labels and pens are cached (2026-10-16): built afresh, a draw of the bar cost 3 ms, mostly FormattedText,
@@ -376,8 +387,11 @@ public sealed class TimelineBar : FrameworkElement
 	private DrawingGroup? _ticks;
 	private (double Width, int Maximum, Brush Tick, Brush Label, string Culture, double Dpi) _ticksKey;
 
-	/// <summary>The minor and major ticks with their labels as one frozen drawing, rebuilt only when its inputs change.</summary>
-	private DrawingGroup TicksDrawing(double w, Rect bar, Pen pen)
+	/// <summary>
+	/// The minor and major ticks (3 and 6 px down from the top of <paramref name="inner"/>, the bar inside its outline)
+	/// with their labels as one frozen drawing, rebuilt only when its inputs change.
+	/// </summary>
+	private DrawingGroup TicksDrawing(double w, Rect inner, Pen pen)
 	{
 		var key = (w, Maximum, TickBrush, LabelBrush, CultureInfo.CurrentCulture.Name, _dpi);
 		if (_ticks != null && key == _ticksKey)
@@ -406,14 +420,14 @@ public sealed class TimelineBar : FrameworkElement
 					if (f % major != 0)
 					{
 						double x = Math.Round(XOf(f)) + 0.5;
-						dc.DrawLine(pen, new Point(x, bar.Top), new Point(x, bar.Top + 3));
+						dc.DrawLine(pen, new Point(x, inner.Top), new Point(x, inner.Top + 3));
 					}
 				}
 			}
 			for (int f = 0; f <= Maximum; f += major)
 			{
 				double x = Math.Round(XOf(f)) + 0.5;
-				dc.DrawLine(pen, new Point(x, bar.Top), new Point(x, bar.Top + 6));
+				dc.DrawLine(pen, new Point(x, inner.Top), new Point(x, inner.Top + 6));
 				FormattedText label = Label(f.ToString(CultureInfo.CurrentCulture), LabelBrush);
 				dc.DrawText(label, new Point(Math.Min(x + 2, w - label.Width - 1), 0));
 			}
