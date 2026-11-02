@@ -230,6 +230,19 @@ public sealed class Settings : INotifyPropertyChanged
 		set => Set(ref _previewDitherBits, value);
 	}
 
+	private double _uiZoom = 1;
+
+	/// <summary>
+	/// The zoom of every window's content (View > UI zoom, 2026-11-02, the user's request): 1 for the monitor's scale,
+	/// 0.5 to 3 from the menu, up to 8 from the start-up switch; applied live by <see cref="Theming.WindowZoom"/>.
+	/// </summary>
+	[XmlAttribute, DefaultValue(1.0)]
+	public double UiZoom
+	{
+		get => _uiZoom;
+		set => Set(ref _uiZoom, Math.Clamp(value, 0.5, 8));
+	}
+
 	private string _lastExportFolder = "";
 
 	/// <summary>The folder of the last export; empty for none.</summary>

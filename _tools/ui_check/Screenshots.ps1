@@ -29,16 +29,24 @@
 # window (parked outside it for the captures, so no hover state gets into a figure).
 #
 #   powershell -ExecutionPolicy Bypass -File _tools\ui_check\Screenshots.ps1 [-Exe <path>] [-Example <wdproj>]
-#       [-Out <folder>] [-Frame <n>] [-PngFolder <folder>]
+#       [-Out <folder>] [-Frame <n>] [-PngFolder <folder>] [-Zoom <factor>]
 #
 # -PngFolder also writes each figure's PNG (without badges) there, for a look at the captures.
+# -Zoom puts the UI zoom setting (View > UI zoom, 2026-11-01, the user's choice) into the figures' settings: the
+# windows' content and size at that scale, so the figures come out at that many times the pixels, as from a monitor
+# at that scale (the title bar excepted, which is Windows' and stays at the monitor's). The pixel constants below
+# (margins, row heights, the badges) scale with it; the SVG keeps its size in CSS pixels and puts the pixels into a
+# scaled view box, which the manual's converter and browsers draw at the 100 % size, crisp on a monitor at the zoom's
+# scale; the PNGs declare their pixel density. The window must fit the screen (nothing off it is composed): on a 4K
+# monitor 1.5 does, 2 does not. 1, the default, leaves every figure as it was.
 
 param(
 	[string]$Exe = (Join-Path $PSScriptRoot "..\..\WaveDudeNext.WPF\bin\Debug\net10.0-windows\WaveDudeNext.WPF.exe"),
-	[string]$Example = "C:\Work\Examples_WDN\Example14_wave_in_2_boxes.wdproj",
+	[string]$Example = (Join-Path $PSScriptRoot "..\..\Examples\Example16_Wave_in_2_boxes.wdproj"),
 	[string]$Out = (Join-Path $PSScriptRoot "..\..\Assets"),
 	[int]$Frame = 1200,
-	[string]$PngFolder = ""
+	[string]$PngFolder = "",
+	[double]$Zoom = 1
 )
 . (Join-Path $PSScriptRoot "Common.ps1")
 
@@ -134,6 +142,8 @@ $script:figureCount = 0
 $script:problems = 0
 
 function Problem([string]$text) { $script:problems++; Write-Output ("PROBLEM  " + $text) }
+# a number for the SVG or the command line, in the invariant culture (a zoomed figure has halves)
+function Inv($x) { return ([double]$x).ToString([Globalization.CultureInfo]::InvariantCulture) }
 function Rect($e) { return $e.Current.BoundingRectangle }
 function Has([string]$id) { try { (Find $id) -ne $null } catch { $false } }
 function Cond([string]$property, $value) { return New-Object System.Windows.Automation.PropertyCondition($A::$property, $value) }
@@ -209,7 +219,11 @@ function Set-FigureSettings([int]$treeHeight, [int]$propertiesHeight, [int]$wind
 	$root.SetAttribute("Language", "en")
 	# the part forms' description open (2026-10-29, the user's choice), so the figure shows the kind's text
 	$root.SetAttribute("PartDescriptionExpanded", "true")
-	foreach ($name in "WindowState", "PreviewResolution", "PreviewFrames", "PreviewSampleBytes", "PreviewDitherBits", "PreviewOrientation") { $root.RemoveAttribute($name) }
+	foreach ($name in "WindowState", "PreviewResolution", "PreviewFrames", "PreviewSampleBytes", "PreviewDitherBits", "PreviewOrientation", "UiZoom") { $root.RemoveAttribute($name) }
+	# the UI zoom setting (View > UI zoom) for a zoomed figure, which takes 16-bit samples too: those pictures are drawn
+	# at the picture's size in device pixels, while the 8-bit default is a bitmap of the store's size that WPF scales
+	# up, soft at a zoom
+	if ($Zoom -ne 1) { $root.SetAttribute("UiZoom", (Inv $Zoom)); $root.SetAttribute("PreviewSampleBytes", "2") }
 	$old = $root.SelectSingleNode("Layout")
 	if ($old -ne $null) { $root.RemoveChild($old) | Out-Null }
 	$layout = $xml.CreateElement("Layout")
@@ -299,26 +313,29 @@ function Row-Hint($row) {
 	}
 	return $hint
 }
+# the badge's centre in the figure's pixels; the radius and the gaps are the app's pixels, so they scale with the zoom
 function Badge-Centre($fig, $item) {
-	$R = $BadgeRadius
+	$R = $BadgeRadius * $Zoom; $gap = 3 * $Zoom
 	$l = $item.Rect.Left - $fig.Left; $t = $item.Rect.Top - $fig.Top; $w = $item.Rect.Width; $h = $item.Rect.Height
 	$cx = $l + $w / 2; $cy = $t + $h / 2
 	switch ($item.Anchor) {
-		"tl" { $cx = $l + $R + 4; $cy = $t + $R + 4 }
-		"corner" { $cx = $l + $w - 2; $cy = $t + 2 }
-		"left" { $cx = $l - $R - 3 }
-		"right" { $cx = $l + $w + $R + 3 }
-		"above" { $cy = $t - $R - 3 }
-		"below" { $cy = $t + $h + $R + 3 }
-		"gutter" { $cx = -$R - 3; $cy = $t + [math]::Min($h, 23) / 2 }
-		"rgutter" { $cx = $fig.Bitmap.Width + $R + 3 }
-		"bottom" { $cy = $fig.Bitmap.Height + $R + 3 }
+		"tl" { $cx = $l + $R + 4 * $Zoom; $cy = $t + $R + 4 * $Zoom }
+		"corner" { $cx = $l + $w - 2 * $Zoom; $cy = $t + 2 * $Zoom }
+		"left" { $cx = $l - $R - $gap }
+		"right" { $cx = $l + $w + $R + $gap }
+		"above" { $cy = $t - $R - $gap }
+		"below" { $cy = $t + $h + $R + $gap }
+		"gutter" { $cx = -$R - $gap; $cy = $t + [math]::Min($h, 23 * $Zoom) / 2 }
+		"rgutter" { $cx = $fig.Bitmap.Width + $R + $gap }
+		"bottom" { $cy = $fig.Bitmap.Height + $R + $gap }
 	}
 	return @([int][math]::Round($cx), [int][math]::Round($cy))
 }
 function Save-Figure($fig) {
-	$R = $BadgeRadius
+	$R = $BadgeRadius * $Zoom
 	$W = $fig.Bitmap.Width; $H = $fig.Bitmap.Height
+	# a zoomed figure's PNG declares its pixel density; at 1 the bitmap is left alone, so the bytes stay the same
+	if ($Zoom -ne 1) { $fig.Bitmap.SetResolution(96 * $Zoom, 96 * $Zoom) }
 	$ms = New-Object System.IO.MemoryStream
 	$fig.Bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
 	$png = $ms.ToArray(); $ms.Dispose()
@@ -331,20 +348,21 @@ function Save-Figure($fig) {
 	foreach ($item in $fig.Items) {
 		$n++
 		$c = Badge-Centre $fig $item
-		$minX = [math]::Min($minX, $c[0] - $R - 2); $minY = [math]::Min($minY, $c[1] - $R - 2)
-		$maxX = [math]::Max($maxX, $c[0] + $R + 2); $maxY = [math]::Max($maxY, $c[1] + $R + 2)
+		$minX = [math]::Min($minX, $c[0] - $R - 2 * $Zoom); $minY = [math]::Min($minY, $c[1] - $R - 2 * $Zoom)
+		$maxX = [math]::Max($maxX, $c[0] + $R + 2 * $Zoom); $maxY = [math]::Max($maxY, $c[1] + $R + 2 * $Zoom)
 		$title = [System.Security.SecurityElement]::Escape($item.Label)
-		$null = $badges.AppendLine(('  <g><title>{0}</title><circle cx="{1}" cy="{2}" r="{3}" fill="#FFC107" stroke="#202020" stroke-width="1"/><text x="{1}" y="{2}" dy=".36em" fill="#000">{4}</text></g>' -f $title, $c[0], $c[1], $R, $n))
+		$null = $badges.AppendLine(('  <g><title>{0}</title><circle cx="{1}" cy="{2}" r="{3}" fill="#FFC107" stroke="#202020" stroke-width="{5}"/><text x="{1}" y="{2}" dy=".36em" fill="#000">{4}</text></g>' -f $title, $c[0], $c[1], (Inv $R), $n, (Inv $Zoom)))
 		# the feature in bold, its description (the tooltip) on the next line of the item
 		$null = $script:legend.AppendLine(("{0}. **{1}**" -f $n, $item.Label) + $(if ($item.Hint -ne "") { "  " } else { "" }))
 		if ($item.Hint -ne "") { $null = $script:legend.AppendLine("   " + $item.Hint) }
 	}
 	$null = $script:legend.AppendLine()
 	$svg = New-Object System.Text.StringBuilder
-	$null = $svg.AppendLine(('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{0}" height="{1}" viewBox="{2} {3} {0} {1}">' -f ($maxX - $minX), ($maxY - $minY), $minX, $minY))
+	# the size in CSS pixels at 100 %, the view box in the figure's pixels: a zoomed figure is drawn at its 100 % size
+	$null = $svg.AppendLine(('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{0}" height="{1}" viewBox="{2} {3} {4} {5}">' -f (Inv (($maxX - $minX) / $Zoom)), (Inv (($maxY - $minY) / $Zoom)), (Inv $minX), (Inv $minY), (Inv ($maxX - $minX)), (Inv ($maxY - $minY))))
 	$null = $svg.AppendLine(('  <image x="0" y="0" width="{0}" height="{1}" xlink:href="data:image/png;base64,{2}"/>' -f $W, $H, [Convert]::ToBase64String($png)))
 	if ($n -gt 0) {
-		$null = $svg.AppendLine('  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">')
+		$null = $svg.AppendLine(('  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="{0}" font-weight="bold" text-anchor="middle">' -f (Inv (11 * $Zoom))))
 		$null = $svg.Append($badges.ToString()).AppendLine('  </g>')
 	}
 	$null = $svg.AppendLine('</svg>')
@@ -354,12 +372,12 @@ function Save-Figure($fig) {
 	Write-Output ("figure {0}: {1}x{2}, {3} badges" -f $fig.Name, $W, $H, $n)
 }
 
-# the dock group holding a pane: the title bar row (21 px) above the pane's content, inside a 1 px border
+# the dock group holding a pane: the title bar row (21 px at zoom 1) above the pane's content, inside a 1 px border
 function Pane-Rect([string]$paneId, [string]$contentClass) {
 	$title = Rect (Find ("DockTitle:" + $paneId))
 	$content = Rect (FindByClass $contentClass)
-	$top = $title.Top + $title.Height / 2 - 11.5
-	return @(($content.Left - 1), $top, ($content.Right + 1), ($content.Bottom + 1))
+	$top = $title.Top + $title.Height / 2 - 11.5 * $Zoom
+	return @(($content.Left - $Zoom), $top, ($content.Right + $Zoom), ($content.Bottom + $Zoom))
 }
 
 # an English string of the app, by its key in the string table (for elements a harness finds by name)
@@ -407,13 +425,13 @@ function Properties-Figure([string]$name, [string]$title, $extras = @(), [string
 	# a section heading is a Label, whose text is a TextBlock inside it (its parent in the control view is the Label);
 	# a hint paragraph wraps, so a row is a single line
 	$walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
-	$rows = @($all | Where-Object { ($_.Current.ClassName -eq "TextBlock" -or $_.Current.ClassName -eq "CheckBox") -and [math]::Abs($_.Current.BoundingRectangle.Left - $column) -le 2 -and $_.Current.BoundingRectangle.Height -le 24 -and $walker.GetParent($_).Current.ControlType -ne $CT::Text } | Sort-Object { $_.Current.BoundingRectangle.Top })
+	$rows = @($all | Where-Object { ($_.Current.ClassName -eq "TextBlock" -or $_.Current.ClassName -eq "CheckBox") -and [math]::Abs($_.Current.BoundingRectangle.Left - $column) -le 2 * $Zoom -and $_.Current.BoundingRectangle.Height -le 24 * $Zoom -and $walker.GetParent($_).Current.ControlType -ne $CT::Text } | Sort-Object { $_.Current.BoundingRectangle.Top })
 	$offscreen = @($rows | Where-Object { $_.Current.IsOffscreen })
 	if ($offscreen.Count -gt 0) { Problem ("{0}: {1} rows lie outside the pane (form taller than the pane)" -f $name, $offscreen.Count) }
 	$rect = Pane-Rect "properties" "PropertiesPane"
 	$top = $rect[1]
 	# cropped below the form's last control (the containers span the pane; the form's margin is 8 px)
-	$bottom = ($all | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.ControlType -ne $CT::Pane -and $_.Current.ControlType -ne $CT::Custom -and $_.Current.ControlType -ne $CT::Group } | ForEach-Object { $_.Current.BoundingRectangle.Bottom } | Measure-Object -Maximum).Maximum + 9
+	$bottom = ($all | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.ControlType -ne $CT::Pane -and $_.Current.ControlType -ne $CT::Custom -and $_.Current.ControlType -ne $CT::Group } | ForEach-Object { $_.Current.BoundingRectangle.Bottom } | Measure-Object -Maximum).Maximum + 9 * $Zoom
 	if ($fromRow -ne "" -or $toRow -ne "") {
 		$names = @($rows | ForEach-Object { $_.Current.Name })
 		$first = if ($fromRow -ne "") { [array]::IndexOf($names, $fromRow) } else { 0 }
@@ -422,15 +440,15 @@ function Properties-Figure([string]$name, [string]$title, $extras = @(), [string
 		$rows = @($rows[$first..$last])
 		# down to the last row's editor (the next sibling in the control view, when it lies on the row's line)
 		$lastRect = Rect $rows[$rows.Count - 1]
-		$bottom = $lastRect.Bottom + 6
+		$bottom = $lastRect.Bottom + 6 * $Zoom
 		$editor = $walker.GetNextSibling($rows[$rows.Count - 1])
-		if ($editor -ne $null -and (Rect $editor).Top -lt $lastRect.Bottom) { $bottom = [math]::Max($bottom, (Rect $editor).Bottom + 6) }
+		if ($editor -ne $null -and (Rect $editor).Top -lt $lastRect.Bottom) { $bottom = [math]::Max($bottom, (Rect $editor).Bottom + 6 * $Zoom) }
 		if ($heading -ne "") {
 			$label = Find-InPane $pane ("key:" + $heading)
 			if ($label -eq $null) { Problem ("{0}: the section heading '{1}' was not found" -f $name, $heading); return }
-			$top = (Rect $label).Top - 6
+			$top = (Rect $label).Top - 6 * $Zoom
 		}
-		elseif ($fromRow -ne "") { $top = (Rect $rows[0]).Top - 6 }
+		elseif ($fromRow -ne "") { $top = (Rect $rows[0]).Top - 6 * $Zoom }
 	}
 	$capture = Capture-Window
 	$fig = Crop-Figure $name $title $capture $rect[0] $top $rect[2] ([math]::Min($rect[3], $bottom)) $start
@@ -481,14 +499,14 @@ function Menu-Figure([string]$name, [string]$title, [scriptblock]$hintOf = $null
 	# the crop: from the menu bar down to the popups, or from a popup's top when it opened upward (a context menu
 	# near the top of the window, 2026-10-29)
 	$bar = Rect @(ByType $script:win "Menu")[0]
-	$top = $bar.Top - 1; $right = $bar.Left + 260; $bottom = 0
+	$top = $bar.Top - $Zoom; $right = $bar.Left + 260 * $Zoom; $bottom = 0
 	foreach ($popup in $popups) {
 		$shot = Capture-Popup $popup
 		if ($shot.FromScreen) { Write-Output ("note: popup of {0} read from the screen" -f $name) }
 		[Shot]::Paste($capture.Bitmap, $shot.Bitmap, ($shot.Left - $capture.Left), ($shot.Top - $capture.Top))
 		$shot.Bitmap.Dispose()
 		$pr = Rect $popup
-		$top = [math]::Min($top, $pr.Top - 12); $right = [math]::Max($right, $pr.Right + 12); $bottom = [math]::Max($bottom, $pr.Bottom + 12)
+		$top = [math]::Min($top, $pr.Top - 12 * $Zoom); $right = [math]::Max($right, $pr.Right + 12 * $Zoom); $bottom = [math]::Max($bottom, $pr.Bottom + 12 * $Zoom)
 	}
 	$fig = Crop-Figure $name $title $capture $capture.Left $top $right $bottom
 	$capture.Bitmap.Dispose()
@@ -526,6 +544,7 @@ try {
 
 		$capture = Capture-Window
 		# the README's picture (2026-10-30, the user's request): the same capture as a plain PNG, without badges
+		if ($Zoom -ne 1) { $capture.Bitmap.SetResolution(96 * $Zoom, 96 * $Zoom) }
 		$capture.Bitmap.Save((Join-Path $Out "main-window.png"), [System.Drawing.Imaging.ImageFormat]::Png)
 		$fig = New-Figure "main-window" "The main window with the example project at frame $Frame." $capture.Bitmap $capture.Left $capture.Top
 		$headers = @(ByType @(ByType $script:win "Menu")[0] "MenuItem")
@@ -545,7 +564,7 @@ try {
 		$rect = Pane-Rect "project" "ProjectTree"
 		# cropped below the last row (the root row's rectangle spans every row)
 		$lastRow = (ByType (ByType $script:win "Tree")[0] "TreeItem" | ForEach-Object { $_.Current.BoundingRectangle.Bottom } | Measure-Object -Maximum).Maximum
-		$fig = Crop-Figure "project-tree" "The Project pane with the example project." $capture $rect[0] $rect[1] $rect[2] ([math]::Min($rect[3], $lastRow + 9))
+		$fig = Crop-Figure "project-tree" "The Project pane with the example project." $capture $rect[0] $rect[1] $rect[2] ([math]::Min($rect[3], $lastRow + 9 * $Zoom))
 		$capture.Bitmap.Dispose()
 		Add-BadgeFor $fig "DockTitle:project" "right" "Pane title"
 		Add-BadgeFor $fig "ToolAddSource" "corner" "Add a source"
@@ -564,7 +583,7 @@ try {
 		$group = Find "Tree:TreeSources"
 		$groupTop = (Rect $group).Top
 		# the group row's own buttons lie on its first line: the expander at the left, the plus at the right
-		$groupButtons = @(ByType $group "Button" | Where-Object { $_.Current.BoundingRectangle.Top -lt $groupTop + 23 } | Sort-Object { $_.Current.BoundingRectangle.Left })
+		$groupButtons = @(ByType $group "Button" | Where-Object { $_.Current.BoundingRectangle.Top -lt $groupTop + 23 * $Zoom } | Sort-Object { $_.Current.BoundingRectangle.Left })
 		if ($groupButtons.Count -ge 2) {
 			Add-Badge $fig (Rect $groupButtons[0]) "on" "Expand or collapse a group" $groupButtons[0].Current.HelpText
 			Add-Badge $fig (Rect $groupButtons[$groupButtons.Count - 1]) "on" "Add to this group" $groupButtons[$groupButtons.Count - 1].Current.HelpText
@@ -589,9 +608,9 @@ try {
 		$capture = Capture-Window
 		$fieldImage = Rect (Find "PreviewFieldImage"); $intensityImage = Rect (Find "PreviewIntensityImage")
 		$fieldStrip = Rect (Find "PreviewFieldImageBrightness"); $intensityStrip = Rect (Find "PreviewIntensityImageBrightness")
-		$left = [math]::Min($fieldStrip.Left, $intensityStrip.Left) - 6
-		$top = [math]::Min($fieldImage.Top, $fieldStrip.Top) - 10
-		$fig = Crop-Figure "preview" "The preview: field and intensity pictures of the example project at frame $Frame." $capture $left $top ($fieldImage.Right + 8) ($intensityImage.Bottom + 8)
+		$left = [math]::Min($fieldStrip.Left, $intensityStrip.Left) - 6 * $Zoom
+		$top = [math]::Min($fieldImage.Top, $fieldStrip.Top) - 10 * $Zoom
+		$fig = Crop-Figure "preview" "The preview: field and intensity pictures of the example project at frame $Frame." $capture $left $top ($fieldImage.Right + 8 * $Zoom) ($intensityImage.Bottom + 8 * $Zoom)
 		$capture.Bitmap.Dispose()
 		Add-BadgeFor $fig "PreviewFieldImage" "tl" "Field picture"
 		Add-BadgeFor $fig "PreviewFieldImageBrightness" "on" "Brightness of the field picture"
@@ -615,7 +634,7 @@ try {
 		# the timeline and the transport row
 		$capture = Capture-Window
 		$timeline = Rect (Find "PreviewTimeline"); $run = Rect (Find "PreviewRun"); $stacked = Rect (Find "PreviewStacked")
-		$fig = Crop-Figure "timeline" "The timeline with the playhead and the in and out points, and the transport controls." $capture ($run.Left - 6) ($timeline.Top - 22) ($stacked.Right + 6) ($run.Bottom + 5)
+		$fig = Crop-Figure "timeline" "The timeline with the playhead and the in and out points, and the transport controls." $capture ($run.Left - 6 * $Zoom) ($timeline.Top - 22 * $Zoom) ($stacked.Right + 6 * $Zoom) ($run.Bottom + 5 * $Zoom)
 		$capture.Bitmap.Dispose()
 		# the playhead and the brackets, placed by the bar's own mapping: a one-pixel inset at both ends, then
 		# frame × track width / maximum; the bar reports the playhead and the maximum through its range value and the
@@ -628,8 +647,8 @@ try {
 		if ($bar.Current.ItemStatus -match "^range (\d+)\.\.(\d+)$") { $null = $marks.Add(@("In point", [int]$Matches[1])); $null = $marks.Add(@("Out point", [int]$Matches[2])) }
 		else { Problem "the timeline reports no in/out range" }
 		foreach ($mark in $marks) {
-			$x = $timeline.Left + 1 + $mark[1] * ($timeline.Width - 2) / $maximum
-			Add-Badge $fig (New-Object System.Windows.Rect(($x - 1), $timeline.Top, 2, $timeline.Height)) "above" $mark[0]
+			$x = $timeline.Left + $Zoom + $mark[1] * ($timeline.Width - 2 * $Zoom) / $maximum
+			Add-Badge $fig (New-Object System.Windows.Rect(($x - $Zoom), $timeline.Top, (2 * $Zoom), $timeline.Height)) "above" $mark[0]
 		}
 		foreach ($pair in @(
 			@("PreviewRun", "Run the simulation"), @("PreviewPlay", "Play"), @("PreviewPause", "Pause"),

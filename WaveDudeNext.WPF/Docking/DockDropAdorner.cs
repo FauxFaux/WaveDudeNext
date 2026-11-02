@@ -158,7 +158,7 @@ internal sealed class DockDropAdorner : Adorner
 		}
 
 		var text = new FormattedText(_title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-			new Typeface("Segoe UI"), 12, glyph, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+			new Typeface("Segoe UI"), 12, glyph, DevicePixels.PerDip(this));
 		var ghost = new Rect(_mouse.X + 14, _mouse.Y + 14, text.Width + 16, text.Height + 6);
 		dc.DrawRoundedRectangle(indicatorBackground, new Pen(indicatorBorder, 1), ghost, 2, 2);
 		dc.DrawText(text, new Point(ghost.X + 8, ghost.Y + 3));

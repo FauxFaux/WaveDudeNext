@@ -72,6 +72,7 @@ public partial class App : Application
 	/// </summary>
 	public static string LogFile { get; private set; } = Path.Combine(ExecutableDirectory, LogFileName);
 
+
 	/// <summary>
 	/// Replaces the NLog configuration with the application's targets: a rolling file next to
 	/// the executable (everything in Debug builds, Info and up in Release), plus the debugger
@@ -230,9 +231,16 @@ public partial class App : Application
 		};
 		LanguageController.Instance.Refresh();
 
+		string? file = ReadArguments(e.Args);
+		WindowZoom.Install();
 		var window = new MainWindow();
 		MainWindow = window;
 		window.Show();
+		if (PresentationSource.FromVisual(window)?.CompositionTarget is { } target)
+		{
+			// the facts a report's picture depends on (the process is DPI aware per monitor, 2026-11-02)
+			Logger.Info("Display scale {Percent} %, UI zoom {Zoom}", Math.Round(target.TransformToDevice.M11 * 100), Settings.Default.UiZoom);
+		}
 		// the last start-up line, and so the status bar's first text unless this is a first start or a file is opened below
 		Logger.Info("{Title} {Version} ready", FindResource("Title"), Assembly.GetExecutingAssembly().GetName().Version?.ToString(3));
 		if (firstStart is { } first)
@@ -242,13 +250,52 @@ public partial class App : Application
 				first.Facts.CacheDriveSeekPenalty switch { true => "with a seek penalty (a hard disk)", false => "without a seek penalty", null => "of unknown kind" },
 				PreviewDefaults.Describe(first.Tier));
 		}
-		if (e.Args.Length > 0)
+		if (file != null)
 		{
 			// launched with a project file (double-click, "open with", command line); after
 			// Show so that an error box has the main window behind it
-			Logger.Info("Startup arguments: {Args}", string.Join(" ", e.Args));
-			window.OpenFile(e.Args[0]);
+			window.OpenFile(file);
 		}
+	}
+
+	/// <summary>
+	/// Reads the start-up arguments: the switches are applied (<c>--zoom=&lt;factor&gt;</c> sets the UI zoom setting,
+	/// <see cref="Settings.UiZoom"/>, as the View menu does, 0.5 to 8 with a decimal point, 2026-11-01, the user's
+	/// request for the figure harness; an unknown switch is logged and ignored), and the first other argument is the
+	/// project file to open, returned, or null.
+	/// </summary>
+	private static string? ReadArguments(string[] args)
+	{
+		if (args.Length > 0)
+		{
+			Logger.Info("Startup arguments: {Args}", string.Join(" ", args));
+		}
+		string? file = null;
+		foreach (string arg in args)
+		{
+			const string zoomSwitch = "--zoom=";
+			if (arg.StartsWith(zoomSwitch, StringComparison.OrdinalIgnoreCase))
+			{
+				if (double.TryParse(arg.AsSpan(zoomSwitch.Length), NumberStyles.Float, CultureInfo.InvariantCulture, out double zoom) && zoom is >= 0.5 and <= 8)
+				{
+					Settings.Default.UiZoom = zoom;
+					Logger.Info("UI zoom {Zoom} ({Switch}): the setting, kept for the next start too", zoom, arg);
+				}
+				else
+				{
+					Logger.Warn("The start-up switch {Switch} is ignored: the zoom must be a number from 0.5 to 8", arg);
+				}
+			}
+			else if (arg.StartsWith("--", StringComparison.Ordinal))
+			{
+				Logger.Warn("The start-up switch {Switch} is unknown and ignored", arg);
+			}
+			else
+			{
+				file ??= arg;
+			}
+		}
+		return file;
 	}
 
 	/// <summary>

@@ -33,8 +33,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
         xmlns:runs="clr-namespace:WaveDudeNext.Runs;assembly=WaveDudeNext"
         Icon="App.ico"
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
-        Width="{Binding Source={x:Static p:Settings.Default}, Path=WindowWidth, Mode=TwoWay}"
-        Height="{Binding Source={x:Static p:Settings.Default}, Path=WindowHeight, Mode=TwoWay}"
+        Width="{Binding Source={x:Static p:Settings.Default}, Path=WindowWidth, Mode=TwoWay, Converter={x:Static converters:ZoomConverter.Instance}}"
+        Height="{Binding Source={x:Static p:Settings.Default}, Path=WindowHeight, Mode=TwoWay, Converter={x:Static converters:ZoomConverter.Instance}}"
         Left="{Binding Source={x:Static p:Settings.Default}, Path=WindowLeft, Mode=TwoWay}"
         Top="{Binding Source={x:Static p:Settings.Default}, Path=WindowTop, Mode=TwoWay}"
         WindowState="{Binding Source={x:Static p:Settings.Default}, Path=WindowState, Mode=TwoWay}"
@@ -52,6 +52,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 		<converters:EqualityConverter x:Key="Equality" />
 		<converters:FrameMemoryOptionConverter x:Key="FrameMemoryOption" />
 		<converters:IntEqualsConverter x:Key="IntEquals" />
+		<converters:DoubleEqualsConverter x:Key="DoubleEquals" />
 		<converters:TitleConverter x:Key="TitleConverter" />
 		<converters:RunStatusConverter x:Key="RunStatus" />
 
@@ -199,6 +200,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 		<CommandBinding Command="{x:Static commands:ViewCommands.SetPreviewResolution}" Executed="OnSetPreviewResolution" />
 		<CommandBinding Command="{x:Static commands:ViewCommands.SetPreviewFrames}" Executed="OnSetPreviewFrames" />
 		<CommandBinding Command="{x:Static commands:ViewCommands.SetPreviewSamples}" Executed="OnSetPreviewSamples" />
+		<CommandBinding Command="{x:Static commands:ViewCommands.SetUiZoom}" Executed="OnSetUiZoom" />
 		<CommandBinding Command="{x:Static commands:ViewCommands.SetPreviewDither}" Executed="OnSetPreviewDither" />
 		<!-- the pictures' Auto brightness; handler in MainWindow.Display.cs -->
 		<CommandBinding Command="{x:Static commands:DisplayCommands.AutoBrightness}" CanExecute="CanAutoBrightness" Executed="OnAutoBrightness" />
@@ -288,6 +290,34 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 				<MenuItem x:Name="themeMenu" Header="{DynamicResource MenuViewTheme}" controls:MenuIcon.Glyph="&#xE790;"
 				          ItemsSource="{Binding Options, Source={x:Static theming:ThemeController.Instance}}"
 				          ItemContainerStyle="{StaticResource ThemeMenuItemStyle}" />
+				<!-- the UI zoom (2026-11-02, the user's request): every window's content at the factor, a user setting applied
+				     live (WindowZoom); the parameter is the factor with a decimal point -->
+				<MenuItem Header="{DynamicResource MenuViewUiZoom}" controls:MenuIcon.Glyph="&#xE8A3;" AutomationProperties.AutomationId="MenuUiZoom">
+					<MenuItem Header="{DynamicResource MenuViewUiZoom50}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="0.5"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=0.5, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom50" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom75}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="0.75"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=0.75, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom75" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom100}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="1"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=1, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom100" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom125}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="1.25"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=1.25, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom125" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom150}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="1.5"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=1.5, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom150" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom200}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="2"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=2, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom200" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom250}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="2.5"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=2.5, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom250" />
+					<MenuItem Header="{DynamicResource MenuViewUiZoom300}" Command="{x:Static commands:ViewCommands.SetUiZoom}" CommandParameter="3"
+					          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource DoubleEquals}, ConverterParameter=3, Mode=OneWay}"
+					          AutomationProperties.AutomationId="MenuUiZoom300" />
+				</MenuItem>
 				<MenuItem Header="{DynamicResource MenuViewLanguage}"
 				          ItemsSource="{Binding Options, Source={x:Static localization:LanguageController.Instance}}"
 				          ItemContainerStyle="{StaticResource LanguageMenuItemStyle}" controls:MenuIcon.Glyph="&#xE774;" />

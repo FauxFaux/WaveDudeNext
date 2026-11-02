@@ -276,7 +276,7 @@ public sealed class TimelineBar : FrameworkElement
 		{
 			return;
 		}
-		_dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip; // once per draw, not per label
+		_dpi = DevicePixels.PerDip(this); // once per draw, not per label
 		Pen pen = PenFor(TickBrush);
 		var bar = new Rect(0.5, BarTop + 0.5, w - 1.0, BarHeight - 1.0);
 		dc.DrawRectangle(Background, pen, bar);

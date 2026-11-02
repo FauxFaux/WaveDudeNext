@@ -208,11 +208,12 @@ The View menu. Its settings belong to the program, not to the project, and are k
 
 1. **Panes**: Shows or hides the Project, Properties, Preview and Messages panes. The Messages pane lists the program's log with a search box, a filter per level and Copy for a bug report.
 2. **Theme**: System, Light or Dark; System follows Windows.
-3. **Language**: System, English, Deutsch, Français or Nederlands; the program switches at once.
-4. **Preview resolution**: Full, Half or Quarter: the preview's run computes the canvas at a reduced size, faster and with less memory, for a weaker machine. An export always uses the full size.
-5. **Preview frames**: Full, every second or every fourth frame kept by the preview's run; the timeline does not change.
-6. **Preview samples**: 16-bit float keeps the full values, so the brightness can be changed after a run and every level of a gradient shows; 8-bit palette index stores each pixel as its colour at the brightness of the run's start, half the memory, and a brightness change then needs a new run, which starts by itself.
-7. **Preview dithering**: With 16-bit samples, the pictures can be dithered as if the screen had 10, 12, 14 or 16 bits per channel, which hides the banding of dark gradients; on screen only, never in an export. Off by default, except on a machine with plenty of memory (see below).
+3. **UI zoom**: 0.5x to 3x: the size of the program's windows, menus and text, for a large or a very sharp screen; 1x is the screen's own scale. It applies at once and is kept. The preview pictures keep the screen's pixels at any zoom.
+4. **Language**: System, English, Deutsch, Français or Nederlands; the program switches at once.
+5. **Preview resolution**: Full, Half or Quarter: the preview's run computes the canvas at a reduced size, faster and with less memory, for a weaker machine. An export always uses the full size.
+6. **Preview frames**: Full, every second or every fourth frame kept by the preview's run; the timeline does not change.
+7. **Preview samples**: 16-bit float keeps the full values, so the brightness can be changed after a run and every level of a gradient shows; 8-bit palette index stores each pixel as its colour at the brightness of the run's start, half the memory, and a brightness change then needs a new run, which starts by itself.
+8. **Preview dithering**: With 16-bit samples, the pictures can be dithered as if the screen had 10, 12, 14 or 16 bits per channel, which hides the banding of dark gradients; on screen only, never in an export. Off by default, except on a machine with plenty of memory (see below).
 
 On its first start the program chooses the preview resolution, the preview frames, the preview samples and the dithering for the machine it runs on, once, and the View menu shows the choice. A machine with 32 GB of memory or more starts with 16-bit samples, dithered to 16 bits. A machine with less than 16 GB, with a hard disk under the cache file, without an OpenCL graphics card or with four processor threads or fewer starts at half resolution with every second frame and 8-bit samples. Every other machine starts at full resolution with every frame and 8-bit samples. Each setting can be changed here at any time.
 

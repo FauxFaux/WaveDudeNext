@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-License-Identifier: GPL-3.0-or-later
+Copyright (C) 2026 Alexander Graef <alex@graef.cc>
+
+This file is part of WaveDude Next, a 2D wave simulator.
+
+Based on the work of
+  Jeroen Vleggaar (Huygens Optics), author of Wave Dude 2D, Copyright (C) 2026
+    <https://www.youtube.com/@HuygensOptics>, <https://www.huygensoptics.com>
+  0x23 (Diffraction Limited), author of WaveSimulator2D
+    <https://www.youtube.com/@DiffractionLimited>, <https://github.com/0x23/WaveSimulator2D>
+
+WaveDude Next is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
+<https://www.gnu.org/licenses/>.
+-->
+
+<!-- The process is DPI aware per monitor (2026-11-02, the user's choice): each window renders at the scale of the monitor
+     it is on and rescales when dragged to another, the title bar included (version 2), instead of Windows stretching its
+     bitmap; and WPF then gives every new visual its parent's DPI, which the UI zoom (WindowZoom) relies on for whole
+     pixels at any factor. The older dpiAware entry is for Windows before 1703. -->
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="WaveDudeNext.WPF" />
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

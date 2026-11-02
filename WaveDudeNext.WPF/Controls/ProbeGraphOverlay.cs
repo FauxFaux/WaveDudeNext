@@ -402,7 +402,7 @@ public sealed class ProbeGraphOverlay : Panel
 		{
 			return;
 		}
-		double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+		double pixelsPerDip = DevicePixels.PerDip(this);
 		ProbeGraphStyle style = StyleFor(pixelsPerDip);
 		object? selected = SelectedItem;
 		// the selected box last, so it lies over any box it overlaps (the user's rule, 2026-10-18)

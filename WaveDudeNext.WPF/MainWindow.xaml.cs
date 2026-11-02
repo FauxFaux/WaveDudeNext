@@ -119,6 +119,10 @@ public partial class MainWindow : Window
 			{
 				Logger.Info("Preview dithering {State} (View menu)", Settings.Default.PreviewDitherBits == 0 ? "off" : "from " + Settings.Default.PreviewDitherBits + " bits per channel");
 			}
+			else if (args.PropertyName == nameof(Settings.UiZoom))
+			{
+				Logger.Info("UI zoom {Zoom} (View menu)", Settings.Default.UiZoom);
+			}
 		};
 		Closing += (_, e) =>
 		{
@@ -405,6 +409,16 @@ public partial class MainWindow : Window
 
 	/// <summary>View > Preview dithering: the bits per channel the 16-bit pictures are dithered from (0 none, 10, 12, 14, 16); the pictures redraw.</summary>
 	private void OnSetPreviewDither(object sender, ExecutedRoutedEventArgs e) => SetIntSetting(e, bits => Settings.Default.PreviewDitherBits = bits);
+
+	/// <summary>View > UI zoom: the factor of every window's content, from the parameter as text with a decimal point (0.5 to 3); applied live by WindowZoom.</summary>
+	private void OnSetUiZoom(object sender, ExecutedRoutedEventArgs e)
+	{
+		if (e.Parameter is string text && double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double factor))
+		{
+			Settings.Default.UiZoom = factor;
+			SaveSettings();
+		}
+	}
 
 	/// <summary>A menu choice carried as a number in the command parameter (an int, or digits as text): stores it and saves the settings.</summary>
 	private static void SetIntSetting(ExecutedRoutedEventArgs e, Action<int> apply)

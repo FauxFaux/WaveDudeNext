@@ -66,6 +66,15 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="WavelengthNominal">(nominale)</s:String>
 	<s:String x:Key="ImageUnreadable">(illisible)</s:String>
 	<s:String x:Key="MenuViewTheme">_Thème</s:String>
+	<s:String x:Key="MenuViewUiZoom">_Zoom de l'interface</s:String>
+	<s:String x:Key="MenuViewUiZoom50">0,5x</s:String>
+	<s:String x:Key="MenuViewUiZoom75">0,75x</s:String>
+	<s:String x:Key="MenuViewUiZoom100">1x</s:String>
+	<s:String x:Key="MenuViewUiZoom125">1,25x</s:String>
+	<s:String x:Key="MenuViewUiZoom150">1,5x</s:String>
+	<s:String x:Key="MenuViewUiZoom200">2x</s:String>
+	<s:String x:Key="MenuViewUiZoom250">2,5x</s:String>
+	<s:String x:Key="MenuViewUiZoom300">3x</s:String>
 	<s:String x:Key="MenuViewLanguage">_Langue</s:String>
 	<s:String x:Key="MenuViewResolution">_Résolution de l'aperçu</s:String>
 	<s:String x:Key="MenuViewResolutionFull">_Complète</s:String>

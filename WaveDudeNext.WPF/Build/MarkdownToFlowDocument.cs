@@ -782,7 +782,8 @@ public class MarkdownToFlowDocument : Task
 		return image;
 	}
 
-	// a figure: the picture scaled down to the column when it is wider, never up, its pixels whole while it fits
+	// a figure: the picture scaled down to the column when it is wider, never up, its pixels whole while it fits (a
+	// zoomed figure's at its 100 % size, see SvgReader)
 	private void RenderFigure(Node image, int line, StringBuilder sb)
 	{
 		string body = FigureBody(image.Text, line);
@@ -892,7 +893,10 @@ public class MarkdownToFlowDocument : Task
 
 	/// <summary>
 	/// Draws one SVG as a WPF Canvas: images, circles, texts and groups, a group's title its tooltip, the view box's
-	/// origin at the canvas's corner. Anything else fails the figure with an error naming it.
+	/// origin at the canvas's corner, and a view box scaled to the SVG's size drawn at that scale (the harness's figures
+	/// at a zoom, 2026-11-01: the pixels in the box, the size in CSS pixels, so the figure keeps its place on the page
+	/// and its pixels show one to one on a monitor at the zoom's scale). Anything else fails the figure with an error
+	/// naming it.
 	/// </summary>
 	private sealed class SvgReader
 	{
@@ -902,6 +906,8 @@ public class MarkdownToFlowDocument : Task
 		private readonly int _line;
 		private double _left;
 		private double _top;
+		/// <summary>Device-independent pixels per unit of the view box: 1, or a half for a figure at zoom 2.</summary>
+		private double _unit = 1;
 		private int _images;
 
 		public SvgReader(MarkdownToFlowDocument task, string path, string name, int line)
@@ -958,9 +964,15 @@ public class MarkdownToFlowDocument : Task
 				Fail(root, "it has neither a size nor a viewBox");
 				return null;
 			}
-			if (Math.Abs(boxWidth - width) > 1e-6 || Math.Abs(boxHeight - height) > 1e-6)
+			if (boxWidth <= 0 || boxHeight <= 0)
 			{
-				Fail(root, "its viewBox is scaled to another size, which the converter does not draw");
+				Fail(root, "its viewBox is empty");
+				return null;
+			}
+			_unit = width / boxWidth;
+			if (Math.Abs(height / boxHeight - _unit) > 1e-6)
+			{
+				Fail(root, "its viewBox is scaled to another aspect, which the converter does not draw");
 				return null;
 			}
 			var sb = new StringBuilder();
@@ -1048,8 +1060,8 @@ public class MarkdownToFlowDocument : Task
 			double strokeWidth = stroke == null ? 0 : Number(circle, "stroke-width", 1);
 			string ink = Paint(text, own.Fill ?? "black");
 			// the Border's edge, like SVG's stroke, is centred on the radius: the box grows by the stroke
-			double box = 2 * r + strokeWidth;
-			sb.Append("<Border Canvas.Left=\"" + N(cx - box / 2 - _left) + "\" Canvas.Top=\"" + N(cy - box / 2 - _top) + "\" Width=\"" + N(box) + "\" Height=\"" + N(box)
+			double box = (2 * r + strokeWidth) * _unit;
+			sb.Append("<Border Canvas.Left=\"" + N((cx - _left) * _unit - box / 2) + "\" Canvas.Top=\"" + N((cy - _top) * _unit - box / 2) + "\" Width=\"" + N(box) + "\" Height=\"" + N(box)
 				+ "\" CornerRadius=\"" + N(box / 2) + "\"");
 			if (fill != null)
 			{
@@ -1057,7 +1069,7 @@ public class MarkdownToFlowDocument : Task
 			}
 			if (stroke != null)
 			{
-				sb.Append(" BorderBrush=\"" + Escape(stroke) + "\" BorderThickness=\"" + N(strokeWidth) + "\"");
+				sb.Append(" BorderBrush=\"" + Escape(stroke) + "\" BorderThickness=\"" + N(strokeWidth * _unit) + "\"");
 			}
 			if (tip != null)
 			{
@@ -1068,7 +1080,7 @@ public class MarkdownToFlowDocument : Task
 			{
 				sb.Append(" FontFamily=\"" + Escape(own.FontFamily) + "\"");
 			}
-			sb.Append(" FontSize=\"" + N(own.FontSize) + "\"");
+			sb.Append(" FontSize=\"" + N(own.FontSize * _unit) + "\"");
 			if (own.FontWeight != null)
 			{
 				sb.Append(" FontWeight=\"" + own.FontWeight + "\"");
@@ -1123,7 +1135,7 @@ public class MarkdownToFlowDocument : Task
 			_images++;
 			string name = _images == 1 ? _name : _name + "-" + _images.ToString(CultureInfo.InvariantCulture);
 			string file = _task.WriteFigure(_path + "#" + _images.ToString(CultureInfo.InvariantCulture), name, match.Groups[1].Value == "png" ? ".png" : ".jpg", bytes);
-			sb.AppendLine("<Image Canvas.Left=\"" + N(x - _left) + "\" Canvas.Top=\"" + N(y - _top) + "\" Width=\"" + N(width) + "\" Height=\"" + N(height)
+			sb.AppendLine("<Image Canvas.Left=\"" + N((x - _left) * _unit) + "\" Canvas.Top=\"" + N((y - _top) * _unit) + "\" Width=\"" + N(width * _unit) + "\" Height=\"" + N(height * _unit)
 				+ "\" Stretch=\"Fill\" RenderOptions.BitmapScalingMode=\"HighQuality\" Source=\"" + Escape(_task.FigureUri + file) + "\" />");
 		}
 
@@ -1135,15 +1147,15 @@ public class MarkdownToFlowDocument : Task
 			string fill = Paint(e, (string)e.Attribute("fill") ?? style.Fill ?? "black");
 			string stroke = Paint(e, (string)e.Attribute("stroke") ?? "none");
 			double strokeWidth = stroke == null ? 0 : Number(e, "stroke-width", 1);
-			double size = 2 * r + strokeWidth;
-			sb.Append("<Ellipse Canvas.Left=\"" + N(cx - size / 2 - _left) + "\" Canvas.Top=\"" + N(cy - size / 2 - _top) + "\" Width=\"" + N(size) + "\" Height=\"" + N(size) + "\"");
+			double size = (2 * r + strokeWidth) * _unit;
+			sb.Append("<Ellipse Canvas.Left=\"" + N((cx - _left) * _unit - size / 2) + "\" Canvas.Top=\"" + N((cy - _top) * _unit - size / 2) + "\" Width=\"" + N(size) + "\" Height=\"" + N(size) + "\"");
 			if (fill != null)
 			{
 				sb.Append(" Fill=\"" + Escape(fill) + "\"");
 			}
 			if (stroke != null)
 			{
-				sb.Append(" Stroke=\"" + Escape(stroke) + "\" StrokeThickness=\"" + N(strokeWidth) + "\"");
+				sb.Append(" Stroke=\"" + Escape(stroke) + "\" StrokeThickness=\"" + N(strokeWidth * _unit) + "\"");
 			}
 			sb.AppendLine(" />");
 		}
@@ -1159,25 +1171,24 @@ public class MarkdownToFlowDocument : Task
 				return;
 			}
 			SvgStyle own = style.With(e, this);
-			double size = own.FontSize;
-			double x = Number(e, "x", 0), y = Number(e, "y", 0), dy = Length(e, "dy", size);
-			double middle = y + dy - 0.36 * size - _top;
+			double size = own.FontSize * _unit;
+			double x = Number(e, "x", 0), y = Number(e, "y", 0), dy = Length(e, "dy", own.FontSize);
+			double middle = (y + dy - 0.36 * own.FontSize - _top) * _unit;
 			string fill = Paint(e, own.Fill ?? "black");
 			string alignment;
-			double left;
+			double left = (x - _left) * _unit;
 			switch (own.Anchor)
 			{
 				case "middle":
 					alignment = "Center";
-					left = x - _left - TextReach;
+					left -= TextReach;
 					break;
 				case "end":
 					alignment = "Right";
-					left = x - _left - 2 * TextReach;
+					left -= 2 * TextReach;
 					break;
 				default:
 					alignment = "Left";
-					left = x - _left;
 					break;
 			}
 			sb.Append("<Grid Canvas.Left=\"" + N(left) + "\" Canvas.Top=\"" + N(middle - 2 * size) + "\" Height=\"" + N(4 * size) + "\"");

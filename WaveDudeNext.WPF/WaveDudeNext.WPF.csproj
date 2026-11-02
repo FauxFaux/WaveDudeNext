@@ -10,6 +10,8 @@
     <StartupObject>WaveDudeNext.WPF.Program</StartupObject>
     <!-- executable icon (Explorer, taskbar); the window icon is the same file as a resource -->
     <ApplicationIcon>App.ico</ApplicationIcon>
+    <!-- DPI awareness per monitor (2026-11-02): the manifest says why -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- read by About and the file properties; the license text is LICENSE.md, the header of every source file names it.
          Authors and Company are the product's name (2026-10-26, the user's rule): .NET puts the company into folder names,
          and the author's name is nobody's business on a user's disk; the Copyright line names him -->

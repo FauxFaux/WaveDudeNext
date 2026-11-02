@@ -21,7 +21,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:converters="clr-namespace:WaveDudeNext.WPF.Converters"
                     xmlns:controls="clr-namespace:WaveDudeNext.WPF.Controls"
-                    xmlns:localization="clr-namespace:WaveDudeNext.WPF.Localization">
+                    xmlns:localization="clr-namespace:WaveDudeNext.WPF.Localization"
+                    xmlns:theming="clr-namespace:WaveDudeNext.WPF.Theming">
 
 	<!-- editors used by the property views: VS look, colours from the theme table -->
 
@@ -229,7 +230,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 						<TextBox x:Name="PART_EditableTextBox" Visibility="Collapsed" Margin="0,0,18,0" BorderThickness="0" Background="Transparent"
 						         Padding="{TemplateBinding Padding}" IsReadOnly="{TemplateBinding IsReadOnly}" />
 						<Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}"
-						       AllowsTransparency="True" PopupAnimation="None" Focusable="False">
+						       AllowsTransparency="True" PopupAnimation="None" Focusable="False" theming:WindowZoom.Popup="True">
 							<Border Background="{DynamicResource ComboBoxListBackground}" BorderBrush="{DynamicResource MenuPopupBorder}"
 							        BorderThickness="1" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
 							        SnapsToDevicePixels="True">
@@ -493,7 +494,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 					<Grid>
 						<Border x:Name="Bd" BorderBrush="{DynamicResource TextBoxBorder}" BorderThickness="1" SnapsToDevicePixels="True"
 						        Background="{Binding Color, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource RgbBrush}}" />
-						<Popup x:Name="PART_Popup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="None"
+						<Popup x:Name="PART_Popup" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="None" theming:WindowZoom.Popup="True"
 						       PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
 						       IsOpen="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
 							<Border Background="{DynamicResource ComboBoxListBackground}" BorderBrush="{DynamicResource MenuPopupBorder}" BorderThickness="1" SnapsToDevicePixels="True">

@@ -45,7 +45,7 @@ function LogText() {
 	try { $sr = New-Object IO.StreamReader($fs); return $sr.ReadToEnd() } finally { $fs.Dispose() }
 }
 function LogHas([string]$text) { return (LogText).Contains($text) }
-# View (3rd header, after File and Edit) > entry $entry (0 Panes, 1 Theme, 2 Language, 3 Preview resolution, 4 Preview frames, 5 Preview samples) > item $item
+# View (3rd header, after File and Edit) > entry $entry (0 Panes, 1 Theme, 2 UI zoom, 3 Language, 4 Preview resolution, 5 Preview frames, 6 Preview samples) > item $item
 function ChooseView([int]$entry, [int]$item) {
 	Step "F10" 0x79 150                            # the menu bar's first header (File)
 	Step "Down" 0x28 150                           # opens File
@@ -96,7 +96,7 @@ function Park() {
 
 Start-App $exe $project
 try {
-	ChooseView 5 0                                 # 16-bit samples first: 8-bit is the default since 2026-10-16, and the first run must be the full quality
+	ChooseView 6 0                                 # 16-bit samples first: 8-bit is the default since 2026-10-16, and the first run must be the full quality
 	FocusOn "PreviewPlay"                          # a window never activated has no focused element, and F5 (a routed gesture) then goes nowhere
 	Key 0x74 300                                   # F5
 	Check "F5 run completes" (WaitFor { (RunStatus) -like "Completed:*" } 30000) (RunStatus)
@@ -106,16 +106,16 @@ try {
 	MarkerAtSource "at full resolution"
 	LastFrames "at full quality" $false
 
-	ChooseAndRerun "View > Preview frames > Half" 4 1
+	ChooseAndRerun "View > Preview frames > Half" 5 1
 	Check "the timeline still has 100 frames" ((Frame) -like "* / 99") (Frame)
 	Check "the log says 50 of 100 frames are stored" (LogHas "50 of 100 frames stored as 64${by}48 (1/1 resolution, every 2. frame, 16-bit)")
 	LastFrames "with every second frame stored" $true
 
-	ChooseAndRerun "View > Preview resolution > Half" 3 1
+	ChooseAndRerun "View > Preview resolution > Half" 4 1
 	Check "the log says the frames are 32x24" (LogHas "50 of 100 frames stored as 32${by}24 (1/2 resolution, every 2. frame, 16-bit)")
 	MarkerAtSource "on a half-size picture"
 
-	ChooseAndRerun "View > Preview samples > 8-bit" 5 1
+	ChooseAndRerun "View > Preview samples > 8-bit" 6 1
 	Check "the log says 8-bit" (LogHas "50 of 100 frames stored as 32${by}24 (1/2 resolution, every 2. frame, 8-bit)")
 	Check "the app never took the foreground" ((Foreground) -ne "APP") (Foreground)
 }
@@ -131,9 +131,9 @@ try {
 	Check "after a restart F5 runs in the kept quality" (WaitFor { (RunStatus) -like "Completed:*" } 30000) (RunStatus)
 	Start-Sleep -Milliseconds 300
 	Check "still 50 of 100 frames of 32x24, 8-bit (settings kept)" ((Frame) -like "* / 99" -and (LogHas "50 of 100 frames stored as 32${by}24 (1/2 resolution, every 2. frame, 8-bit)")) (Frame)
-	ChooseAndRerun "View > Preview samples > 16-bit" 5 0
-	ChooseAndRerun "View > Preview resolution > Full" 3 0
-	ChooseAndRerun "View > Preview frames > Full" 4 0
+	ChooseAndRerun "View > Preview samples > 16-bit" 6 0
+	ChooseAndRerun "View > Preview resolution > Full" 4 0
+	ChooseAndRerun "View > Preview frames > Full" 5 0
 	Check "back to all frames stored" ((Frame) -like "* / 99" -and (LogHas "100 of 100 frames stored as 64${by}48 (full)")) (Frame)
 	LastFrames "after the return to Full" $false
 	Check "the app never took the foreground" ((Foreground) -ne "APP") (Foreground)

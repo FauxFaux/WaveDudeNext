@@ -311,6 +311,44 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   (2026-10-21, Display, off by default, the user's choices): the preview's marker, a composite source's dots and the
   name, enabled sources only, scaled like the probe labels, under the probe markers and boxes. Harness hooks:
   `WAVEDUDE_EXPORT_PATH`, `WAVEDUDE_DISCARD_EDITS=1`.
+- **UI zoom** (View > UI zoom, 0.5x to 3x, `Settings.UiZoom`, default 1, live; 2026-11-01/02, the user's request, first
+  as a start-up switch for figures at a higher pixel density without a DPI change, then as this setting; `--zoom=<factor>`,
+  0.5 to 8, sets the setting at start): every window's content gets a layout scale (`WindowZoom`, from the theme's Window
+  style, at Initialized and at each change of the setting) and Ideal text formatting (Display formatting rasterises on the
+  100 % grid and WPF scales those glyph bitmaps, soft; seen pixel by pixel), window sizes are multiplied by the change
+  (the main window's bound size carries the zoom from `ZoomConverter` when read and is set like the others after a change,
+  never re-read: WPF writes both sizes back from the handle after the first resize), then the window is kept inside its
+  monitor's work area (`KeepOnScreen`, at SourceInitialized and after a change; the user's rule, a zoomed window had
+  wandered off). Whole pixels at any factor (2026-11-02, the user's rule: a line is there or not, 1 or 2 px, never cut; at
+  1.5 the About window's bottom outline had been cut): WPF rounds layout to the DPI its tree believes in, so each tree's
+  root is told the real DPI times the zoom through `VisualTreeHelper.SetRootDpi` (a system-DPI-aware process never resets
+  it; `HwndTarget` does only when per-monitor aware), the root and its chrome outside the transform round to nothing, the
+  content rounds. **The process is DPI aware per monitor** (`app.manifest`, PerMonitorV2; 2026-11-02, the user's choice
+  after the About buttons' outlines at 1.5 had stayed on the monitor's grid): only in that mode does WPF give a new
+  visual its parent's DPI (its `AddVisualChild`), which the templates' inner parts, created at a tree's first layout,
+  need, and a Border builds its edge pens once, at its first drawing. WPF then also puts the monitor's DPI on a tree
+  when a window's handle takes it as its root and when the window lands on a monitor of another scale, so the zoomed
+  DPI is put back at the window's source change and in its DpiChanged event, by the handle's real DPI, never the
+  event's (telling a tree its DPI raises DpiChanged itself; taking the event's value fed back without end, a silent
+  crash). A DPI change also makes the preview pane tell the presenter its pictures' device sizes again (their layout
+  size stays). Users with monitors of different scales get each window rendered at its monitor's scale, title bar
+  included, instead of a stretched bitmap, and a window dragged across such a boundary resizes in pixels; untested
+  here (one monitor), the user tests by hand. Popups are trees of their own and WPF raises no Loaded for their
+  content: the theme's popups (menus, drop-downs, the colour button) carry `theming:WindowZoom.Popup="True"`, a
+  tooltip or context menu `theming:WindowZoom.Standalone="True"` in its style, and each content is watched for the
+  source it gets at an opening (`PresentationSource.AddSourceChangedHandler`, before any layout), where its whole tree
+  is also invalidated: a popup opened before a zoom change keeps its entries' measure under the unchanged constraint,
+  and each moved onto the new grid only when a hover invalidated it (the user's report, 1 px shifts); a tooltip or context
+  menu sits in a parentless popup of WPF's own, which takes no transform (its `UpdateTransform`), so its style binds
+  the scale and the formatting to the setting (`ZoomTransformConverter`, `ZoomTextFormattingConverter`). The log's
+  "Display scale" line after the window shows names the monitor's scale and the zoom. Code
+  working in device pixels (the 16-bit picture size, text metrics, the number box's drag) asks `DevicePixels.PerDip`: the
+  composition target's real DPI (not `GetDpi`, which is the raised one) times the transforms to the root, so the 16-bit
+  pictures are rendered at the picture's device size and drawn 1:1 at any zoom (the 8-bit ones are WPF-scaled bitmaps as
+  always). The title bar stays at the monitor's scale; the app's own drawings (timeline, graph boxes, handles, edge line)
+  draw 1-unit lines, 1.5 px at 1.5, not yet snapped. The window must fit the screen for a capture: the Desktop Window
+  Manager composes nothing off it, so PrintWindow returns white there. `PreviewQualityCheck` and `LanguageCheck` count
+  the View menu's entries past the new one.
 - **Optical parts** (2026-10-18; **`OpticalParts.md` is the reference**: the kinds, the painting rules, the measurements
   and how to add a kind): subclasses of `OpticalPart` in `Project.Parts`, one class and one XML element per kind, the
   class being the kind (no enum, 2026-10-22): a lens or mirror, the shapes under `ShapePart` (polygon, rectangle, ellipse,
@@ -394,15 +432,21 @@ script sometimes comes up active; only the foreground guard fails then.
 **Manual figures** (2026-10-27): `Screenshots.ps1` on `Common.ps1` writes `Assets/*.svg` (the PNG inlined, numbered
 badges at UI Automation rectangles), `Assets/Legend.md` (what each number marks) and `Assets/main-window.png` (the
 window without badges, the README's picture, 2026-10-30): the window, the menus, the tree,
-the preview and the timeline from `C:\Work\Examples_WDN\Example14_wave_in_2_boxes.wdproj` at a scratch frame, the
+the preview and the timeline from `Examples/Example16_Wave_in_2_boxes.wdproj` (a relative path, 2026-11-02) at a scratch frame, the
 properties form of every object kind from `figures.wdproj` beside the harnesses (one of each kind, made with the
 library's adders), plus two crops of the rectangle's form for the manual's sections on the settings several forms share
 (`Properties-Figure` takes a row range, a section heading and the first badge's number, so the crops keep the whole
-form's numbers; 2026-10-30, the user's request); dark theme, English, 100 %, the user's 1314 × 1126 arrangement, his
-settings put back afterwards. A pointer resting on the window is parked just outside it for a capture and put back at
+form's numbers; 2026-10-30, the user's request); dark theme, English, **UI zoom 1.25** (2026-11-02, the user's choice,
+so the figures are sharp on denser screens; the window 1642 × 1408 px on the monitor at 100 %), the user's 1314 × 1126
+arrangement, his settings put back afterwards. A pointer resting on the window is parked just outside it for a capture and put back at
 the end (2026-10-30: it lay on a probe's graph box, whose hover border changed the main window's picture between two
 runs); the harnesses' one mouse action, clicking and activating nothing. A figure must come out byte for byte the same
-from an unchanged app.
+from an unchanged app. `-Zoom <factor>` (2026-11-01; 1.25 is the figures' zoom, 1 the default) puts the UI zoom
+setting into the figures' settings, scales the script's pixel constants, takes 16-bit samples (the 8-bit picture is a
+bitmap WPF scales) and writes the SVG with its size in CSS pixels over a view box in the figure's pixels, which the
+manual's converter (`SvgReader`, a uniform view-box scale) and browsers draw at the 100 % size; the PNGs declare their
+density. The window must fit the monitor (nothing off it is composed): at 2 the 1314 × 1126 window would be 2252 px
+tall, more than the 4K monitor; 1.25 and 1.5 fit, the properties session's 1400 too.
 
 ## People, name, license
 

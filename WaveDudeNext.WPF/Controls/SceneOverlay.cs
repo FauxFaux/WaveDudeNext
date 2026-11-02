@@ -1010,6 +1010,7 @@ public sealed class SceneOverlay : Panel
 			dc.DrawRectangle(fill, new Pen(AccentBrush, 1.0) { DashStyle = DashStyles.Dash }, marquee);
 		}
 		dc.Pop();
+		double pixelsPerDip = DevicePixels.PerDip(this);
 		foreach (MarkerThumb thumb in Children.OfType<MarkerThumb>().OrderBy(thumb => thumb.IsSelectedMarker))
 		{
 			// the name beside the main handle; hidden by Display except a selected item's (2026-10-29, the user's design)
@@ -1020,7 +1021,7 @@ public sealed class SceneOverlay : Panel
 			(int x, int y) = PointOf(thumb);
 			Point centre = ToView(x, y);
 			string name = thumb.Item switch { Source source => source.Name, OpticalPart part => part.Name, _ => ((Probe)thumb.Item).Name };
-			var label = new FormattedText(name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LabelTypeface, 11, thumb.IsSelectedMarker ? AccentBrush : LabelBrush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+			var label = new FormattedText(name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LabelTypeface, 11, thumb.IsSelectedMarker ? AccentBrush : LabelBrush, pixelsPerDip);
 			// beside the point; below it for a composite source or a part, whose rotation handle sits beside it at 0 degrees
 			bool below = thumb.Item is Source { Array: not null } or OpticalPart;
 			double lx = below ? Math.Clamp(centre.X - label.Width / 2, 0, Math.Max(0, ActualWidth - label.Width)) : Math.Min(centre.X + LabelOffset, Math.Max(0, ActualWidth - label.Width));

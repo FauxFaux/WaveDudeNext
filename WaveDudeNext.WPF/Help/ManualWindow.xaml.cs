@@ -170,7 +170,7 @@ public partial class ManualWindow : Window
 		double whole = WholePixels(e.VerticalOffset);
 		if (whole > _scroller.ScrollableHeight)
 		{
-			double scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+			double scale = DevicePixels.PerDip(_scroller);
 			whole = Math.Floor(_scroller.ScrollableHeight * scale) / scale;
 		}
 		if (Math.Abs(whole - e.VerticalOffset) > 1e-3)
@@ -182,7 +182,7 @@ public partial class ManualWindow : Window
 	/// <summary>An offset in device-independent pixels moved to the nearest whole device pixel.</summary>
 	private double WholePixels(double offset)
 	{
-		double scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+		double scale = DevicePixels.PerDip((Visual?)_scroller ?? this);
 		return Math.Round(offset * scale) / scale;
 	}
 

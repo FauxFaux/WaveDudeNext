@@ -169,11 +169,12 @@ The View menu.
 
 1. **Panes**
 2. **Theme**
-3. **Language**
-4. **Preview resolution**
-5. **Preview frames**
-6. **Preview samples**
-7. **Preview dithering**
+3. **UI zoom**
+4. **Language**
+5. **Preview resolution**
+6. **Preview frames**
+7. **Preview samples**
+8. **Preview dithering**
 
 ## The Simulation menu
 

@@ -282,6 +282,12 @@ public partial class PreviewPane : UserControl
 	private readonly Stopwatch _clock = new();
 	private readonly FramePresenter _presenter;
 
+	/// <summary>The picture of each layer once it has had a size, for <see cref="RefreshPictureSizes"/>.</summary>
+	private readonly Dictionary<FrameLayer, Image> _pictures = [];
+
+	/// <summary>The window whose DPI changes refresh the pictures' sizes, once subscribed.</summary>
+	private Window? _dpiWindow;
+
 	/// <summary>Fractional frame advance carried from one tick to the next, so slow speeds still move.</summary>
 	private double _carry;
 
@@ -297,6 +303,16 @@ public partial class PreviewPane : UserControl
 		_presenter = new FramePresenter(Dispatcher);
 		// a 16-bit picture of a new size arrives with its first frame
 		_presenter.BitmapsChanged += (_, _) => UpdateCanvas(_presenter.Source);
+		// a window landing on a monitor of another scale (the process is DPI aware per monitor, 2026-11-02) changes the
+		// pictures' size in device pixels while their layout size stays, so no SizeChanged comes: told again here
+		Loaded += (_, _) =>
+		{
+			if (_dpiWindow == null && Window.GetWindow(this) is { } window)
+			{
+				_dpiWindow = window;
+				window.DpiChanged += (_, _) => RefreshPictureSizes();
+			}
+		};
 
 		// frames = ceil(steps / visualize every); re-evaluated whenever the project or its settings change. The
 		// timeline is always the project's: a reduced preview (View > Preview frames) stores fewer frames, but
@@ -930,7 +946,8 @@ public partial class PreviewPane : UserControl
 
 	/// <summary>
 	/// A picture's size on screen changed (the window, the split, one picture or two): the presenter renders a 16-bit
-	/// frame at that size in device pixels, the picture's rounded layout size, so its pixels land 1:1 on the screen's.
+	/// frame at that size in device pixels, the picture's rounded layout size at the window's DPI and zoom, so its
+	/// pixels land 1:1 on the screen's.
 	/// </summary>
 	private void OnPictureSizeChanged(object sender, SizeChangedEventArgs e)
 	{
@@ -938,9 +955,25 @@ public partial class PreviewPane : UserControl
 		{
 			return;
 		}
-		DpiScale dpi = VisualTreeHelper.GetDpi(image);
-		_presenter.SetTargetSize(GetLayer(cell) == ProbeLayer.Field ? FrameLayer.Field : FrameLayer.Intensity,
-			(int)Math.Round(e.NewSize.Width * dpi.DpiScaleX), (int)Math.Round(e.NewSize.Height * dpi.DpiScaleY));
+		FrameLayer layer = GetLayer(cell) == ProbeLayer.Field ? FrameLayer.Field : FrameLayer.Intensity;
+		_pictures[layer] = image;
+		SetPictureSize(layer, image);
+	}
+
+	/// <summary>The presenter told a picture's current size in device pixels.</summary>
+	private void SetPictureSize(FrameLayer layer, Image image)
+	{
+		double scale = DevicePixels.PerDip(image);
+		_presenter.SetTargetSize(layer, (int)Math.Round(image.RenderSize.Width * scale), (int)Math.Round(image.RenderSize.Height * scale));
+	}
+
+	/// <summary>Both pictures' sizes told again, after a DPI change.</summary>
+	private void RefreshPictureSizes()
+	{
+		foreach ((FrameLayer layer, Image image) in _pictures)
+		{
+			SetPictureSize(layer, image);
+		}
 	}
 
 	/// <summary>Rebuilds both palettes and redraws: a project colour scheme changed, or the project was replaced.</summary>

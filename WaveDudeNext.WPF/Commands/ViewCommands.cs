@@ -38,4 +38,7 @@ public static class ViewCommands
 
 	/// <summary>Sets the dithering of the 16-bit pictures (2026-10-23): the parameter is the bits per channel (0 for none, 10, 12, 14 or 16).</summary>
 	public static readonly RoutedUICommand SetPreviewDither = new("Preview dithering", nameof(SetPreviewDither), typeof(ViewCommands));
+
+	/// <summary>Sets the UI zoom (2026-11-02): the parameter is the factor of every window's content as text, 0.5 to 3, with a decimal point.</summary>
+	public static readonly RoutedUICommand SetUiZoom = new("UI zoom", nameof(SetUiZoom), typeof(ViewCommands));
 }

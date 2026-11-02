@@ -252,8 +252,8 @@ public sealed class NumberBox : TextBox
 		// measured on the screen (device pixels) so a wrap of the cursor can be taken out again; the box's own
 		// coordinates would also shift if the drag scrolled or re-laid out the form
 		Point screen = PointToScreen(e.GetPosition(this));
-		double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
-		double dx = (screen.X + _wrapOffset - _pressScreenX) / dpi;
+		double scale = DevicePixels.PerDip(this);
+		double dx = (screen.X + _wrapOffset - _pressScreenX) / scale;
 		if (!_scrubbing)
 		{
 			if (Math.Abs(dx) < SystemParameters.MinimumHorizontalDragDistance)

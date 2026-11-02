@@ -48,7 +48,7 @@ function ChooseLanguage([int]$index) {
 	Step "Down" 0x28 150                           # opens File
 	Step "Right" $VK_RIGHT 150                     # moves to Edit and opens it
 	Step "Right" $VK_RIGHT 150                     # moves to View and opens it on its first entry
-	Step "Down" 0x28 100; Step "Down" 0x28 100     # Theme, Language
+	Step "Down" 0x28 100; Step "Down" 0x28 100; Step "Down" 0x28 100     # Theme, UI zoom, Language
 	Step "Right" $VK_RIGHT 150                     # opens Language on System
 	for ($i = 0; $i -lt $index; $i++) { Step "Down" 0x28 100 }
 	Step "Enter" $VK_RETURN 300
