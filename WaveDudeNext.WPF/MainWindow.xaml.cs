@@ -99,9 +99,16 @@ public partial class MainWindow : Window
 			}
 			else if (args.PropertyName == nameof(Settings.FrameMemoryPercent))
 			{
-				Logger.Info("RAM cache size: {Bound}, {Budget} right now (Simulation menu)",
-					Settings.Default.FrameMemoryPercent <= FrameMemory.Automatic ? "automatic (what is free minus " + FrameMemory.Gigabytes(FrameMemory.Margin) + ")" : "at most " + Settings.Default.FrameMemoryPercent + " % of the RAM",
-					FrameMemory.Gigabytes(FrameMemory.Budget(Settings.Default.FrameMemoryPercent)));
+				int percent = Settings.Default.FrameMemoryPercent;
+				double budget = FrameMemory.ToGigabytes(FrameMemory.Budget(percent));
+				if (percent <= FrameMemory.Automatic)
+				{
+					Logger.Info("RAM cache size: automatic (what is free minus {Margin:0.0} GB), {Budget:0.0} GB right now (Simulation menu)", FrameMemory.ToGigabytes(FrameMemory.Margin), budget);
+				}
+				else
+				{
+					Logger.Info("RAM cache size: at most {Percent} % of the RAM, {Budget:0.0} GB right now (Simulation menu)", percent, budget);
+				}
 			}
 			else if (args.PropertyName is nameof(Settings.PreviewResolution) or nameof(Settings.PreviewFrames) or nameof(Settings.PreviewSampleBytes))
 			{

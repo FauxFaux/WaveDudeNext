@@ -89,8 +89,11 @@ public static class FrameMemory
 		return Math.Max(0, Math.Min(byShare, byAvailable));
 	}
 
-	/// <summary>A byte count as gigabytes with one decimal, for log lines.</summary>
-	public static string Gigabytes(long bytes) => (bytes / (double)(1L << 30)).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " GB";
+	/// <summary>A byte count as gigabytes with one decimal and the unit, in the current culture, for the UI.</summary>
+	public static string Gigabytes(long bytes) => ToGigabytes(bytes).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " GB";
+
+	/// <summary>A byte count in gigabytes (2^30 bytes), for a log line's <c>{Name:0.0} GB</c>, which NLog formats invariantly.</summary>
+	public static double ToGigabytes(long bytes) => bytes / (double)(1L << 30);
 
 	private static bool TryStatus(out MemoryStatus status)
 	{

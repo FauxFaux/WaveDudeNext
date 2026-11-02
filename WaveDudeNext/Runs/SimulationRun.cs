@@ -399,6 +399,8 @@ public sealed class SimulationRun : INotifyPropertyChanged, IDisposable
 		TimeSpan elapsed = stopwatch.Elapsed;
 		int finalSteps = stepsDone;
 		int finalFrames = CoveredFrames(Store.Count);
+		// where the stored frames landed, which the start line can only plan: a failed allocation sends the rest to disk
+		int inMemory = Store.FramesInMemory, onDisk = Store.FramesOnDisk;
 		Post(() =>
 		{
 			StepsDone = finalSteps;
@@ -406,7 +408,9 @@ public sealed class SimulationRun : INotifyPropertyChanged, IDisposable
 			Elapsed = elapsed;
 			Error = error;
 			State = final;
-			Logger.Info("Run {0}: {1} of {2} steps, {3} frames, {4:0.0} s", final, finalSteps, Spec.Steps, finalFrames, elapsed.TotalSeconds);
+			Logger.Info("Run {0}: {1} of {2} steps, {3} frames, {4:0.0} s; {5} stored, {6} in memory ({7:0.0} GB) and {8} on disk ({9:0.0} GB)",
+				final, finalSteps, Spec.Steps, finalFrames, elapsed.TotalSeconds, inMemory + onDisk,
+				inMemory, FrameMemory.ToGigabytes(inMemory * Store.FrameBytes), onDisk, FrameMemory.ToGigabytes(onDisk * Store.FrameBytes));
 			Finished?.Invoke(this, EventArgs.Empty);
 		});
 		_completion.TrySetResult();

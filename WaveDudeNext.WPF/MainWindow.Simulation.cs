@@ -114,8 +114,8 @@ public partial class MainWindow
 			}
 		};
 		run.Finished += (_, _) => OnRunFinished();
-		Logger.Info("{Kind} started: {Steps} steps, {Stored} of {Frames} frames stored as {Width}×{Height} ({Quality}), {RamFrames} in memory ({RamBytes}) and {DiskFrames} on disk; edits made from now on do not affect it",
-			automatic ? "Re-run" : "Run", spec.Steps, spec.StoredFrameCount, spec.FrameCount, spec.Shape.Width, spec.Shape.Height, spec.Quality, store.RamFrames, FrameMemory.Gigabytes(store.RamBytes), spec.StoredFrameCount - store.RamFrames);
+		Logger.Info("{Kind} started: {Steps} steps, {Stored} of {Frames} frames stored as {Width}×{Height} ({Quality}), {RamFrames} in memory ({RamBytes:0.0} GB) and {DiskFrames} on disk; edits made from now on do not affect it",
+			automatic ? "Re-run" : "Run", spec.Steps, spec.StoredFrameCount, spec.FrameCount, spec.Shape.Width, spec.Shape.Height, spec.Quality, store.RamFrames, FrameMemory.ToGigabytes(store.RamBytes), spec.StoredFrameCount - store.RamFrames);
 		IsRunStale = false;
 		IsProbesStale = false;
 		Run = run;
