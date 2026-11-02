@@ -17,6 +17,34 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{147F7C4A-2F6A-4858-A0D6-D4552CFB89BF}"
+	ProjectSection(SolutionItems) = preProject
+		Examples\Example01_Source_Mirror_Probe.wdproj = Examples\Example01_Source_Mirror_Probe.wdproj
+		Examples\Example02_Coherent_source_gaussian_beam.wdproj = Examples\Example02_Coherent_source_gaussian_beam.wdproj
+		Examples\Example03_Directional_pulsed_source.wdproj = Examples\Example03_Directional_pulsed_source.wdproj
+		Examples\Example04_3_sources_3_frequencies.wdproj = Examples\Example04_3_sources_3_frequencies.wdproj
+		Examples\Example05_Small_incoherent_source.wdproj = Examples\Example05_Small_incoherent_source.wdproj
+		Examples\Example06_Large_incoherent_source.wdproj = Examples\Example06_Large_incoherent_source.wdproj
+		Examples\Example07_Random_emitter_lattice.wdproj = Examples\Example07_Random_emitter_lattice.wdproj
+		Examples\Example08_Resonant_wave_in_cavity.wdproj = Examples\Example08_Resonant_wave_in_cavity.wdproj
+		Examples\Example09_Laplacian_dispersion.wdproj = Examples\Example09_Laplacian_dispersion.wdproj
+		Examples\Example10_Beam_expansion.wdproj = Examples\Example10_Beam_expansion.wdproj
+		Examples\Example11_Zone_plate.wdproj = Examples\Example11_Zone_plate.wdproj
+		Examples\Example12_Pulse_splitter.wdproj = Examples\Example12_Pulse_splitter.wdproj
+		Examples\Example13_Bragg_reflector.wdproj = Examples\Example13_Bragg_reflector.wdproj
+		Examples\Example14_Resonant_roundabout.wdproj = Examples\Example14_Resonant_roundabout.wdproj
+		Examples\Example15_Top_up_the_tank.wdproj = Examples\Example15_Top_up_the_tank.wdproj
+		Examples\Example16_Wave_in_2_boxes.wdproj = Examples\Example16_Wave_in_2_boxes.wdproj
+		Examples\Example17_Hanbury_Brown_Twiss.wdproj = Examples\Example17_Hanbury_Brown_Twiss.wdproj
+		Examples\Example18_XOR_AND_OR_logic.wdproj = Examples\Example18_XOR_AND_OR_logic.wdproj
+		Examples\Example19_Sources_with_spherical_mirror.wdproj = Examples\Example19_Sources_with_spherical_mirror.wdproj
+		Examples\Example20_Test_glass.wdproj = Examples\Example20_Test_glass.wdproj
+		Examples\Example21_Ball_lens.wdproj = Examples\Example21_Ball_lens.wdproj
+		Examples\Example22_Coherence_and_ball_lens.wdproj = Examples\Example22_Coherence_and_ball_lens.wdproj
+		Examples\Example23_Fibers.wdproj = Examples\Example23_Fibers.wdproj
+		Examples\Example24_Fiber_cross_over.wdproj = Examples\Example24_Fiber_cross_over.wdproj
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -54,6 +82,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{147F7C4A-2F6A-4858-A0D6-D4552CFB89BF} = {02F4BC0A-5E50-4208-AAF7-253BC852DFF5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {83B9D680-B0B2-441D-9B2E-8EE36FE2E69D}
