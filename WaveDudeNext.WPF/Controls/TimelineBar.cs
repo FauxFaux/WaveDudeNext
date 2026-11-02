@@ -277,23 +277,43 @@ public sealed class TimelineBar : FrameworkElement
 			return;
 		}
 		_dpi = DevicePixels.PerDip(this); // once per draw, not per label
-		Pen pen = PenFor(TickBrush);
-		var bar = new Rect(0.5, BarTop + 0.5, w - 1.0, BarHeight - 1.0);
-		dc.DrawRectangle(Background, pen, bar);
+		// a line is a whole number of device pixels thick (one at 100 %, two at 150 and 200 %), and every edge drawn
+		// below lies on a guideline, which WPF moves onto the device grid under any scale, so the lines and fills come
+		// out whole at a UI zoom and on a 150 % monitor as at 100 % (2026-11-02, the user's rule); at 100 % the
+		// arithmetic is the one before, pixel for pixel
+		double t = DevicePixels.Hairline(_dpi);
+		double half = t / 2;
+		Pen pen = PenFor(TickBrush, t);
+		var bar = new Rect(half, BarTop + half, w - t, BarHeight - t);
 		// fills and ticks lie on whole pixels inside the outline, whose rectangle runs through the centres of its pixels:
 		// on those half-pixel edges a fill is smeared over one row or column more (2026-11-01, the in point's bracket)
-		var inner = new Rect(1.0, BarTop + 1.0, w - 2.0, BarHeight - 2.0);
+		var inner = new Rect(t, BarTop + t, w - 2 * t, BarHeight - 2 * t);
+		var xs = new List<double> { 0, t, w - t, w };
+		var ys = new List<double> { BarTop, BarTop + t, BarTop + BarHeight - t, BarTop + BarHeight, inner.Top + 2, inner.Bottom - 2 };
 
 		// the frames a run has produced so far, as a band from the start to the newest frame's column
-		if (Available > 0 && Available <= Maximum)
-		{
-			double xa = Math.Round(XOf(Available - 1)) + 1.0;
-			dc.DrawRectangle(AvailableBrush, null, new Rect(inner.Left, inner.Top, Math.Max(0, xa - inner.Left), inner.Height));
-		}
-
+		double xa = Available > 0 && Available <= Maximum ? Math.Round(XOf(Available - 1)) + 1.0 : double.NaN;
 		// the in/out range: a translucent band over both points' columns once it is narrower than the run
 		double c0 = Math.Round(XOf(RangeStart));
 		double c1 = Math.Round(XOf(RangeEnd));
+		double hoverX = _hoverFrame is int hover && _drag == DragMode.None && hover != Value ? Math.Round(XOf(hover)) : double.NaN;
+		double playheadX = Math.Round(XOf(Value));
+		foreach (double column in new[] { xa, c0, c1 + 1.0, hoverX, hoverX + t, playheadX, playheadX + t })
+		{
+			if (!double.IsNaN(column))
+			{
+				xs.Add(column);
+			}
+		}
+		BracketEdges(c0, open: true, xs);
+		BracketEdges(c1, open: false, xs);
+		dc.PushGuidelineSet(new GuidelineSet([.. xs], [.. ys]));
+
+		dc.DrawRectangle(Background, pen, bar);
+		if (!double.IsNaN(xa))
+		{
+			dc.DrawRectangle(AvailableBrush, null, new Rect(inner.Left, inner.Top, Math.Max(0, xa - inner.Left), inner.Height));
+		}
 		if (c1 > c0 && (RangeStart > 0 || RangeEnd < Maximum))
 		{
 			dc.PushOpacity(0.25);
@@ -306,7 +326,7 @@ public sealed class TimelineBar : FrameworkElement
 		// only when the width, the range, the brushes, the culture or the DPI change
 		if (Maximum > 0)
 		{
-			dc.DrawDrawing(TicksDrawing(w, inner, pen));
+			dc.DrawDrawing(TicksDrawing(w, inner, pen, t));
 		}
 
 		// the brackets over the ticks: a tick on a point's frame (frame 0 always has one) cut a notch into its bracket
@@ -314,17 +334,17 @@ public sealed class TimelineBar : FrameworkElement
 		DrawBracket(dc, c1, inner, open: false);
 
 		// the frame under the mouse
-		if (_hoverFrame is int hover && _drag == DragMode.None && hover != Value)
+		if (!double.IsNaN(hoverX))
 		{
-			double x = Math.Round(XOf(hover)) + 0.5;
+			double x = hoverX + half;
 			dc.PushOpacity(0.5);
 			dc.DrawLine(pen, new Point(x, bar.Top), new Point(x, bar.Bottom));
 			dc.Pop();
 		}
 
 		// the playhead: a line through the bar, a handle on top, the frame number next to it
-		double px = Math.Round(XOf(Value)) + 0.5;
-		dc.DrawLine(PenFor(Foreground), new Point(px, bar.Top), new Point(px, bar.Bottom));
+		double px = playheadX + half;
+		dc.DrawLine(PenFor(Foreground, t), new Point(px, bar.Top), new Point(px, bar.Bottom));
 		var handle = new StreamGeometry();
 		using (StreamGeometryContext g = handle.Open())
 		{
@@ -340,8 +360,22 @@ public sealed class TimelineBar : FrameworkElement
 
 		if (IsKeyboardFocused)
 		{
-			dc.DrawRectangle(null, PenFor(AccentBrush), new Rect(0.5, 0.5, w - 1, h - 1));
+			dc.PushGuidelineSet(new GuidelineSet([0, t, w - t, w], [0, t, h - t, h]));
+			dc.DrawRectangle(null, PenFor(AccentBrush, t), new Rect(half, half, w - t, h - t));
+			dc.Pop();
 		}
+		dc.Pop();
+	}
+
+	/// <summary>The vertical edges of a bracket's bar and feet (<see cref="DrawBracket"/>), for the guidelines.</summary>
+	private static void BracketEdges(double column, bool open, List<double> xs)
+	{
+		double left = open ? column : column - 1.0;
+		double feet = open ? left : left - 4.0;
+		xs.Add(left);
+		xs.Add(left + 2.0);
+		xs.Add(feet);
+		xs.Add(feet + 6.0);
 	}
 
 	/// <summary>
@@ -361,7 +395,7 @@ public sealed class TimelineBar : FrameworkElement
 	// and the bar is drawn on every frame-count and position change; the cache is cleared when it grows large
 	// (the playhead's label changes per frame) and when the culture or the DPI changes, which the key carries
 	private readonly Dictionary<(string Text, bool Bold, Brush Brush, string Culture, double Dpi), FormattedText> _labels = new();
-	private readonly Dictionary<Brush, Pen> _pens = new();
+	private readonly Dictionary<(Brush Brush, double Thickness), Pen> _pens = new();
 	private const int LabelCacheLimit = 2048;
 
 	private double _dpi = 1;
@@ -389,15 +423,17 @@ public sealed class TimelineBar : FrameworkElement
 
 	/// <summary>
 	/// The minor and major ticks (3 and 6 px down from the top of <paramref name="inner"/>, the bar inside its outline)
-	/// with their labels as one frozen drawing, rebuilt only when its inputs change.
+	/// with their labels as one frozen drawing, rebuilt only when its inputs change; <paramref name="t"/> is the tick
+	/// line's thickness, a whole number of device pixels, and every tick's edges lie on the drawing's guidelines.
 	/// </summary>
-	private DrawingGroup TicksDrawing(double w, Rect inner, Pen pen)
+	private DrawingGroup TicksDrawing(double w, Rect inner, Pen pen, double t)
 	{
 		var key = (w, Maximum, TickBrush, LabelBrush, CultureInfo.CurrentCulture.Name, _dpi);
 		if (_ticks != null && key == _ticksKey)
 		{
 			return _ticks;
 		}
+		double half = t / 2;
 		var group = new DrawingGroup();
 		using (DrawingContext dc = group.Open())
 		{
@@ -413,24 +449,33 @@ public sealed class TimelineBar : FrameworkElement
 				}
 			}
 			int minor = major >= 10 ? major / 5 : major >= 2 ? 1 : 0;
+			var xs = new List<double>();
+			for (int f = 0; f <= Maximum; f += minor > 0 ? minor : major)
+			{
+				double column = Math.Round(XOf(f));
+				xs.Add(column);
+				xs.Add(column + t);
+			}
+			dc.PushGuidelineSet(new GuidelineSet([.. xs], [inner.Top, inner.Top + 3, inner.Top + 6]));
 			if (minor > 0)
 			{
 				for (int f = 0; f <= Maximum; f += minor)
 				{
 					if (f % major != 0)
 					{
-						double x = Math.Round(XOf(f)) + 0.5;
+						double x = Math.Round(XOf(f)) + half;
 						dc.DrawLine(pen, new Point(x, inner.Top), new Point(x, inner.Top + 3));
 					}
 				}
 			}
 			for (int f = 0; f <= Maximum; f += major)
 			{
-				double x = Math.Round(XOf(f)) + 0.5;
+				double x = Math.Round(XOf(f)) + half;
 				dc.DrawLine(pen, new Point(x, inner.Top), new Point(x, inner.Top + 6));
 				FormattedText label = Label(f.ToString(CultureInfo.CurrentCulture), LabelBrush);
 				dc.DrawText(label, new Point(Math.Min(x + 2, w - label.Width - 1), 0));
 			}
+			dc.Pop();
 		}
 		group.Freeze();
 		_ticks = group;
@@ -438,14 +483,14 @@ public sealed class TimelineBar : FrameworkElement
 		return group;
 	}
 
-	/// <summary>A frozen one-pixel pen of <paramref name="brush"/>, made once per brush (the theme brushes are shared instances).</summary>
-	private Pen PenFor(Brush brush)
+	/// <summary>A frozen pen of <paramref name="brush"/> and <paramref name="thickness"/>, made once per pair (the theme brushes are shared instances).</summary>
+	private Pen PenFor(Brush brush, double thickness)
 	{
-		if (!_pens.TryGetValue(brush, out Pen? pen))
+		if (!_pens.TryGetValue((brush, thickness), out Pen? pen))
 		{
-			pen = new Pen(brush, 1.0);
+			pen = new Pen(brush, thickness);
 			pen.Freeze();
-			_pens[brush] = pen;
+			_pens[(brush, thickness)] = pen;
 		}
 		return pen;
 	}

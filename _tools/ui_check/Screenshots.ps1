@@ -38,7 +38,8 @@
 # (margins, row heights, the badges) scale with it; the SVG keeps its size in CSS pixels and puts the pixels into a
 # scaled view box, which the manual's converter and browsers draw at the 100 % size, crisp on a monitor at the zoom's
 # scale; the PNGs declare their pixel density. The window must fit the screen (nothing off it is composed): on a 4K
-# monitor 1.5 does, 2 does not. 1, the default, leaves every figure as it was.
+# monitor 1.5 does, 2 does not. 1.25 is the default and the figures' zoom (2026-11-02, the user's choice); 1 makes
+# figures at the monitor's own pixels.
 
 param(
 	[string]$Exe = (Join-Path $PSScriptRoot "..\..\WaveDudeNext.WPF\bin\Debug\net10.0-windows\WaveDudeNext.WPF.exe"),
@@ -46,7 +47,7 @@ param(
 	[string]$Out = (Join-Path $PSScriptRoot "..\..\Assets"),
 	[int]$Frame = 1200,
 	[string]$PngFolder = "",
-	[double]$Zoom = 1
+	[double]$Zoom = 1.25
 )
 . (Join-Path $PSScriptRoot "Common.ps1")
 

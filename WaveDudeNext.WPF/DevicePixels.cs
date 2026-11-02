@@ -46,4 +46,12 @@ public static class DevicePixels
 		Rect unit = visual.TransformToAncestor(root).TransformBounds(new Rect(0, 0, 1, 1));
 		return dpi * unit.Height;
 	}
+
+	/// <summary>
+	/// The thickness in device-independent pixels of a one-pixel line drawn at <paramref name="perDip"/> device pixels
+	/// per unit: the whole number of device pixels nearest to the scale (1 up to 1.25, 2 at 1.5 and 2, 3 at 2.5 and 3),
+	/// so that a line's two edges can both lie on the pixel grid, where a guideline set at those edges puts them
+	/// (2026-11-02, the user's rule: a line is there or not, 1 or 2 pixels wide, never cut).
+	/// </summary>
+	public static double Hairline(double perDip) => Math.Max(1, Math.Round(perDip)) / perDip;
 }

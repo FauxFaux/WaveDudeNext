@@ -345,9 +345,12 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   working in device pixels (the 16-bit picture size, text metrics, the number box's drag) asks `DevicePixels.PerDip`: the
   composition target's real DPI (not `GetDpi`, which is the raised one) times the transforms to the root, so the 16-bit
   pictures are rendered at the picture's device size and drawn 1:1 at any zoom (the 8-bit ones are WPF-scaled bitmaps as
-  always). The title bar stays at the monitor's scale; the app's own drawings (timeline, graph boxes, handles, edge line)
-  draw 1-unit lines, 1.5 px at 1.5, not yet snapped. The window must fit the screen for a capture: the Desktop Window
-  Manager composes nothing off it, so PrintWindow returns white there. `PreviewQualityCheck` and `LanguageCheck` count
+  always). The title bar stays at the monitor's scale. The app's own hairlines, the timeline's and the graph boxes',
+  are whole at any scale (2026-11-02, the user's rule): a pen of `DevicePixels.Hairline`, the whole number of device
+  pixels nearest to the scale, and a `GuidelineSet` at every line's and fill's edges, which WPF moves onto the device
+  grid under the full transform; at 100 % the arithmetic is the old one, pixel for pixel. The handle glyphs (1.5 px
+  strokes over a halo), the dashed probe lines and the marquee are antialiased by design and stay so. The window must
+  fit the screen for a capture: the Desktop Window Manager composes nothing off it, so PrintWindow returns white there. `PreviewQualityCheck` and `LanguageCheck` count
   the View menu's entries past the new one.
 - **Optical parts** (2026-10-18; **`OpticalParts.md` is the reference**: the kinds, the painting rules, the measurements
   and how to add a kind): subclasses of `OpticalPart` in `Project.Parts`, one class and one XML element per kind, the
@@ -441,7 +444,8 @@ so the figures are sharp on denser screens; the window 1642 × 1408 px on the mo
 arrangement, his settings put back afterwards. A pointer resting on the window is parked just outside it for a capture and put back at
 the end (2026-10-30: it lay on a probe's graph box, whose hover border changed the main window's picture between two
 runs); the harnesses' one mouse action, clicking and activating nothing. A figure must come out byte for byte the same
-from an unchanged app. `-Zoom <factor>` (2026-11-01; 1.25 is the figures' zoom, 1 the default) puts the UI zoom
+from an unchanged app. `-Zoom <factor>` (2026-11-01; 1.25 is the default and the figures' zoom, 1 for figures at the
+monitor's own pixels) puts the UI zoom
 setting into the figures' settings, scales the script's pixel constants, takes 16-bit samples (the 8-bit picture is a
 bitmap WPF scales) and writes the SVG with its size in CSS pixels over a view box in the figure's pixels, which the
 manual's converter (`SvgReader`, a uniform view-box scale) and browsers draw at the 100 % size; the PNGs declare their

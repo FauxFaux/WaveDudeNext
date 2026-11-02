@@ -420,7 +420,7 @@ public sealed class ProbeGraphOverlay : Panel
 				continue;
 			}
 			dc.PushTransform(new TranslateTransform(box.X, box.Y));
-			ProbeGraphDrawing.DrawBox(dc, layout, ReferenceEquals(probe, selected) ? new Pen(AccentBrush, 1.0) : null, pixelsPerDip);
+			ProbeGraphDrawing.DrawBox(dc, layout, ReferenceEquals(probe, selected) ? new Pen(AccentBrush, DevicePixels.Hairline(pixelsPerDip)) : null, pixelsPerDip);
 			dc.Pop();
 		}
 	}
