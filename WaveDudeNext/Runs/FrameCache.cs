@@ -15,6 +15,7 @@
 // version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 // <https://www.gnu.org/licenses/>.
 
+using System.Globalization;
 using NLog;
 
 namespace WaveDudeNext.Runs;
@@ -54,8 +55,11 @@ public static class FrameCache
 		long needed = bytes + (64L << 20);
 		if (drive.AvailableFreeSpace < needed)
 		{
+			// the text reaches the log, the status bar and the dialog alike, so its numbers take the decimal point of every
+			// other number in the log (2026-11-03, the user's rule: a report's reader must not trip over "1806,2 GB")
 			throw new RunSpecException(
-				$"The run needs {bytes / (1024.0 * 1024 * 1024):0.#} GB of frame cache on {drive.Name}, but only {drive.AvailableFreeSpace / (1024.0 * 1024 * 1024):0.#} GB is free. "
+				string.Create(CultureInfo.InvariantCulture,
+					$"The run needs {bytes / (1024.0 * 1024 * 1024):0.#} GB of frame cache on {drive.Name}, but only {drive.AvailableFreeSpace / (1024.0 * 1024 * 1024):0.#} GB is free. ")
 				+ "Reduce the canvas, the steps or raise 'Visualize every', or turn the intensity preview off.");
 		}
 	}

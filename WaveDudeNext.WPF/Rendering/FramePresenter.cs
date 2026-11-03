@@ -16,6 +16,7 @@
 // <https://www.gnu.org/licenses/>.
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
@@ -233,9 +234,13 @@ public sealed class FramePresenter
 			screen = new ScreenRenderer(sourceWidth, sourceHeight, width, height);
 			_screens[(int)layer] = screen;
 			double scale = width / (double)sourceWidth;
+			// the factor is text before NLog formats the entry, so it takes the invariant culture here, as NLog's own
+			// parameters do (2026-11-03, the user's rule: no "1,29×" in the log)
+			string how = width == sourceWidth && height == sourceHeight ? "1:1"
+				: scale < 1 ? string.Create(CultureInfo.InvariantCulture, $"{1 / scale:0.##}× smaller, each pixel the mean of the samples it covers")
+				: string.Create(CultureInfo.InvariantCulture, $"{scale:0.##}× larger, blended between the nearest samples");
 			Logger.Debug("Preview {Layer}: 16-bit frames of {SourceWidth}×{SourceHeight} drawn at {Width}×{Height} screen pixels ({How})",
-				layer, sourceWidth, sourceHeight, width, height,
-				width == sourceWidth && height == sourceHeight ? "1:1" : scale < 1 ? $"{1 / scale:0.##}× smaller, each pixel the mean of the samples it covers" : $"{scale:0.##}× larger, blended between the nearest samples");
+				layer, sourceWidth, sourceHeight, width, height, how);
 		}
 		return screen;
 	}
