@@ -168,6 +168,16 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 							<Setter Property="Foreground" Value="{DynamicResource LogFatal}" />
 							<Setter Property="FontWeight" Value="Bold" />
 						</DataTrigger>
+						<!-- the selected row with the focus takes the selection's foreground, as the tree's does: a style trigger
+						     outranks the template's, so the level colours above stayed on the accent blue (2026-11-03, the user's
+						     report: Debug's grey on blue); last, since a later trigger of the same style wins -->
+						<MultiTrigger>
+							<MultiTrigger.Conditions>
+								<Condition Property="IsSelected" Value="True" />
+								<Condition Property="Selector.IsSelectionActive" Value="True" />
+							</MultiTrigger.Conditions>
+							<Setter Property="Foreground" Value="{DynamicResource TreeViewItemSelectedForeground}" />
+						</MultiTrigger>
 					</Style.Triggers>
 				</Style>
 			</ListView.ItemContainerStyle>
