@@ -16,7 +16,6 @@
 // <https://www.gnu.org/licenses/>.
 
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using NLog;
 using WaveDudeNext.Model;
 using WaveDudeNext.Runs;
@@ -131,7 +130,7 @@ public static class PartPainter
 	{
 		if (shape.IsMirror)
 		{
-			Parallel.For(y0, y1 + 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
+			Parallel.For(y0, y1 + 1, (int y) =>
 			{
 				int row = y * stride;
 				for (int x = x0; x <= x1; x++)
@@ -147,7 +146,7 @@ public static class PartPainter
 		const double step = 1.0 / Supersample;
 		const double half = step / 2.0;
 		int coating = shape.CoatingWidth;
-		Parallel.For(y0, y1 + 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
+		Parallel.For(y0, y1 + 1, (int y) =>
 		{
 			int row = y * stride;
 			for (int x = x0; x <= x1; x++)
@@ -213,7 +212,7 @@ public static class PartPainter
 		float[] depths = new float[columns * (y1 - y0 + 1)];
 		double deepest = 0.0;
 		var gate = new Lock();
-		Parallel.For(y0, y1 + 1, () => 0.0, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y, ParallelLoopState _, double local) =>
+		Parallel.For(y0, y1 + 1, () => 0.0, (int y, ParallelLoopState _, double local) =>
 		{
 			int row = (y - y0) * columns;
 			for (int x = x0; x <= x1; x++)
@@ -233,7 +232,7 @@ public static class PartPainter
 		double ramp = Math.Min(shape.AbsorptionRamp, deepest);
 		int full = shape.Absorption;
 		Logger.Debug("Absorption {Absorption} over a ramp of {Ramp:0.#} px (the part reaches {Deepest:0.#} px deep)", full, ramp, deepest);
-		Parallel.For(y0, y1 + 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
+		Parallel.For(y0, y1 + 1, (int y) =>
 		{
 			int row = (y - y0) * columns;
 			for (int x = x0; x <= x1; x++)

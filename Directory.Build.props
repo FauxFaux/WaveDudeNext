@@ -8,4 +8,18 @@
     <Description>A 2D wave simulator</Description>
   </PropertyGroup>
 
+  <!-- No quick JIT (2026-11-03, the user's choice): every method of this code, and of a package without precompiled
+       code, is compiled optimised at its first call, so no tier-0 code exists in the app's own code. The runtime's
+       tiering starts call counting only after 100 ms without a first call of any method, ours or the framework's, and
+       interrupts its background compiler whenever that happens; a window under interaction keeps that delay alive, so
+       the painter's per-pixel methods ran as tier-0 code at 115-460 ms a composition where a probe took 31 ms, and at a
+       start 1158 methods of this code were tier-0 and none promoted. The framework's precompiled code keeps tiering up as
+       Microsoft tuned it; dynamic PGO is off, since the runtime needs quick JIT for it. Here, so the app, library_check
+       and every harness run alike. No ReadyToRun in the publish profiles either (the same day): its version-resilient
+       code ran the painter's per-pixel path 5-10x slower than a first-call JIT, so the shipped build is compiled like
+       the plain one, for about 0.45 s of start-up JIT. -->
+  <PropertyGroup>
+    <TieredCompilationQuickJit>false</TieredCompilationQuickJit>
+  </PropertyGroup>
+
 </Project>

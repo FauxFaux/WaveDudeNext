@@ -26,11 +26,25 @@ harnesses run.
   targeted probe or screenshot for a local change, `library_check` (20 s) for a library change, a UI harness only
   when its flow changed, **once**. Never loop a harness for a flake, never run the suite after an edit.
 - **Measure properly**: warm the JIT; never poll UI Automation while measuring (it loads the UI thread it
-  measures); the app's own log lines are the measurement. **A hot loop measured alone may be a tier-1 figure the app never
-  reaches** (2026-11-03: the part painter took 31 ms in a probe and 115–460 ms in the app, the same call; in a busy WPF process
-  the runtime kept its per-pixel methods at tier-0 — the probe pinned there with `DOTNET_TC_CallCounting=0` reproduced the
-  app's 212 ms): compare a probe against the app's log, and take a hot path out of tiering with
-  `[MethodImpl(MethodImplOptions.AggressiveOptimization)]` where the gap is that.
+  measures); the app's own log lines are the measurement. **Quick JIT is off** (`TieredCompilationQuickJit` in
+  `Directory.Build.props`, 2026-11-03, the user's choice, after the part painter took 31 ms in a probe and 115–460 ms in the
+  app, the same call: the runtime's tiering counts calls only after 100 ms without a first call of any method, ours or the
+  framework's, and interrupts its background compiler at every such call (`tieredcompilation.cpp`), so a window under
+  interaction keeps this code at tier 0; at a start 1158 of its methods were, none promoted; seen with
+  `DOTNET_JitDisasmSummary=1` and `DOTNET_JitStdOutFile=<file>`, which list every jitted method with its tier): every method
+  of this code is compiled optimised at its first call, in the app, `library_check` and the harnesses alike, so a probe
+  and the app run the same code; the framework's precompiled code keeps tiering up; dynamic PGO is off, it needs quick
+  JIT. Every build starts 0.45 s later for it, the published ones too, since they are plain IL (see Publish). The
+  `AggressiveOptimization` attributes the painter's path had carried since that morning are gone (the user's request,
+  once provably a no-op: the runtime's `method.cpp` makes every method of a module without precompiled code ineligible
+  for tiering when quick JIT is off, `library_check` compiled the painter's methods the same with and without them, and
+  Example 16 opened in the published EXE painted in the same milliseconds). A hot path would need the attribute again
+  only with ReadyToRun: its precompiled code must stay valid across servicing of the runtime, so it inlines nothing from
+  outside its assembly and reaches every framework method and struct layout through an indirection, which made the
+  per-pixel path 5–10× slower than a first-call JIT (`Math.Round`, `Math.Clamp`, a span conversion and even our own
+  `SegmentDistance` as a call per pixel, the vertices a `ValueTuple` of unknown size); seen by printing the JIT's listing
+  from crossgen2 (`--codegenopt:JitDisasm=<patterns> --codegenopt:JitStdOutFile=<file> --parallelism:1`) beside the
+  runtime's (`DOTNET_JitDisasm`, `DOTNET_JitStdOutFile`).
 - **Harnesses are keyboard-only**: post `WM_KEYDOWN`/`WM_CHAR` to the window, read state through UIA properties,
   never UIA patterns, the mouse, `SendKeys` or `SetForegroundWindow` (each activates the window). Modifiers cannot
   be posted, so every command a harness presses has an unmodified key. Everything a harness needs has an
@@ -93,7 +107,16 @@ harnesses run.
 - `dotnet build WaveDudeNext.sln` → 0 warnings. Harnesses use `WaveDudeNext.WPF\bin\Debug\net10.0-windows\WaveDudeNext.WPF.exe`.
 - `dotnet run --project _tools/library_check -c Release` (`-- export`, `-- bench [w h]`, `-- bench-render [w h]`,
   `-- bench-export [w h]`); `powershell -ExecutionPolicy Bypass -File _tools/ui_check/<script>.ps1` (`-Trace`).
-- Publish: `dotnet publish WaveDudeNext.WPF/WaveDudeNext.WPF.csproj -p:PublishProfile=SingleFile`. Version in
+- Publish: `dotnet publish WaveDudeNext.WPF/WaveDudeNext.WPF.csproj -p:PublishProfile=SingleFile` (framework-dependent;
+  `SingleFileBundled` carries the runtime). **No ReadyToRun** (2026-11-03, the user's choice after a day with it): it
+  bought 0.55 s of start (1.90 s to the first idle of the window against 2.44 for the plain IL) and cost the painter's
+  per-pixel path 5–10× until a tier-1 promotion a busy window postpones (see Measure properly), so the shipped EXE runs
+  the code the probes measure: 7.3 MB, 2.44 s; the bundled one 146 MB. Should it return: for a self-contained single file
+  the SDK defaults to one composite image of the runtime and the app (168 MB, 1.78 s, the one form of precompiled code
+  that may inline the framework, untested on the painter), and its ReadyToRun step is incremental on
+  `obj\...\win-x64\R2R`, which both profiles share: a publish after a composite one reused the composite's component stubs
+  without their image, so the EXE died at start with a fail-fast before its first log line (both profiles;
+  `DOTNET_ReadyToRun=0` let it start, which named the cause); that folder would need a clean before every publish. Version in
   `Directory.Build.props`; the commit hash lands in About. The license header is the `.editorconfig`
   `file_header_template` (its warranty sentence ends in a full stop: Roslyn cuts the value at `;`). LICENSE.md is
   the FSF's GPL-3.0 Markdown verbatim, nothing else (GitHub's detector rejects additions); the About dialog shows
@@ -490,10 +513,12 @@ coalesced update repainted all four rectangles, one the whole canvas, "composed 
 point and node lists) and paints on the thread pool, one composition in flight, the newest request after it, the UI
 thread taking only the finished pixels (20–24 ms a time, measured on a burst of ten nudges: three compositions of 395,
 212 and 128 ms on the worker); `LoadSceneImage` (a run or scratch request) joins an in-flight composition of the same
-inputs rather than painting again. **The painter's per-pixel path is out of JIT tiering** (2026-11-03, the user's choice):
-alone it took 31 ms for those four parts, in the app 115–460 ms, because the runtime left its methods at tier-0 code in
-the busy process (pinned there, the probe took 212 ms); `AggressiveOptimization` on the shape methods a pixel reaches, the
-painter's row lambdas and the glowing edges' makes a composition 26–35 ms a background and 10–17 ms a box in the app,
+inputs rather than painting again. **The painter's per-pixel path is out of JIT tiering** (2026-11-03, the user's choice,
+first by `AggressiveOptimization` on the shape methods a pixel reaches, the painter's row lambdas and the glowing edges',
+since that evening by quick JIT off for all of this code, see Measure properly, the attributes gone): alone
+it took 31 ms for those four parts, in the app 115–460 ms, because the runtime left its methods at
+tier-0 code in the busy process (pinned there, the probe took 212 ms); optimised at first call,
+a composition is 26–35 ms a background and 10–17 ms a box in the app,
 74 ms for the four during a burst of nudges (was 395–460), the pictures 17–32 ms on the UI thread. Each part logs its
 paint time, and a composition logs the thread pool's state when it starts. **A pixel is sampled 16 times only where an
 edge is within reach** — the outline, the coating band's, or an inner edge the shape reports (`InnerEdgeDistance`: a

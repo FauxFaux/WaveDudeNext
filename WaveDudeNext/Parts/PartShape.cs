@@ -15,7 +15,6 @@
 // version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 // <https://www.gnu.org/licenses/>.
 
-using System.Runtime.CompilerServices;
 using WaveDudeNext.Model;
 
 namespace WaveDudeNext.Parts;
@@ -80,11 +79,9 @@ public abstract class PartShape
 	/// The face nearest the point (x', y') of the part frame. Asked only inside the band of a part that leaves a face
 	/// bare, so a shape without faces to tell apart answers <see cref="Face.Front"/>.
 	/// </summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	protected virtual Face FaceAt(double x, double y) => Face.Front;
 
 	/// <summary>Whether the band at (x', y') is painted: the flag of the nearest face, without the search when every face is coated.</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	private bool Coated(double x, double y) =>
 		_frontCoated && _backCoated && _sidesCoated || FaceAt(x, y) switch { Face.Front => _frontCoated, Face.Back => _backCoated, _ => _sidesCoated };
 
@@ -96,7 +93,6 @@ public abstract class PartShape
 	/// tenths of a percent of the best at two, where the linear ramp reflects three to four times as much.
 	/// </summary>
 	/// <param name="t">Depth over thickness; clamped to 0..1.</param>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public static double GradedProfile(double t)
 	{
 		t = Math.Clamp(t, 0.0, 1.0);
@@ -147,7 +143,6 @@ public abstract class PartShape
 	/// cubic close behind; the figures are under "Absorption" in OpticalParts.md.
 	/// </summary>
 	/// <param name="t">Depth over ramp; clamped to 0..1.</param>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public static double AbsorptionProfile(double t)
 	{
 		t = Math.Clamp(t, 0.0, 1.0);
@@ -160,7 +155,6 @@ public abstract class PartShape
 	/// <see cref="AbsorptionProfile"/> of the depth over <paramref name="ramp"/>, rising inward. A shape that absorbs at
 	/// its rim instead (a logic gate's cladding) overrides it.
 	/// </summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public virtual double AbsorptionShareAt(double canvasX, double canvasY, double depth, double ramp) =>
 		AbsorptionProfile(ramp > 0.0 ? depth / ramp : 1.0);
 
@@ -180,11 +174,9 @@ public abstract class PartShape
 	/// the outline nor an inner edge is within reach (2026-11-03: every pixel of a fibre had taken 16 samples, 400 ms for
 	/// Example 23's wide fibre). A shape with inner edges that does not say returns 0, which keeps every inside pixel sampled.
 	/// </summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	protected virtual double InnerEdgeDistance(double x, double y) => HasInnerEdges ? 0.0 : double.PositiveInfinity;
 
 	/// <summary>How far inside the outline the canvas point lies, in pixels (negative outside): the exact distance for straight and circular edges, so the painter can tell a pixel wholly inside or outside from one sample.</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public double DepthAt(double canvasX, double canvasY)
 	{
 		(double x, double y) = ToFrame(canvasX, canvasY);
@@ -192,7 +184,6 @@ public abstract class PartShape
 	}
 
 	/// <summary><see cref="DepthAt"/> and the distance to the nearest inner edge (<see cref="InnerEdgeDistance"/>) of the canvas point, in one mapping into the part frame.</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public (double Depth, double InnerEdge) DepthsAt(double canvasX, double canvasY)
 	{
 		(double x, double y) = ToFrame(canvasX, canvasY);
@@ -200,7 +191,6 @@ public abstract class PartShape
 	}
 
 	/// <summary>Maps a canvas point into the part frame: the inverse of the composite source's turn (x = dx cos + dy sin, y = dy cos - dx sin), the transpose.</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	private (double X, double Y) ToFrame(double canvasX, double canvasY)
 	{
 		double ox = canvasX - _centreX;
@@ -229,7 +219,6 @@ public abstract class PartShape
 	}
 
 	/// <summary>The index at a canvas point as <see cref="IndexAt(double, double, double)"/> gives it over a medium of index 1.</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public double? IndexAt(double canvasX, double canvasY) => IndexAt(canvasX, canvasY, 1.0);
 
 	/// <summary>
@@ -241,7 +230,6 @@ public abstract class PartShape
 	/// <param name="canvasX">Canvas x, continuous.</param>
 	/// <param name="canvasY">Canvas y, continuous.</param>
 	/// <param name="outside">The index the pixel had before the part, the medium a graded band rises from.</param>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	public double? IndexAt(double canvasX, double canvasY, double outside)
 	{
 		(double x, double y) = ToFrame(canvasX, canvasY);
@@ -275,7 +263,6 @@ public abstract class PartShape
 	protected static int GuardCoating(int coating) => Math.Clamp(coating, 0, OpticalPart.MaxCoating);
 
 	/// <summary>Signed distance of (x, y) inside a simple polygon: the distance to the nearest edge, negative outside (even-odd rule).</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	protected static double PolygonDepth(ReadOnlySpan<(double X, double Y)> vertices, double x, double y)
 	{
 		bool inside = false;
@@ -298,7 +285,6 @@ public abstract class PartShape
 	}
 
 	/// <summary>Distance from (x, y) to the segment a–b.</summary>
-	[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 	protected static double SegmentDistance(double ax, double ay, double bx, double by, double x, double y)
 	{
 		double dx = bx - ax;
@@ -341,20 +327,16 @@ public abstract class PartShape
 		public override int Absorption { get; }
 		public override int AbsorptionRamp { get; }
 		protected override double Extent => _extent;
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y) => _index;
 
 		/// <summary>How far a surface of radius <paramref name="radius"/> bows out beyond its vertex at the lens edge.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private double Sag(double radius) => LensPart.Sag(radius, _half);
 
 		/// <summary>The least of: inside the first surface, inside the second, within the half-diameter.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y) =>
 			Math.Min(Math.Min(SurfaceDepth(x, y, _vertex1, _r1, -1), SurfaceDepth(x, y, _vertex2, _r2, +1)), _half - Math.Abs(y));
 
 		/// <summary>The nearest of the three: the first surface is the front, the second the back, the rim the sides.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override Face FaceAt(double x, double y)
 		{
 			double first = SurfaceDepth(x, y, _vertex1, _r1, -1);
@@ -370,7 +352,6 @@ public abstract class PartShape
 		/// radius and side have opposite signs. Distances are to the circle, so the coating band keeps its thickness
 		/// along the normal.
 		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private static double SurfaceDepth(double x, double y, double vertex, double radius, int side)
 		{
 			if (radius == 0.0)
@@ -433,7 +414,6 @@ public abstract class PartShape
 		}
 
 		/// <summary>The face of the edge nearest the point.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override Face FaceAt(double x, double y)
 		{
 			int nearest = 0;
@@ -455,9 +435,7 @@ public abstract class PartShape
 		public override int Absorption { get; }
 		public override int AbsorptionRamp { get; }
 		protected override double Extent => _extent;
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y) => PolygonDepth(_vertices, x, y);
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y) => _index;
 	}
 
@@ -580,7 +558,6 @@ public abstract class PartShape
 		/// outer radius − 2 × band to the peak, and falling the same way to nothing at the outer edge; the depth given by
 		/// the painter is not used, so the band runs up to an end face and stops there instead of wrapping it.
 		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		public override double AbsorptionShareAt(double canvasX, double canvasY, double depth, double ramp)
 		{
 			if (_band <= 0.0)
@@ -602,7 +579,6 @@ public abstract class PartShape
 		/// The start face is the front, the end face the back, the tube the sides: with flat ends, whichever of the three
 		/// the point is nearest to inside; with round ends, the caps before the start and beyond the end.
 		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override Face FaceAt(double x, double y)
 		{
 			int last = _path.Length - 1;
@@ -620,13 +596,10 @@ public abstract class PartShape
 		public override bool HasInnerEdges { get; }
 
 		/// <summary>The core boundary's distance, |r − core radius| by the distance from the path; none without a cladding.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double InnerEdgeDistance(double x, double y) => HasInnerEdges ? Math.Abs(PathDistance(x, y) - _coreRadius) : double.PositiveInfinity;
 		protected override double Extent => _extent;
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y) => PathDistance(x, y) <= _coreRadius ? _coreIndex : _claddingIndex;
 
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y)
 		{
 			(int from, int to) = ChordsNear(x, y);
@@ -675,7 +648,6 @@ public abstract class PartShape
 		}
 
 		/// <summary>Distance to the nearest chord of the path among those listed for the point's cell (exact within the tube, where the nearest chord is always listed).</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private double PathDistance(double x, double y)
 		{
 			(int from, int to) = ChordsNear(x, y);
@@ -689,7 +661,6 @@ public abstract class PartShape
 		}
 
 		/// <summary>The range in the chord lists for the cell of (x', y'): empty outside the grid.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private (int From, int To) ChordsNear(double x, double y)
 		{
 			int column = (int)Math.Floor((x - _gridX) / CellSize);
@@ -703,15 +674,12 @@ public abstract class PartShape
 		}
 
 		/// <summary>The cell holding (x', y'), clamped onto the grid.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private (int Column, int Row) CellOf(double x, double y) =>
 			(Math.Clamp((int)Math.Floor((x - _gridX) / CellSize), 0, _columns - 1), Math.Clamp((int)Math.Floor((y - _gridY) / CellSize), 0, _rows - 1));
 
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private static double Square(double v) => v * v;
 
 		/// <summary>The direction (x, y) as a unit vector, or null for a zero vector.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private static (double X, double Y)? Unit(double x, double y)
 		{
 			double length = Math.Sqrt(x * x + y * y);
@@ -744,17 +712,14 @@ public abstract class PartShape
 		protected override double Extent => Math.Sqrt(_halfLength * _halfLength + _halfWidth * _halfWidth);
 
 		/// <summary>The nearest layer boundary along x': a pair's edges at 0, its first thickness and the period.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double InnerEdgeDistance(double x, double y)
 		{
 			double along = (x + _halfLength) % _period;
 			return Math.Min(along, Math.Min(Math.Abs(along - _thickness1), _period - along));
 		}
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y) => Math.Min(_halfLength - Math.Abs(x), _halfWidth - Math.Abs(y));
 
 		/// <summary>The first layer of a pair starts at -L/2 and the pairs repeat along +x'.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y)
 		{
 			double along = (x + _halfLength) % _period;
@@ -781,16 +746,13 @@ public abstract class PartShape
 		public override bool IsMirror => false;
 		protected override int Coating { get; }
 		protected override double Extent => Math.Sqrt(_halfLength * _halfLength + _halfDiameter * _halfDiameter);
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y) => Math.Min(_halfLength - Math.Abs(x), _halfDiameter - Math.Abs(y));
 
 		/// <summary>The end faces across the axis are the front (−x') and the back, the long sides the sides.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override Face FaceAt(double x, double y) =>
 			_halfLength - Math.Abs(x) <= _halfDiameter - Math.Abs(y) ? (x < 0.0 ? Face.Front : Face.Back) : Face.Sides;
 
 		/// <summary>n(y') = n_c − (n_c − n_e)·(y' / (D/2))².</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y)
 		{
 			double t = y / _halfDiameter;
@@ -828,13 +790,10 @@ public abstract class PartShape
 		public override int Absorption => ZonePlatePart.BlockAbsorption;
 		public override int AbsorptionRamp => Math.Max(1, (int)Math.Ceiling(_ramp));
 		protected override double Extent => Math.Sqrt(_halfThickness * _halfThickness + _outerHalfWidth * _outerHalfWidth);
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y) => Math.Min(_halfThickness - Math.Abs(x), _outerHalfWidth - Math.Abs(y));
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y) => 1.0;
 
 		/// <summary>Nothing in an open zone; in a block or the mount, rising quadratically from the faces across the axis over the ramp.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		public override double AbsorptionShareAt(double canvasX, double canvasY, double depth, double ramp)
 		{
 			(double x, double y) = ToFrame(canvasX, canvasY);
@@ -902,7 +861,6 @@ public abstract class PartShape
 		/// arm of a switched-off output, rising quadratically from nothing over the output ramp to full at the right end. The
 		/// input ends and an active output do not absorb, so light comes in and goes out.
 		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		public override double AbsorptionShareAt(double canvasX, double canvasY, double depth, double ramp)
 		{
 			(double x, double y) = ToFrame(canvasX, canvasY);
@@ -918,7 +876,6 @@ public abstract class PartShape
 		}
 
 		/// <summary>The distance from the nearer arm's centre line, and whether that arm is B (below the axis).</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		private (double Distance, bool ArmB) Nearest(double x, double y)
 		{
 			(double offset, double slope) = _design.ArmOffsetAndSlope(x);
@@ -926,11 +883,9 @@ public abstract class PartShape
 			return (Math.Abs(Math.Abs(y) - offset) * cos, y > 0.0);
 		}
 
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double Depth(double x, double y) => Math.Min(_halfLength - Math.Abs(x), _outer - Nearest(x, y).Distance);
 
 		/// <summary>The core, the phase section on its arm, or the cladding; within the coating's thickness of a coated end (the input at −x, the output at +x), √n of it rounded to 0.01.</summary>
-		[MethodImpl(MethodImplOptions.AggressiveOptimization)]
 		protected override double BodyIndex(double x, double y)
 		{
 			(double distance, bool armB) = Nearest(x, y);
