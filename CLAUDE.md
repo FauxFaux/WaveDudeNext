@@ -79,10 +79,13 @@ harnesses run.
   quoted in its error's entry** (2026-11-03, the user's rule): the catch logs an `UnreadableFileException` wrapping the error,
   whose `ToString` appends the file's text, the first 64 K characters and the line an XML error names beyond them, so the
   log file and the Messages pane's tooltip carry it while the status bar and the dialog keep the one-line message; the
-  settings file needs it most, since the next save writes the defaults over it (moving it aside is still open).
+  settings file needs it most, since the next save writes the defaults over it. Moving an unreadable file aside was
+  proposed and refused (2026-11-03, the user's decision: nobody would find that file, which is exactly why its text is in
+  the log).
 - **Do not resurrect**: a probe signal lane, timeline tracks, zoom and pan of the axis, thumbnails, a run progress
   bar, the scratch budget and its "not computed" note, a GPU JPEG front end, a Direct3D display path, a bent
-  rotation lever. **Do not change**: the readout showing both frame and step (undecided).
+  rotation lever, an unreadable settings file moved aside (2026-11-03: nobody would find it, the log quotes it). **Do not
+  change**: the readout showing both frame and step (undecided).
 - Collect the reusable rules for other projects only when he asks.
 
 ## Build and run
