@@ -3,7 +3,7 @@
   <!-- shared by every project under the repo root: the product version (the SDK appends the commit hash to the
        informational version, which Help > About shows shortened) and the names Explorer's file properties show -->
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Product>WaveDude Next</Product>
     <Description>A 2D wave simulator</Description>
   </PropertyGroup>
