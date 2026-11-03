@@ -17,7 +17,9 @@ The class is the kind (2026-10-22: the `PartKind` enum was removed).
    get (a fibre's default path: `XmlSerializer` appends a file's items to the list it finds), and its properties under
    `CLAUDE.md`'s model conventions (`[Range]` beside every clamp in `Normalize()`).
 2. Its shape in `Parts/PartShape.cs` (`PartShape.For`) and, if it has one, its size grip in `SceneOverlay.GripOf` and
-   `SetGrip`.
+   `SetGrip`. A shape whose `Depth` and `InnerEdgeDistance` are true distances (they change by at most the distance
+   moved) says so with `DepthIsDistance`, and the painter settles runs of pixels from one centre's depths; one that is
+   not stays pixel by pixel, which is always right.
 3. An `[XmlElement("Name", typeof(…))]` line on `Project.Parts`: one element name per kind.
 4. Its entry in `PartMenuEntries` (`Panes/ProjectTree.xaml`), where the app decides which kinds it offers and in which
    order; both menus take their entries from there.
@@ -48,7 +50,21 @@ checked.
   body, a fibre's or GRIN lens's zone) and the indices averaged (an existing red 0 counting as index 1), rounded to red.
   A mirror uses the pixel-centre test alone and writes red 0: a half-covered mirror pixel would otherwise round to an
   index and be transparent. A part's centre is the corner of pixel (X, Y), so even sizes, every default, cover whole
-  pixels. A part whose index is not painted (`PaintsIndex` false, the zone plate) writes blue alone.
+  pixels. A part whose index is not painted (`PaintsIndex` false, the zone plate) writes blue alone. Only pixels near
+  an edge are supersampled: the shape's depth at the pixel centre is a distance, so a pixel farther than a sample's
+  reach (0.6 px) from the outline, the coating band's inner edge and every inner edge (a fibre's core, a stack's layers)
+  takes its centre's index in one go. And where the shape says its depths are distances (`PartShape.DepthIsDistance`:
+  the polygon shapes, the fibre, the Bragg stack, the GRIN lens, the zone plate; not the lens, whose surface depth is
+  the radius beyond a convex surface's centre and minus infinity beyond a concave one's, nor the gate's first-order arm
+  distance), one pixel centre settles a run of the pixels after it along the row (2026-11-04): a centre k pixels on is
+  at most k nearer to every edge, so the next floor(e − 0.6 − allowance) pixels, e the nearest edge's distance, are
+  outside too or body too, and only the body index is asked of them (`BodyIndexAt`); a fibre's `SkipAllowance` covers
+  the one place its depth jumps, the wedge between a flat face's plane and the end chord's perpendicular at a bent end,
+  by (R + margin) tan²φ / 2 per end, φ the angle between the face's tangent and the chord. `library_check` paints every
+  example's parts and every kind at four angles both ways, with runs and pixel by pixel, and the bytes must agree. A
+  fibre sample runs its chords once for depth, index and face together (`Evaluate`), with each chord's run and length
+  precomputed; on a blank Full HD canvas the painting of a 400 × 330 outline went 3.6 → 0.8 ms, a hexagon 2.3 → 0.7, an
+  S-bent fibre across the canvas 19 → 9.6.
 - **The angle** is in degrees, counter-clockwise on the screen, 0 pointing the part's axis x' along +x (the composite
   source's convention); y' is across. Shapes face a source on the left (-x').
 - **The AR coating** (`CoatedPart`: lens, shapes, GRIN lens) is a band of `Coating` pixels just inside the outline: with

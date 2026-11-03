@@ -16,6 +16,7 @@
 // <https://www.gnu.org/licenses/>.
 
 using System.Globalization;
+using System.Numerics;
 using System.Numerics.Tensors;
 using WaveDudeNext.Model;
 using WaveDudeNext.Probes;
@@ -800,48 +801,45 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		float scale = _intensityScale;
 		int bands = Math.Min(h, Environment.ProcessorCount * 4);
 
+		// the cells go through the stencil in lanes of Vector<float> (4 on SSE, 8 with AVX2; 2026-11-04), each lane the
+		// scalar arithmetic in the scalar order, so the field is the same bit for bit as cell by cell (and as the GPU's,
+		// which library_check proves); the columns the lanes do not cover and the first and last column of a 4th-order
+		// row, which take the 9-point stencil, go cell by cell
+		int lanes = Vector<float>.Count;
 		Parallel.For(0, bands, band =>
 		{
 			int rowStart = (int)((long)h * band / bands);
 			int rowEnd = (int)((long)h * (band + 1) / bands) - 1;
 			for (int y = rowStart; y <= rowEnd; y++)
 			{
-				int idx = (y + 1) * stride + 1;
+				int row = (y + 1) * stride + 1;
 				// the 4th order stencil reaches 2 cells away, so it is only safe for domain rows/columns that
 				// have that much room before the (1 cell wide) border - the outermost ring of the domain (y = 0,
 				// y = h - 1, and, per column below, x = 0, x = w - 1) falls back to the original 3x3 kernel
 				bool rowAllows4th = use4th && y >= 1 && y <= h - 2;
-				for (int x = 0; x < w; x++)
+				int x = 0;
+				if (rowAllows4th)
 				{
-					float center = u[idx];
-					float laplacian;
-					if (rowAllows4th && x >= 1 && x <= w - 2)
+					StepCell9(u, uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, stride, row);
+					int end = w - 1;
+					for (x = 1; x + lanes <= end; x += lanes)
 					{
-						laplacian = FourthOrderFar * (u[idx - 2] + u[idx + 2] + u[idx - 2 * stride] + u[idx + 2 * stride])
-							+ FourthOrderNear * (u[idx - 1] + u[idx + 1] + u[idx - stride] + u[idx + stride])
-							+ FourthOrderCenter * center;
+						StepLanes4(u, uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, stride, row + x);
 					}
-					else
+					for (; x < end; x++)
 					{
-						laplacian = KernelCorner * (u[idx - stride - 1] + u[idx - stride + 1] + u[idx + stride - 1] + u[idx + stride + 1])
-							+ KernelEdge * (u[idx - 1] + u[idx + 1] + u[idx - stride] + u[idx + stride])
-							- center;
+						StepCell4(u, uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, stride, row + x);
 					}
-					// the new value replaces the previous one (each cell only reads its own previous value)
-					float next = center + (center - uPrev[idx]) * d[idx] + laplacian * c2[idx] * mult;
-					uPrev[idx] = next;
-					if (track)
-					{
-						// two cascaded one-pole stages (see the class remarks), blended with the 1-stage
-						// result (IntensityBlend) for the shown/exported intensity rather than using the full
-						// 2-stage cascade outright
-						float s1 = stage1![idx] * alpha + next * next * (1f - alpha);
-						stage1[idx] = s1;
-						float s2 = intensity![idx] * alpha + s1 * (1f - alpha);
-						intensity[idx] = s2;
-						intensityOut![idx] = (s1 * (1f - IntensityBlend) + s2 * IntensityBlend) * scale;
-					}
-					idx++;
+					StepCell9(u, uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, stride, row + w - 1);
+					continue;
+				}
+				for (; x + lanes <= w; x += lanes)
+				{
+					StepLanes9(u, uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, stride, row + x);
+				}
+				for (; x < w; x++)
+				{
+					StepCell9(u, uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, stride, row + x);
 				}
 			}
 		});
@@ -853,6 +851,81 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		// the array that received the new values is now the current field
 		_uPrev = u;
 		_u = uPrev;
+	}
+
+	/// <summary>One cell of <see cref="UpdateField"/> with the 9-point stencil: the Laplacian, then <see cref="FinishCell"/>.</summary>
+	private static void StepCell9(float[] u, float[] uPrev, float[] c2, float[] d, float[]? stage1, float[]? intensity, float[]? intensityOut, bool track, float mult, float alpha, float scale, int stride, int idx)
+	{
+		float center = u[idx];
+		float laplacian = KernelCorner * (u[idx - stride - 1] + u[idx - stride + 1] + u[idx + stride - 1] + u[idx + stride + 1])
+			+ KernelEdge * (u[idx - 1] + u[idx + 1] + u[idx - stride] + u[idx + stride])
+			- center;
+		FinishCell(uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, idx, center, laplacian);
+	}
+
+	/// <summary>One cell of <see cref="UpdateField"/> with the 4th-order stencil: the Laplacian, then <see cref="FinishCell"/>.</summary>
+	private static void StepCell4(float[] u, float[] uPrev, float[] c2, float[] d, float[]? stage1, float[]? intensity, float[]? intensityOut, bool track, float mult, float alpha, float scale, int stride, int idx)
+	{
+		float center = u[idx];
+		float laplacian = FourthOrderFar * (u[idx - 2] + u[idx + 2] + u[idx - 2 * stride] + u[idx + 2 * stride])
+			+ FourthOrderNear * (u[idx - 1] + u[idx + 1] + u[idx - stride] + u[idx + stride])
+			+ FourthOrderCenter * center;
+		FinishCell(uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, idx, center, laplacian);
+	}
+
+	/// <summary>
+	/// The leapfrog update of one cell from its Laplacian, <c>next = u + (u − uPrev)·d + lap·c²·mult</c>, written over
+	/// its previous value, and when tracking the intensity's two cascaded one-pole stages (see the class remarks),
+	/// blended with the 1-stage result (<see cref="IntensityBlend"/>) for the shown/exported intensity rather than
+	/// using the full 2-stage cascade outright.
+	/// </summary>
+	private static void FinishCell(float[] uPrev, float[] c2, float[] d, float[]? stage1, float[]? intensity, float[]? intensityOut, bool track, float mult, float alpha, float scale, int idx, float center, float laplacian)
+	{
+		float next = center + (center - uPrev[idx]) * d[idx] + laplacian * c2[idx] * mult;
+		uPrev[idx] = next;
+		if (track)
+		{
+			float s1 = stage1![idx] * alpha + next * next * (1f - alpha);
+			stage1[idx] = s1;
+			float s2 = intensity![idx] * alpha + s1 * (1f - alpha);
+			intensity[idx] = s2;
+			intensityOut![idx] = (s1 * (1f - IntensityBlend) + s2 * IntensityBlend) * scale;
+		}
+	}
+
+	/// <summary><see cref="StepCell9"/> for <see cref="Vector{T}.Count"/> cells from <paramref name="idx"/> on, each lane the scalar's arithmetic in its order.</summary>
+	private static void StepLanes9(float[] u, float[] uPrev, float[] c2, float[] d, float[]? stage1, float[]? intensity, float[]? intensityOut, bool track, float mult, float alpha, float scale, int stride, int idx)
+	{
+		var center = new Vector<float>(u, idx);
+		Vector<float> laplacian = KernelCorner * (new Vector<float>(u, idx - stride - 1) + new Vector<float>(u, idx - stride + 1) + new Vector<float>(u, idx + stride - 1) + new Vector<float>(u, idx + stride + 1))
+			+ KernelEdge * (new Vector<float>(u, idx - 1) + new Vector<float>(u, idx + 1) + new Vector<float>(u, idx - stride) + new Vector<float>(u, idx + stride))
+			- center;
+		FinishLanes(uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, idx, center, laplacian);
+	}
+
+	/// <summary><see cref="StepCell4"/> for <see cref="Vector{T}.Count"/> cells from <paramref name="idx"/> on, each lane the scalar's arithmetic in its order.</summary>
+	private static void StepLanes4(float[] u, float[] uPrev, float[] c2, float[] d, float[]? stage1, float[]? intensity, float[]? intensityOut, bool track, float mult, float alpha, float scale, int stride, int idx)
+	{
+		var center = new Vector<float>(u, idx);
+		Vector<float> laplacian = FourthOrderFar * (new Vector<float>(u, idx - 2) + new Vector<float>(u, idx + 2) + new Vector<float>(u, idx - 2 * stride) + new Vector<float>(u, idx + 2 * stride))
+			+ FourthOrderNear * (new Vector<float>(u, idx - 1) + new Vector<float>(u, idx + 1) + new Vector<float>(u, idx - stride) + new Vector<float>(u, idx + stride))
+			+ FourthOrderCenter * center;
+		FinishLanes(uPrev, c2, d, stage1, intensity, intensityOut, track, mult, alpha, scale, idx, center, laplacian);
+	}
+
+	/// <summary><see cref="FinishCell"/> for <see cref="Vector{T}.Count"/> cells from <paramref name="idx"/> on.</summary>
+	private static void FinishLanes(float[] uPrev, float[] c2, float[] d, float[]? stage1, float[]? intensity, float[]? intensityOut, bool track, float mult, float alpha, float scale, int idx, Vector<float> center, Vector<float> laplacian)
+	{
+		Vector<float> next = center + (center - new Vector<float>(uPrev, idx)) * new Vector<float>(d, idx) + laplacian * new Vector<float>(c2, idx) * mult;
+		next.CopyTo(uPrev, idx);
+		if (track)
+		{
+			Vector<float> s1 = new Vector<float>(stage1!, idx) * alpha + next * next * (1f - alpha);
+			s1.CopyTo(stage1!, idx);
+			Vector<float> s2 = new Vector<float>(intensity!, idx) * alpha + s1 * (1f - alpha);
+			s2.CopyTo(intensity!, idx);
+			((s1 * (1f - IntensityBlend) + s2 * IntensityBlend) * scale).CopyTo(intensityOut!, idx);
+		}
 	}
 
 	/// <summary>

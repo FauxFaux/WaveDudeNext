@@ -284,6 +284,7 @@ internal static class Program
 		CheckProbeGraph();
 		CheckImport();
 		CheckParts();
+		CheckPainterRuns();
 		CheckAbsorbingParts();
 		CheckXorGate();
 		CheckGatePortFollower();
@@ -2780,6 +2781,288 @@ internal static class Program
 		}
 		File.Delete(newer);
 		Check(refused, "a newer format version is refused");
+	}
+
+	/// <summary>
+	/// The painter's runs (2026-11-04: where a shape's depths are distances, one pixel centre settles the pixels after it
+	/// along the row) against the pixel-by-pixel painting they replaced, kept here as <see cref="PaintPixelByPixel"/>: every
+	/// example's parts, and every kind at several angles with coatings of both profiles, bare faces, mirrors, absorption,
+	/// both fibre ends and a fibre bent sharply at its flat start face (the wedge the allowance covers), painted both ways
+	/// onto a canvas whose red and blue vary and that holds mirror pixels, must come out byte for byte the same.
+	/// </summary>
+	private static void CheckPainterRuns()
+	{
+		var cases = new List<(string Name, int Width, int Height, IReadOnlyList<OpticalPart> Parts)>();
+		string? root = FindRepoRoot();
+		if (root != null)
+		{
+			foreach (string file in Directory.GetFiles(Path.Combine(root, "Examples"), "*.wdproj").Order())
+			{
+				Project example = Project.Load(file);
+				if (example.Parts.Any(part => part.Enabled))
+				{
+					cases.Add((Path.GetFileNameWithoutExtension(file), Math.Max(64, example.Scene.Width), Math.Max(64, example.Scene.Height), example.Parts));
+				}
+			}
+		}
+		foreach (double angle in new[] { 0.0, 17.0, 90.0, -123.0 })
+		{
+			var project = new Project();
+			project.Scene.Width = 520;
+			project.Scene.Height = 360;
+			var lens = project.AddPart<LensPart>();
+			lens.X = 110; lens.Y = 90; lens.Angle = angle; lens.Diameter = 120; lens.Thickness = 30;
+			lens.Coating = 5; lens.CoatingProfile = CoatingProfile.Graded; lens.BackCoated = false; lens.Absorption = 40;
+			var mirror = project.AddPart<LensPart>();
+			mirror.X = 260; mirror.Y = 90; mirror.Angle = angle; mirror.Diameter = 100; mirror.Thickness = 10; mirror.Mirror = true;
+			var slab = project.AddPart<RectanglePart>();
+			slab.X = 410; slab.Y = 90; slab.Angle = angle; slab.Length = 140; slab.Width = 50;
+			slab.Coating = 4; slab.SidesCoated = false; slab.RefractiveIndex = 2.25; slab.Absorption = 120; slab.AbsorptionRamp = 12;
+			var wall = project.AddPart<RectanglePart>();
+			wall.X = 60; wall.Y = 230; wall.Angle = angle; wall.Length = 90; wall.Width = 6; wall.Mirror = true;
+			var polygon = project.AddPart<PolygonPart>();
+			polygon.X = 170; polygon.Y = 230; polygon.Angle = angle; polygon.Side = 40;
+			polygon.Coating = 3; polygon.CoatingProfile = CoatingProfile.Layer; polygon.FrontCoated = false;
+			var disc = project.AddPart<EllipsePart>();
+			disc.X = 290; disc.Y = 230; disc.Angle = angle; disc.Length = 80; disc.Width = 50;
+			disc.Absorption = 200; disc.AbsorptionRamp = 60; disc.Coating = 6; disc.CoatingProfile = CoatingProfile.Graded;
+			var triangle = project.AddPart<TrianglePart>();
+			triangle.X = 400; triangle.Y = 230; triangle.Angle = angle; triangle.Base = 70;
+			var outline = project.AddPart<OutlinePart>();
+			outline.X = 470; outline.Y = 300; outline.Angle = angle;
+			foreach ((int px, int py) in new[] { (-40, -30), (30, -40), (45, 10), (0, 45), (-35, 20), (-10, 0) })
+			{
+				outline.Points.Add(new PartPoint { X = px, Y = py });
+			}
+			var fiber = project.AddPart<FiberPart>();
+			fiber.X = 130; fiber.Y = 320; fiber.Angle = angle; fiber.CoreDiameter = 12; fiber.CladdingThickness = 8;
+			fiber.Coating = 3; fiber.FrontCoated = false; fiber.Absorption = 90; fiber.AbsorptionRamp = 3; fiber.Ends = FiberEnds.Flat;
+			fiber.Nodes[0].X = -100; fiber.Nodes[0].Y = 0; fiber.Nodes[0].SetHandle(true, 8, 40);
+			fiber.Nodes[1].X = 100; fiber.Nodes[1].Y = 10; fiber.Nodes[1].SetHandle(false, -60, 30);
+			var bare = project.AddPart<FiberPart>();
+			bare.X = 380; bare.Y = 320; bare.Angle = angle; bare.CoreDiameter = 16; bare.CladdingThickness = 0;
+			bare.Ends = FiberEnds.Round; bare.Coating = 4; bare.CoatingProfile = CoatingProfile.Graded;
+			bare.Nodes[0].X = -70; bare.Nodes[1].X = 70; bare.Nodes[1].Y = -20;
+			var bragg = project.AddPart<BraggReflectorPart>();
+			bragg.X = 60; bragg.Y = 90; bragg.Angle = angle; bragg.Pairs = 4; bragg.Thickness1 = 5; bragg.Thickness2 = 7; bragg.Width = 60;
+			var grin = project.AddPart<GrinLensPart>();
+			grin.X = 190; grin.Y = 160; grin.Angle = angle; grin.Length = 60; grin.Diameter = 50;
+			grin.Coating = 6; grin.CoatingProfile = CoatingProfile.Graded; grin.SidesCoated = false;
+			var plate = project.AddPart<ZonePlatePart>();
+			plate.X = 330; plate.Y = 160; plate.Angle = angle; plate.Diameter = 120; plate.Thickness = 20; plate.Coating = 6; plate.Mount = true; plate.MountWidth = 20;
+			var gate = project.AddPart<XorGatePart>();
+			gate.X = 450; gate.Y = 160; gate.Angle = angle;
+			cases.Add(($"every kind at {angle}°", project.Scene.Width, project.Scene.Height, project.Parts));
+		}
+		int compared = 0;
+		foreach ((string name, int width, int height, IReadOnlyList<OpticalPart> parts) in cases)
+		{
+			// red and blue vary over the canvas, with a column of mirror pixels every 50, so graded bands rise from every
+			// medium and absorption meets blue already there
+			var bgra = new byte[width * height * 4];
+			for (int y = 0; y < height; y++)
+			{
+				for (int x = 0; x < width; x++)
+				{
+					int i = (y * width + x) * 4;
+					bgra[i] = (byte)(y % 90);
+					bgra[i + 2] = (byte)(x % 50 == 0 ? 0 : 100 + (x / 7 + y / 5) % 150);
+					bgra[i + 3] = 255;
+				}
+			}
+			var image = new ScenePixels(width, height, width * 4, bgra);
+			ScenePixels expected = PaintPixelByPixel(image, parts);
+			ScenePixels actual = PartPainter.Paint(image, width, height, 1.0, parts)!;
+			int first = expected.Bgra.AsSpan().CommonPrefixLength(actual.Bgra);
+			compared++;
+			Check(first == expected.Bgra.Length, first == expected.Bgra.Length
+				? $"painter runs: {name} comes out byte for byte as pixel by pixel ({parts.Count} parts, {width}×{height})"
+				: $"painter runs: {name} differs at ({first / 4 % width}, {first / 4 / width}) channel {first % 4}: {expected.Bgra[first]} pixel by pixel, {actual.Bgra[first]} with runs");
+		}
+		Check(compared >= 14, $"the runs were compared on {compared} projects");
+
+		// the glowing edges in lanes (2026-11-04) against the pixel-by-pixel Sobel they replaced: a painted scene and noise
+		var noise = new Random(7);
+		foreach ((string name, ScenePixels pixels) in new[]
+		{
+			("Example 16 painted", PartPainter.Paint(null, 1500, 900, 1.0, cases.First(c => c.Name.StartsWith("Example16")).Parts)!),
+			("noise 1920 × 1080", new ScenePixels(1920, 1080, 1920 * 4, Enumerable.Range(0, 1920 * 1080 * 4).Select(_ => (byte)noise.Next(256)).ToArray())),
+			("noise 5 × 3", new ScenePixels(5, 3, 20, Enumerable.Range(0, 60).Select(_ => (byte)noise.Next(256)).ToArray())),
+		})
+		{
+			byte[] expected = GlowingEdgesPixelByPixel(pixels.Bgra, pixels.Width, pixels.Height, pixels.StrideBytes);
+			byte[] actual = GlowingEdges.Compute(pixels.Bgra, pixels.Width, pixels.Height, pixels.StrideBytes);
+			int first = expected.AsSpan().CommonPrefixLength(actual);
+			Check(first == expected.Length, first == expected.Length
+				? $"glowing edges in lanes: {name} comes out byte for byte as pixel by pixel"
+				: $"glowing edges in lanes: {name} differs at byte {first}: {expected[first]} pixel by pixel, {actual[first]} in lanes");
+		}
+	}
+
+	/// <summary>The glowing edges as they stood before the lanes (2026-11-04): the Sobel magnitude per pixel and channel in double.</summary>
+	private static byte[] GlowingEdgesPixelByPixel(byte[] bgra, int width, int height, int strideBytes)
+	{
+		var result = new byte[width * height * 4];
+		for (int i = 3; i < result.Length; i += 4)
+		{
+			result[i] = 255;
+		}
+		if (width < 3 || height < 3)
+		{
+			return result;
+		}
+		for (int y = 1; y < height - 1; y++)
+		{
+			int rowUp = (y - 1) * strideBytes;
+			int rowMid = y * strideBytes;
+			int rowDown = (y + 1) * strideBytes;
+			int dstRow = y * width * 4;
+			for (int x = 1; x < width - 1; x++)
+			{
+				int cUp = rowUp + (x - 1) * 4;
+				int cMid = rowMid + (x - 1) * 4;
+				int cDown = rowDown + (x - 1) * 4;
+				int dst = dstRow + x * 4;
+				for (int channel = 0; channel < 3; channel++)
+				{
+					int p00 = bgra[cUp + channel];
+					int p01 = bgra[cUp + 4 + channel];
+					int p02 = bgra[cUp + 8 + channel];
+					int p10 = bgra[cMid + channel];
+					int p12 = bgra[cMid + 8 + channel];
+					int p20 = bgra[cDown + channel];
+					int p21 = bgra[cDown + 4 + channel];
+					int p22 = bgra[cDown + 8 + channel];
+					int gx = (p02 + 2 * p12 + p22) - (p00 + 2 * p10 + p20);
+					int gy = (p20 + 2 * p21 + p22) - (p00 + 2 * p01 + p02);
+					double magnitude = Math.Sqrt((double)gx * gx + (double)gy * gy) * GlowingEdges.Scale;
+					result[dst + channel] = (byte)Math.Min(255.0, magnitude);
+				}
+			}
+		}
+		return result;
+	}
+
+	/// <summary>The painting as it stood before the runs (2026-11-03): every pixel of a part's rectangle evaluated on its own.</summary>
+	private static ScenePixels PaintPixelByPixel(ScenePixels image, IReadOnlyList<OpticalPart> parts)
+	{
+		int width = image.Width;
+		int height = image.Height;
+		int stride = width * 4;
+		var bgra = new byte[stride * height];
+		for (int y = 0; y < height; y++)
+		{
+			Buffer.BlockCopy(image.Bgra, y * image.StrideBytes, bgra, y * stride, stride);
+		}
+		const double reach = 0.6;
+		const double step = 1.0 / PartPainter.Supersample;
+		const double half = step / 2.0;
+		foreach (OpticalPart part in parts)
+		{
+			if (!part.Enabled || PartShape.For(part) is not { } shape)
+			{
+				continue;
+			}
+			(int x0, int y0, int x1, int y1) = shape.Bounds(width, height);
+			if (x0 > x1 || y0 > y1)
+			{
+				continue;
+			}
+			if (shape.Absorption > 0)
+			{
+				int columns = x1 - x0 + 1;
+				var depths = new float[columns * (y1 - y0 + 1)];
+				double deepest = 0.0;
+				for (int y = y0; y <= y1; y++)
+				{
+					for (int x = x0; x <= x1; x++)
+					{
+						double depth = shape.DepthAt(x + 0.5, y + 0.5);
+						depths[(y - y0) * columns + x - x0] = (float)depth;
+						deepest = Math.Max(deepest, depth);
+					}
+				}
+				double ramp = Math.Min(shape.AbsorptionRamp, deepest);
+				int full = shape.Absorption;
+				for (int y = y0; y <= y1; y++)
+				{
+					for (int x = x0; x <= x1; x++)
+					{
+						float depth = depths[(y - y0) * columns + x - x0];
+						if (depth >= 0f)
+						{
+							int offset = y * stride + x * 4;
+							int blue = (int)Math.Round(full * shape.AbsorptionShareAt(x + 0.5, y + 0.5, depth, ramp));
+							bgra[offset] = (byte)Math.Max(bgra[offset], blue);
+						}
+					}
+				}
+			}
+			if (!shape.PaintsIndex)
+			{
+				continue;
+			}
+			if (shape.IsMirror)
+			{
+				for (int y = y0; y <= y1; y++)
+				{
+					for (int x = x0; x <= x1; x++)
+					{
+						if (shape.IndexAt(x + 0.5, y + 0.5) is not null)
+						{
+							bgra[y * stride + x * 4 + 2] = 0;
+						}
+					}
+				}
+				continue;
+			}
+			int coating = shape.CoatingWidth;
+			for (int y = y0; y <= y1; y++)
+			{
+				for (int x = x0; x <= x1; x++)
+				{
+					int offset = y * stride + x * 4 + 2;
+					(double depth, double inner) = shape.DepthsAt(x + 0.5, y + 0.5);
+					if (depth < -reach)
+					{
+						continue;
+					}
+					int red = bgra[offset];
+					double existing = red == 0 ? 1.0 : red / 100.0;
+					if (depth > reach && inner > reach && (coating == 0 || Math.Abs(depth - coating) > reach))
+					{
+						if (shape.IndexAt(x + 0.5, y + 0.5, existing) is { } whole)
+						{
+							bgra[offset] = (byte)Math.Clamp((int)Math.Round(whole * 100.0), 1, 255);
+						}
+						continue;
+					}
+					double sum = 0.0;
+					int inside = 0;
+					for (int sy = 0; sy < PartPainter.Supersample; sy++)
+					{
+						for (int sx = 0; sx < PartPainter.Supersample; sx++)
+						{
+							double? index = shape.IndexAt(x + half + sx * step, y + half + sy * step, existing);
+							if (index is { } n)
+							{
+								sum += n;
+								inside++;
+							}
+							else
+							{
+								sum += existing;
+							}
+						}
+					}
+					if (inside > 0)
+					{
+						bgra[offset] = (byte)Math.Clamp((int)Math.Round(sum / (PartPainter.Supersample * PartPainter.Supersample) * 100.0), 1, 255);
+					}
+				}
+			}
+		}
+		return new ScenePixels(width, height, stride, bgra);
 	}
 
 	/// <summary>Red at canvas pixel (x, y) of a painted scene.</summary>

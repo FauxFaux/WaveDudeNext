@@ -33,7 +33,12 @@ namespace WaveDudeNext.Parts;
 /// tests the pixel centre alone and writes red 0, since an averaged mirror edge would
 /// clamp to glass. Only pixels near an edge (the outline, the coating band's inner edge, a Bragg layer) are
 /// supersampled: the shape's depth at the pixel centre is an exact distance, so a pixel farther than a sample's
-/// reach from every edge takes its centre's index in one go (2026-10-19, a drag of a part was sluggish).
+/// reach from every edge takes its centre's index in one go (2026-10-19, a drag of a part was sluggish). And where the
+/// shape's depths are distances (<see cref="PartShape.DepthIsDistance"/>), one pixel centre settles a run of the pixels
+/// after it along the row (<see cref="Settled"/>): a centre k pixels on is at most k nearer to every edge, so the pixels
+/// within the nearest edge's distance less the reach are outside too, or body too, and only the body index is asked of
+/// them (2026-11-04: a box of 600 pixels a row takes a handful of depth evaluations instead of 600; proven byte for byte
+/// against the pixel-by-pixel painting by <c>library_check</c>).
 /// Pure geometry, no UI; any thread. The per-kind tests are in <see cref="PartShape"/> so the
 /// harness can check them.
 /// </summary>
@@ -46,6 +51,28 @@ public static class PartPainter
 
 	/// <summary>How far a sample can lie from the pixel centre, with a margin: beyond this depth from an edge, every sample falls on the same side.</summary>
 	private const double SampleReach = 0.6;
+
+	/// <summary>Taken off a run's reach for the rounding of the depths' arithmetic, in pixels.</summary>
+	private const double Epsilon = 1e-6;
+
+	/// <summary>
+	/// How many pixels after one along a row its depths settle: with the nearest edge <paramref name="edge"/> pixels from
+	/// the centre and the shape's depths distances, the next floor(edge − <paramref name="reach"/> − allowance − ε) centres
+	/// are still farther than <paramref name="reach"/> from every edge, on the same side; 0 for a shape whose depths are
+	/// not distances, which is sampled pixel by pixel.
+	/// </summary>
+	/// <param name="shape">The shape.</param>
+	/// <param name="edge">The distance from this pixel's centre to the nearest edge, positive.</param>
+	/// <param name="reach">The samples' reach to stay clear of, <see cref="SampleReach"/> for the refractive painting, 0 for a mirror's centre test.</param>
+	private static int Settled(PartShape shape, double edge, double reach)
+	{
+		if (!shape.DepthIsDistance)
+		{
+			return 0;
+		}
+		double pixels = edge - reach - shape.SkipAllowance - Epsilon;
+		return pixels >= 1.0 ? (int)pixels : 0;
+	}
 
 	/// <summary>
 	/// The scene pixels with the enabled parts painted in: <paramref name="image"/> itself (the same reference, so
@@ -133,12 +160,25 @@ public static class PartPainter
 			Parallel.For(y0, y1 + 1, (int y) =>
 			{
 				int row = y * stride;
-				for (int x = x0; x <= x1; x++)
+				double cy = y + 0.5;
+				for (int x = x0; x <= x1;)
 				{
-					if (shape.IndexAt(x + 0.5, y + 0.5) is not null)
+					// the centre test: inside at a depth of 0 and more; the run its depth settles is on the same side
+					double depth = shape.DepthAt(x + 0.5, cy);
+					int run;
+					if (depth >= 0.0)
 					{
-						bgra[row + x * 4 + 2] = 0;
+						run = Math.Min(Settled(shape, depth, 0.0), x1 - x);
+						for (int k = 0; k <= run; k++)
+						{
+							bgra[row + (x + k) * 4 + 2] = 0;
+						}
 					}
+					else
+					{
+						run = Math.Min(Settled(shape, -depth, 0.0), x1 - x);
+					}
+					x += run + 1;
 				}
 			});
 			return;
@@ -149,13 +189,16 @@ public static class PartPainter
 		Parallel.For(y0, y1 + 1, (int y) =>
 		{
 			int row = y * stride;
-			for (int x = x0; x <= x1; x++)
+			double cy = y + 0.5;
+			for (int x = x0; x <= x1;)
 			{
 				int offset = row + x * 4 + 2;
-				(double depth, double inner) = shape.DepthsAt(x + 0.5, y + 0.5);
+				(double depth, double inner) = shape.DepthsAt(x + 0.5, cy);
 				if (depth < -SampleReach)
 				{
-					continue;   // every sample outside
+					// every sample outside: this pixel and the run its depth settles
+					x += Math.Min(Settled(shape, -depth, SampleReach), x1 - x) + 1;
+					continue;
 				}
 				int red = bgra[offset];
 				// red 0 is a mirror the engine reads as index 1000; averaging it in as glass of index 1 is the user's rule,
@@ -165,10 +208,19 @@ public static class PartPainter
 				{
 					// every sample inside and no edge within reach, neither the outline, an inner edge (a fibre's core, a
 					// stack's layer) nor the coating band's: the centre's index stands for the pixel
-					if (shape.IndexAt(x + 0.5, y + 0.5, existing) is { } whole)
+					if (shape.IndexAt(x + 0.5, cy, existing) is { } whole)
 					{
 						bgra[offset] = (byte)Math.Clamp((int)Math.Round(whole * 100.0), 1, 255);
 					}
+					// deeper than the band, or without one: the run the depths settle is body too, clear of the outline, the
+					// band's inner edge and every inner edge, and the body index alone is its pixels' index
+					double body = coating == 0 ? depth : depth - coating;
+					int run = body > SampleReach ? Math.Min(Settled(shape, Math.Min(body, inner), SampleReach), x1 - x) : 0;
+					for (int k = 1; k <= run; k++)
+					{
+						bgra[offset + k * 4] = (byte)Math.Clamp((int)Math.Round(shape.BodyIndexAt(x + k + 0.5, cy) * 100.0), 1, 255);
+					}
+					x += run + 1;
 					continue;
 				}
 				double sum = 0.0;
@@ -193,6 +245,7 @@ public static class PartPainter
 				{
 					bgra[offset] = (byte)Math.Clamp((int)Math.Round(sum / (Supersample * Supersample) * 100.0), 1, 255);
 				}
+				x++;
 			}
 		});
 	}
@@ -215,11 +268,19 @@ public static class PartPainter
 		Parallel.For(y0, y1 + 1, () => 0.0, (int y, ParallelLoopState _, double local) =>
 		{
 			int row = (y - y0) * columns;
-			for (int x = x0; x <= x1; x++)
+			double cy = y + 0.5;
+			for (int x = x0; x <= x1;)
 			{
-				double depth = shape.DepthAt(x + 0.5, y + 0.5);
+				double depth = shape.DepthAt(x + 0.5, cy);
 				depths[row + x - x0] = (float)depth;
 				local = Math.Max(local, depth);
+				// outside: the run its depth settles is outside too, and only its sign is read
+				int run = depth < 0.0 ? Math.Min(Settled(shape, -depth, 0.0), x1 - x) : 0;
+				for (int k = 1; k <= run; k++)
+				{
+					depths[row + x + k - x0] = -1f;
+				}
+				x += run + 1;
 			}
 			return local;
 		}, local =>

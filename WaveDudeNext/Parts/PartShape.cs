@@ -81,9 +81,14 @@ public abstract class PartShape
 	/// </summary>
 	protected virtual Face FaceAt(double x, double y) => Face.Front;
 
+	/// <summary>Whether every face carries the band, so the band needs no face search.</summary>
+	protected bool AllFacesCoated => _frontCoated && _backCoated && _sidesCoated;
+
+	/// <summary>Whether <paramref name="face"/> carries the band.</summary>
+	protected bool FaceCoated(Face face) => face switch { Face.Front => _frontCoated, Face.Back => _backCoated, _ => _sidesCoated };
+
 	/// <summary>Whether the band at (x', y') is painted: the flag of the nearest face, without the search when every face is coated.</summary>
-	private bool Coated(double x, double y) =>
-		_frontCoated && _backCoated && _sidesCoated || FaceAt(x, y) switch { Face.Front => _frontCoated, Face.Back => _backCoated, _ => _sidesCoated };
+	private bool Coated(double x, double y) => AllFacesCoated || FaceCoated(FaceAt(x, y));
 
 	/// <summary>
 	/// The share of the index step a graded band has reached at <paramref name="t"/>, the depth inside the outline over the
@@ -187,8 +192,38 @@ public abstract class PartShape
 	public (double Depth, double InnerEdge) DepthsAt(double canvasX, double canvasY)
 	{
 		(double x, double y) = ToFrame(canvasX, canvasY);
-		return (Depth(x, y), InnerEdgeDistance(x, y));
+		return Depths(x, y);
 	}
+
+	/// <summary><see cref="Depth"/> and <see cref="InnerEdgeDistance"/> of a part-frame point; a shape whose two share their work (the fibre's chords) overrides it with one pass.</summary>
+	protected virtual (double Depth, double InnerEdge) Depths(double x, double y) => (Depth(x, y), InnerEdgeDistance(x, y));
+
+	/// <summary>
+	/// The body index at a canvas point the painter knows to lie inside the outline and deeper than the coating band:
+	/// <see cref="BodyIndex"/> alone, what <see cref="IndexAt(double, double, double)"/> returns there, without the depth.
+	/// </summary>
+	public double BodyIndexAt(double canvasX, double canvasY)
+	{
+		(double x, double y) = ToFrame(canvasX, canvasY);
+		return BodyIndex(x, y);
+	}
+
+	/// <summary>
+	/// Whether <see cref="Depth"/> and <see cref="InnerEdgeDistance"/> change by at most the distance moved, as a true
+	/// distance to an edge does (1-Lipschitz), so that from one pixel centre's depths the painter can settle the pixels
+	/// after it whose every sample lies on the same side of every edge as that centre's, less <see cref="SkipAllowance"/>
+	/// (2026-11-04). The polygon's signed distance, the fibre's tube, the stack's, the GRIN lens's and the zone plate's
+	/// rectangles say yes. The lens does not: beyond a convex surface's centre its surface depth is the radius, beyond a
+	/// concave one's minus infinity, and only the rim's depth covers the jumps; nor the gate, whose arm distance is first
+	/// order. Both are sampled pixel by pixel.
+	/// </summary>
+	public virtual bool DepthIsDistance => false;
+
+	/// <summary>
+	/// By how many pixels <see cref="Depth"/> may jump where it departs from a distance although <see cref="DepthIsDistance"/>
+	/// holds otherwise (a fibre's flat face at a bent end): the painter settles that many pixels fewer per run. 0 by default.
+	/// </summary>
+	public virtual double SkipAllowance => 0.0;
 
 	/// <summary>Maps a canvas point into the part frame: the inverse of the composite source's turn (x = dx cos + dy sin, y = dy cos - dx sin), the transpose.</summary>
 	private (double X, double Y) ToFrame(double canvasX, double canvasY)
@@ -233,6 +268,12 @@ public abstract class PartShape
 	public double? IndexAt(double canvasX, double canvasY, double outside)
 	{
 		(double x, double y) = ToFrame(canvasX, canvasY);
+		return IndexInFrame(x, y, outside);
+	}
+
+	/// <summary><see cref="IndexAt(double, double, double)"/> of a part-frame point; a shape whose depth, body index and face share their work (the fibre's chords) overrides it with one pass.</summary>
+	protected virtual double? IndexInFrame(double x, double y, double outside)
+	{
 		double depth = Depth(x, y);
 		if (depth < 0.0)
 		{
@@ -247,8 +288,12 @@ public abstract class PartShape
 		{
 			return index;
 		}
-		return _profile == CoatingProfile.Graded ? outside + (index - outside) * GradedProfile(depth / Coating) : Math.Round(Math.Sqrt(index), 2);
+		return BandIndex(depth, index, outside);
 	}
+
+	/// <summary>The index inside the band, <paramref name="depth"/> in over a coated face: for a graded band the index risen from <paramref name="outside"/> toward the body's <paramref name="index"/> by <see cref="GradedProfile"/> of the depth over the thickness, for a layer √n rounded to 0.01.</summary>
+	protected double BandIndex(double depth, double index, double outside) =>
+		_profile == CoatingProfile.Graded ? outside + (index - outside) * GradedProfile(depth / Coating) : Math.Round(Math.Sqrt(index), 2);
 
 	/// <summary>A refractive index within the part range.</summary>
 	protected static double GuardIndex(double index) => double.IsFinite(index) ? Math.Clamp(index, OpticalPart.MinIndex, OpticalPart.MaxIndex) : OpticalPart.MinIndex;
@@ -289,7 +334,12 @@ public abstract class PartShape
 	{
 		double dx = bx - ax;
 		double dy = by - ay;
-		double length2 = dx * dx + dy * dy;
+		return SegmentDistance(ax, ay, dx, dy, dx * dx + dy * dy, x, y);
+	}
+
+	/// <summary>Distance from (x, y) to the segment from a along (<paramref name="dx"/>, <paramref name="dy"/>), whose squared length is <paramref name="length2"/>: the same arithmetic as the four-point form, for a caller that keeps the segments' geometry.</summary>
+	protected static double SegmentDistance(double ax, double ay, double dx, double dy, double length2, double x, double y)
+	{
 		double t = length2 > 0.0 ? Math.Clamp(((x - ax) * dx + (y - ay) * dy) / length2, 0.0, 1.0) : 0.0;
 		double px = ax + t * dx - x;
 		double py = ay + t * dy - y;
@@ -435,6 +485,8 @@ public abstract class PartShape
 		public override int Absorption { get; }
 		public override int AbsorptionRamp { get; }
 		protected override double Extent => _extent;
+		/// <summary>The signed distance to the polygon: a distance.</summary>
+		public override bool DepthIsDistance => true;
 		protected override double Depth(double x, double y) => PolygonDepth(_vertices, x, y);
 		protected override double BodyIndex(double x, double y) => _index;
 	}
@@ -475,10 +527,30 @@ public abstract class PartShape
 		private readonly int[] _cellChords;
 		private readonly int _startZone;
 		private readonly int _endZone;
+		private readonly double _allowance;
+		private readonly double[] _chordDx;
+		private readonly double[] _chordDy;
+		private readonly double[] _chordLength;
+		private readonly double[] _chordLength2;
 
 		public FiberShape(FiberPart fiber, (double X, double Y)[] path) : base(fiber)
 		{
 			_path = path;
+			// each chord's run and length once, instead of a square root per chord per sample (2026-11-04); the same
+			// expressions as the loops had, so the numbers are the same
+			_chordDx = new double[path.Length];
+			_chordDy = new double[path.Length];
+			_chordLength = new double[path.Length];
+			_chordLength2 = new double[path.Length];
+			for (int i = 1; i < path.Length; i++)
+			{
+				double dx = path[i].X - path[i - 1].X;
+				double dy = path[i].Y - path[i - 1].Y;
+				_chordDx[i] = dx;
+				_chordDy[i] = dy;
+				_chordLength2[i] = dx * dx + dy * dy;
+				_chordLength[i] = Math.Sqrt(dx * dx + dy * dy);
+			}
 			_flat = fiber.Ends == FiberEnds.Flat;
 			FiberNode first = fiber.Nodes[0];
 			FiberNode last = fiber.Nodes[^1];
@@ -494,6 +566,15 @@ public abstract class PartShape
 			Absorption = fiber.CladdingThickness > 0 ? GuardAbsorption(fiber.Absorption) : 0;
 			_band = Math.Min(GuardAbsorptionRamp(fiber.AbsorptionRamp), Math.Max(0, fiber.CladdingThickness) / 2.0);
 			_extent = _path.Max(v => Math.Sqrt(v.X * v.X + v.Y * v.Y)) + _outerRadius;
+			// the one place the depth is not a distance (see SkipAllowance): with flat ends, in the wedge between a face's
+			// plane and the end chord's perpendicular through its end point, the chord's round joint (the distance to that
+			// point) stands in for the tube's line, and the depth jumps across the plane. A point of the wedge lies within
+			// φ of that perpendicular, φ the angle between the face's tangent and the chord, so at ρ from the end point its
+			// way along the chord is at most ρ sin φ and its distance from the line at least ρ cos φ; the jump is along² over
+			// the two distances' sum, at most ρ sin²φ / (2 cos φ); and a point whose depth from the chord is above −Margin
+			// (below it the clamp hides the jump) has ρ cos φ ≤ R + Margin. So the jump is at most (R + Margin) tan²φ / 2
+			// per end, and a run of settled pixels can cross both ends.
+			_allowance = _flat ? WedgeJump(_startTangent, path[1].X - path[0].X, path[1].Y - path[0].Y) + WedgeJump(_endTangent, path[^1].X - path[^2].X, path[^1].Y - path[^2].Y) : 0.0;
 			// the chords a flat face cuts: every chord is a capsule, and one starting within the outer radius of an
 			// end (twice that, for a bend) reaches past the face with its round cap
 			_startZone = 1;
@@ -544,10 +625,26 @@ public abstract class PartShape
 					}
 				}
 			}
+
+			// (R + Margin) tan²φ / 2 for the angle φ between a face's tangent and its chord; infinite past 90°, which no flattened curve reaches
+			double WedgeJump((double X, double Y) tangent, double dx, double dy)
+			{
+				double length = Math.Sqrt(dx * dx + dy * dy);
+				double cos = length > 0.0 ? Math.Clamp((tangent.X * dx + tangent.Y * dy) / length, -1.0, 1.0) : 1.0;
+				if (cos <= 0.0)
+				{
+					return double.PositiveInfinity;
+				}
+				double tan2 = (1.0 - cos * cos) / (cos * cos);
+				return (_outerRadius + Margin) * tan2 / 2.0;
+			}
 		}
 
 		public override bool IsMirror => false;
 		protected override int Coating { get; }
+		/// <summary>The largest over the chords of a tube's depth, each cut by the end planes and clamped at −Margin: a distance but for the wedges <see cref="SkipAllowance"/> covers.</summary>
+		public override bool DepthIsDistance => true;
+		public override double SkipAllowance => _allowance;
 		private readonly double _band;
 		public override int Absorption { get; }
 		public override int AbsorptionRamp => Math.Max(1, (int)Math.Ceiling(_band));
@@ -581,14 +678,25 @@ public abstract class PartShape
 		/// </summary>
 		protected override Face FaceAt(double x, double y)
 		{
+			(double startDepth, double endDepth) = FaceDepths(x, y);
+			return FaceOf(startDepth, endDepth, PathDistance(x, y));
+		}
+
+		/// <summary>How far past the start, and how far short of the end, the point lies along the tangents there.</summary>
+		private (double Start, double End) FaceDepths(double x, double y)
+		{
 			int last = _path.Length - 1;
-			double startDepth = (x - _path[0].X) * _startTangent.X + (y - _path[0].Y) * _startTangent.Y;
-			double endDepth = (_path[last].X - x) * _endTangent.X + (_path[last].Y - y) * _endTangent.Y;
+			return ((x - _path[0].X) * _startTangent.X + (y - _path[0].Y) * _startTangent.Y, (_path[last].X - x) * _endTangent.X + (_path[last].Y - y) * _endTangent.Y);
+		}
+
+		/// <summary>The face by the face depths and the distance <paramref name="path"/> from the path (see <see cref="FaceAt"/>).</summary>
+		private Face FaceOf(double startDepth, double endDepth, double path)
+		{
 			if (!_flat)
 			{
 				return startDepth < 0.0 ? Face.Front : endDepth < 0.0 ? Face.Back : Face.Sides;
 			}
-			double side = _outerRadius - PathDistance(x, y);
+			double side = _outerRadius - path;
 			return startDepth <= endDepth && startDepth <= side ? Face.Front : endDepth <= side ? Face.Back : Face.Sides;
 		}
 
@@ -600,27 +708,60 @@ public abstract class PartShape
 		protected override double Extent => _extent;
 		protected override double BodyIndex(double x, double y) => PathDistance(x, y) <= _coreRadius ? _coreIndex : _claddingIndex;
 
-		protected override double Depth(double x, double y)
+		protected override double Depth(double x, double y) => Evaluate(x, y).Depth;
+
+		/// <summary>The depth and the core edge's distance from one pass over the chords.</summary>
+		protected override (double Depth, double InnerEdge) Depths(double x, double y)
 		{
+			(double depth, double path, _, _) = Evaluate(x, y);
+			return (depth, HasInnerEdges ? Math.Abs(path - _coreRadius) : double.PositiveInfinity);
+		}
+
+		/// <summary>The index from one pass over the chords: the depth, the core or the cladding by the distance from the path, and the face by the same numbers (a fibre is never a mirror).</summary>
+		protected override double? IndexInFrame(double x, double y, double outside)
+		{
+			(double depth, double path, double startDepth, double endDepth) = Evaluate(x, y);
+			if (depth < 0.0)
+			{
+				return null;
+			}
+			double index = path <= _coreRadius ? _coreIndex : _claddingIndex;
+			if (Coating <= 0 || depth >= Coating || !(AllFacesCoated || FaceCoated(FaceOf(startDepth, endDepth, path))))
+			{
+				return index;
+			}
+			return BandIndex(depth, index, outside);
+		}
+
+		/// <summary>
+		/// One pass over the chords listed for (x', y'): the depth, the distance to the path (<see cref="PathDistance"/>, infinite
+		/// where no chord is listed) and the face depths (<see cref="FaceDepths"/>). A sample of the painter had run the chords
+		/// for its depth, again for its index and a third time for its face (2026-11-04).
+		/// </summary>
+		private (double Depth, double Path, double StartDepth, double EndDepth) Evaluate(double x, double y)
+		{
+			(double startRaw, double endRaw) = FaceDepths(x, y);
 			(int from, int to) = ChordsNear(x, y);
 			if (from == to)
 			{
-				return -Margin;
+				return (-Margin, double.PositiveInfinity, startRaw, endRaw);
 			}
 			int last = _path.Length - 1;
 			// depth from the end faces: how far past the start, and how far short of the end, along the tangents there
-			double startDepth = _flat ? (x - _path[0].X) * _startTangent.X + (y - _path[0].Y) * _startTangent.Y : double.PositiveInfinity;
-			double endDepth = _flat ? (_path[last].X - x) * _endTangent.X + (_path[last].Y - y) * _endTangent.Y : double.PositiveInfinity;
+			double startDepth = _flat ? startRaw : double.PositiveInfinity;
+			double endDepth = _flat ? endRaw : double.PositiveInfinity;
 			double best = double.NegativeInfinity;
+			double nearest = double.PositiveInfinity;
 			for (int k = from; k < to; k++)
 			{
 				int i = _cellChords[k];
 				(double ax, double ay) = _path[i - 1];
-				(double bx, double by) = _path[i];
-				double dx = bx - ax;
-				double dy = by - ay;
-				double length = Math.Sqrt(dx * dx + dy * dy);
+				double dx = _chordDx[i];
+				double dy = _chordDy[i];
+				double length = _chordLength[i];
 				double along = ((x - ax) * dx + (y - ay) * dy) / length;   // from a, in pixels
+				double segment = SegmentDistance(ax, ay, dx, dy, _chordLength2[i], x, y);
+				nearest = Math.Min(nearest, segment);
 				double depth;
 				if (along >= 0.0 && along <= length || i == 1 && startDepth < 0.0 || i == last && endDepth < 0.0)
 				{
@@ -631,7 +772,7 @@ public abstract class PartShape
 				else
 				{
 					// beyond a chord's end inside the path: the round joint to the next chord, or a round end
-					depth = _outerRadius - SegmentDistance(ax, ay, bx, by, x, y);
+					depth = _outerRadius - segment;
 				}
 				if (i <= _startZone)
 				{
@@ -644,7 +785,7 @@ public abstract class PartShape
 				best = Math.Max(best, depth);
 			}
 			// a chord the cell does not list is more than the margin outside, so it never sets the maximum
-			return Math.Max(best, -Margin);
+			return (Math.Max(best, -Margin), nearest, startRaw, endRaw);
 		}
 
 		/// <summary>Distance to the nearest chord of the path among those listed for the point's cell (exact within the tube, where the nearest chord is always listed).</summary>
@@ -655,7 +796,7 @@ public abstract class PartShape
 			for (int k = from; k < to; k++)
 			{
 				int i = _cellChords[k];
-				nearest = Math.Min(nearest, SegmentDistance(_path[i - 1].X, _path[i - 1].Y, _path[i].X, _path[i].Y, x, y));
+				nearest = Math.Min(nearest, SegmentDistance(_path[i - 1].X, _path[i - 1].Y, _chordDx[i], _chordDy[i], _chordLength2[i], x, y));
 			}
 			return nearest;
 		}
@@ -709,6 +850,8 @@ public abstract class PartShape
 		public override bool IsMirror => false;
 		protected override int Coating => 0;
 		public override bool HasInnerEdges => true;
+		/// <summary>A rectangle's depth and the distance to the nearest layer boundary: distances.</summary>
+		public override bool DepthIsDistance => true;
 		protected override double Extent => Math.Sqrt(_halfLength * _halfLength + _halfWidth * _halfWidth);
 
 		/// <summary>The nearest layer boundary along x': a pair's edges at 0, its first thickness and the period.</summary>
@@ -746,6 +889,8 @@ public abstract class PartShape
 		public override bool IsMirror => false;
 		protected override int Coating { get; }
 		protected override double Extent => Math.Sqrt(_halfLength * _halfLength + _halfDiameter * _halfDiameter);
+		/// <summary>A rectangle's depth: a distance.</summary>
+		public override bool DepthIsDistance => true;
 		protected override double Depth(double x, double y) => Math.Min(_halfLength - Math.Abs(x), _halfDiameter - Math.Abs(y));
 
 		/// <summary>The end faces across the axis are the front (−x') and the back, the long sides the sides.</summary>
@@ -790,6 +935,8 @@ public abstract class PartShape
 		public override int Absorption => ZonePlatePart.BlockAbsorption;
 		public override int AbsorptionRamp => Math.Max(1, (int)Math.Ceiling(_ramp));
 		protected override double Extent => Math.Sqrt(_halfThickness * _halfThickness + _outerHalfWidth * _outerHalfWidth);
+		/// <summary>A rectangle's depth: a distance.</summary>
+		public override bool DepthIsDistance => true;
 		protected override double Depth(double x, double y) => Math.Min(_halfThickness - Math.Abs(x), _outerHalfWidth - Math.Abs(y));
 		protected override double BodyIndex(double x, double y) => 1.0;
 

@@ -182,7 +182,12 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   more rebuilds), the tables holding the CPU's floats, so the arithmetic is unchanged; and the intensity's blend of its
   two stages is made where it is read (the captures, the probes, `PrepareFrame`), not written every step: 69 bytes a
   cell, the step 0.47 → 0.38 ms at full HD and 4th order, 0.25 → 0.21 at 9-point. `PrepareFrame`, which no path of the
-  app uses, reads both stages and blends on the host. Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
+  app uses, reads both stages and blends on the host. **Measured against the engine before these commits** (2026-11-04,
+  the user's question whether the day's engine work changed a result: the library at d0a42e3 built from a `git archive`
+  export under %TEMP%, both stepping the same painted scene with two sources 200 steps, a 32 px rim, open edges, both
+  stencils): the field bit for bit the same, through `PrepareFrame` and through a capture; the captured intensity, the
+  app's path, bit for bit the same, 0 of 2,073,600 halves differing; `PrepareFrame`'s host blend alone differs in about
+  a thousand values of two million by one ulp at 1e-45, where the card flushes subnormals and the host does not. Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
   Laplacian, soft sources, EMA intensity; a scene pixel with red 0 is a mirror, n = 1000, his V0.30 rule,
   2026-10-18), verified CPU = GPU by the harness; seeds from `Pcg32` make CPU = GPU
   bit for bit on random gaps. A source's frequency level, amplitude and phase take decimals (2026-10-19, Jeroen's point 10); the
@@ -485,7 +490,7 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
 ## Numbers (workstation: 10-core Xeon without AVX2, RTX 2080, 64 GB)
 
 GPU step at 1080p 0.21 ms (9-point) to 0.38 ms (4th order, three sub-steps; 0.25–0.47 before the compact maps and the
-deferred intensity blend of 2026-11-03), CPU 6–14 ms; OpenCL build 0.3 s; a full-HD frame's capture (both planes as halves, 8.3 MB)
+deferred intensity blend of 2026-11-03), CPU 5.3 ms (9-point) to 8.7 (4th order) in lanes since 2026-11-04 (6.2 and 13.2 cell by cell); OpenCL build 0.3 s; a full-HD frame's capture (both planes as halves, 8.3 MB)
 0.9 ms on top of its two steps since the page-locked snapshots (2026-11-03; 2.1 ms before, the stepping thread blocked in
 the driver's copy; `bench 1920 1080`: 1.50 → 0.65 ms a step with captures every 2 steps at 4th order, the DMA on its own
 queue), the DMA itself 0.63 ms at 13 GB/s. In the app the default project's run (2500 steps, 1250 frames, 16-bit, both
@@ -505,8 +510,11 @@ table lookup per pixel): 16-bit 0.5 ms,
 Example 7 (2880×1080 in a 458×172 picture, both layers, playing): 16-bit 7.3–8.5 ms a frame, dithered 7.7–9.1, 8-bit
 10–11 (its bitmaps are canvas-sized). Presenter about 7 ms a frame quiet, 20 during a run. JPEG 1080p at 4:4:4: WIC 26 ms a frame
 single-threaded (9 ms a frame in a sequence job on half the cores), in-house 9.8 ms on ten cores (15 in a job);
-MP4 job 16 ms a frame. Part painter on a Full HD canvas (ten cores): a 400 × 330 outline 30 ms, a 400 px lens 5, a hexagon 8, an S-bent fibre across the canvas 51 (156 chords on the cell grid; 1.3 s without it);
-the glowing edges 22 ms; the preview's scene pictures about 100 ms more, so the scene rebuild is coalesced at background priority.
+MP4 job 16 ms a frame. Part painter on a Full HD canvas (ten cores, the bench's figures less its 3 ms canvas, 2026-11-04):
+a 400 × 330 outline 0.8 ms (30 on 2026-10-19, 3.6 before the runs), a 400 px lens 0.6, a hexagon 0.7 (was 2.3), an S-bent
+fibre across the canvas 9.6 (51 on 2026-10-22, 19 before the runs and the one chord pass; 156 chords on the cell grid, 1.3 s
+without it); the glowing edges 8.8 ms on noise and 4.5 on Example 16's scene (12.7 and 6.2 cell by cell; 2.1 of each the
+result's allocation); the preview's scene pictures about 100 ms more, so the scene rebuild is coalesced at background priority.
 **The composition runs on a worker since 2026-11-03** (the user's choice, after the log of a drag in Example 16: every
 coalesced update repainted all four rectangles, one the whole canvas, "composed in 115–270 ms" on the UI thread, then
 20–30 ms of pictures, and the handle jumped): `MainWindow.ComposeScene` clones the parts (`OpticalPart.Clone` copies the
@@ -525,18 +533,27 @@ edge is within reach** — the outline, the coating band's, or an inner edge the
 fibre's core boundary, a Bragg stack's layer boundaries; the logic gate still says 0, every inside pixel sampled) — where
 every pixel of a fibre had been (2026-11-03, after the user's drag of a fibre node: Example 23's three fibres 138/163/398 →
 43/50/96 ms, its composition 731 → 218 ms; a graded band's pixels are the centre sample now, as every other coated shape's,
-within 0.01 of index where the band curves inside a pixel). A fibre pixel still runs four chord loops (depth, body index,
-face, inner edge), sharable for about another factor of two. Left for later, if wanted: a Lipschitz skip
-in the rows (the depth is a lower bound on the distance to the outline, so a pixel at depth *d* settles the next
-⌈|*d*| − 0.6⌉ pixels: ~20 evaluations a row instead of 600 for a box, the arithmetic itself then a few milliseconds),
-and the pictures' glowing edges, now the larger share of the UI thread's time during a drag; not an incremental
-painter, since a coating's band rises from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
+within 0.01 of index where the band curves inside a pixel). **The painter settles runs** (2026-11-04, the user's
+request, "all of them to the best of abilities"; the rules and the figures are in `OpticalParts.md` under Rasterisation):
+where a shape's depths are distances (`PartShape.DepthIsDistance`), one pixel centre settles the next
+floor(e − 0.6 − allowance) pixels of its row, e the nearest edge's distance, as outside or as body (`BodyIndexAt`), so a
+box costs a handful of depth evaluations a row; the lens and the gate are not distances and stay pixel by pixel; a fibre
+sample runs its chords once for depth, index and face (`Evaluate`), its wedge jump at a bent flat end covered by a computed
+`SkipAllowance`. Proven byte for byte against the pixel-by-pixel painting over every example and every kind at four
+angles (`library_check`, "painter runs"); the proof of any later painter change is that check. **Lanes** (`Vector<T>`, 4
+floats on this Xeon, 8 with AVX2): the glowing edges (the Sobel sums as 16-bit integers, the root in double, the bytes the
+scalar's, proven on noise and a painted scene) and the CPU engine's stencil (each lane the scalar arithmetic in its
+order, the field and intensity bit for bit the committed engine's after 100 steps of a painted scene with two sources:
+6.2 → 5.3 ms a step at 9-point, 13.2 → 8.7 at 4th order on 1920 × 1080 with a 32 px rim, the rest the memory bus). The
+screen path keeps its loops: a two-to-three-term dot product a pixel and a table gather, which lanes do not help. Not an
+incremental painter, since a coating's band rises from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
 lens run 105 s full quality (disk-bound), 61 s at half resolution with every second frame, in RAM. Settled by these
-numbers: no GPU JPEG, no OpenCL colouring at presentation, no `Vector256`, no Direct3D display path.
+numbers: no GPU JPEG, no OpenCL colouring at presentation, no explicit `Vector256` paths (`Vector<T>` takes the width the
+machine has), no Direct3D display path.
 
 ## Harnesses
 
-`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots, scene replacement, the memory warning's store bytes).
+`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots, scene replacement, the memory warning's store bytes, the painter's runs and the glowing edges' lanes byte for byte against pixel by pixel).
 UI, all on `Common.ps1`, with their check counts: `PreviewCheck` 43, `RunCheck` 71, `LanguageCheck` 11,
 `ProbeGraphCheck` 39, `ImportCheck` 10, `ExportCheck` 44, `PreviewQualityCheck` 35, `SceneImageCheck` 8,
 `ColorPickerCheck` 13, `KeyboardCheck` 13, `AboutCheck` 18, `SelectionCheck` 10. Test projects `tiny*.wdproj` sit beside them. The
