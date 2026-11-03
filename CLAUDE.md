@@ -448,12 +448,15 @@ Example 7 (2880×1080 in a 458×172 picture, both layers, playing): 16-bit 7.3�
 single-threaded (9 ms a frame in a sequence job on half the cores), in-house 9.8 ms on ten cores (15 in a job);
 MP4 job 16 ms a frame. Part painter on a Full HD canvas (ten cores): a 400 × 330 outline 30 ms, a 400 px lens 5, a hexagon 8, an S-bent fibre across the canvas 51 (156 chords on the cell grid; 1.3 s without it);
 the glowing edges 22 ms; the preview's scene pictures about 100 ms more, so the scene rebuild is coalesced at background priority.
-**Dragging a part is choppy because of that composition** (2026-11-03, the log of a drag in Example 16: every coalesced
-update repaints all four rectangles, one the whole canvas, "composed in 115–270 ms" on the UI thread, then 20–30 ms of
-pictures; the painter spends 35–60 ns a pixel on ten cores even on a plain rectangle); the remedies on the table are a
-worker thread with a snapshot of the parts (`OpticalPart.Clone` copies the point and node lists), a faster painter
-(profile first), or no repaint while the mouse button is held; not an incremental painter, since a coating's band rises
-from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
+**The composition runs on a worker since 2026-11-03** (the user's choice, after the log of a drag in Example 16: every
+coalesced update repainted all four rectangles, one the whole canvas, "composed in 115–270 ms" on the UI thread, then
+20–30 ms of pictures, and the handle jumped): `MainWindow.ComposeScene` clones the parts (`OpticalPart.Clone` copies the
+point and node lists) and paints on the thread pool, one composition in flight, the newest request after it, the UI
+thread taking only the finished pixels (20–24 ms a time, measured on a burst of ten nudges: three compositions of 395,
+212 and 128 ms on the worker); `LoadSceneImage` (a run or scratch request) joins an in-flight composition of the same
+inputs rather than painting again. Still open: the painter itself, 35–60 ns a pixel on ten cores even on a plain
+rectangle (an interior fast path, a cheaper mirror test; profile first), which sets the picture's refresh rate during a
+drag; not an incremental painter, since a coating's band rises from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
 lens run 105 s full quality (disk-bound), 61 s at half resolution with every second frame, in RAM. Settled by these
 numbers: no GPU JPEG, no OpenCL colouring at presentation, no `Vector256`, no Direct3D display path.
 

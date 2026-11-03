@@ -149,6 +149,8 @@ public partial class MainWindow
 		_imageCache = null;
 		_embeddedCache = null;
 		_composedCache = null;
+		// a new set of parts: a composition of the old project still on its worker must not land under the new one's key
+		_partsVersion++;
 		ForgetExportPaths();
 		// the new project's own schemes and scene image; the pane does not exist yet when the constructor sets the first project
 		Dispatcher.InvokeAsync(() =>
@@ -462,9 +464,11 @@ public partial class MainWindow
 
 	/// <summary>
 	/// Hands the preview the scene pixels (null for a canvas without parts, or when the image cannot be read: that is
-	/// logged once the run reports it). Coalesced at background priority: a drag of a part fires a change per mouse
-	/// move, and composing the scene plus rebuilding its pictures is far too slow to do for each (2026-10-19); the
-	/// overlay draws the selected part's outline itself, so what the user drags stays live meanwhile.
+	/// logged once the run reports it). Coalesced at background priority and composed on a worker (2026-11-03, the user's
+	/// choice): a drag of a part fires a change per mouse move, and composing the scene took 115–270 ms of the UI thread
+	/// for Example 16's four rectangles, so the handle jumped; now one composition is in flight at a time, the newest
+	/// request follows it, and the UI thread only takes the finished pixels (20–30 ms for the pictures). The overlay
+	/// draws the selected part's outline itself, so what the user drags stays live meanwhile.
 	/// </summary>
 	private void UpdateScenePixels()
 	{
@@ -476,49 +480,108 @@ public partial class MainWindow
 		Dispatcher.InvokeAsync(() =>
 		{
 			_scenePixelsPending = false;
-			UpdateScenePixelsNow();
+			ComposeScene();
 		}, DispatcherPriority.Background);
 	}
 
 	private bool _scenePixelsPending;
 
-	private void UpdateScenePixelsNow()
+	/// <summary>The composition on a worker with the key its result is cached under, or null when none is in flight. UI thread only.</summary>
+	private (SceneKey Key, Task<ScenePixels?> Task)? _composition;
+
+	/// <summary>Set by a request that arrives while a composition is in flight: another one follows it.</summary>
+	private bool _composeAgain;
+
+	/// <summary>
+	/// Composes the scene on a worker from a snapshot of its inputs (the parts cloned: <see cref="OpticalPart.Clone"/>
+	/// copies the point and node lists too, so the worker shares nothing with the model) and hands the preview the result
+	/// on the UI thread, again while requests arrived meanwhile. A failure of the painter surfaces here like any other.
+	/// </summary>
+	private async void ComposeScene()
 	{
 		if (previewPane == null)
 		{
 			return;
 		}
-		try
+		if (_composition != null)
 		{
+			_composeAgain = true;
+			return;
+		}
+		do
+		{
+			_composeAgain = false;
+			ScenePixels? source;
+			try
+			{
+				source = DecodeSceneImage();
+			}
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or FileFormatException or RunSpecException)
+			{
+				Logger.Debug("Scene image not shown: {Message}", ex.Message);
+				previewPane.ScenePixels = null;
+				return;
+			}
+			Scene scene = Project.Scene;
+			var key = new SceneKey(source, _partsVersion, scene.Width, scene.Height, scene.RefractiveIndex);
 			long started = System.Diagnostics.Stopwatch.GetTimestamp();
-			ScenePixels? pixels = LoadSceneImage();
+			if (!TryCachedScene(key, out ScenePixels? composed))
+			{
+				List<OpticalPart> parts = Project.Parts.Select(part => part.Clone()).ToList();
+				Task<ScenePixels?> task = Task.Run(() => PartPainter.Paint(key.Source, key.Width, key.Height, key.Background, parts));
+				_composition = (key, task);
+				try
+				{
+					composed = await task;
+				}
+				finally
+				{
+					_composition = null;
+				}
+				_composedCache = (key.Source, key.PartsVersion, key.Width, key.Height, key.Background, composed);
+			}
 			long painted = System.Diagnostics.Stopwatch.GetTimestamp();
-			previewPane.ScenePixels = pixels;
-			Logger.Debug("Scene pixels updated: composed in {Paint:0.0} ms, pictures in {Pictures:0.0} ms", System.Diagnostics.Stopwatch.GetElapsedTime(started, painted).TotalMilliseconds, System.Diagnostics.Stopwatch.GetElapsedTime(painted).TotalMilliseconds);
+			previewPane.ScenePixels = composed;
+			Logger.Debug("Scene pixels updated: composed on a worker in {Paint:0.0} ms, pictures in {Pictures:0.0} ms", System.Diagnostics.Stopwatch.GetElapsedTime(started, painted).TotalMilliseconds, System.Diagnostics.Stopwatch.GetElapsedTime(painted).TotalMilliseconds);
 		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or FileFormatException or RunSpecException)
+		while (_composeAgain);
+	}
+
+	/// <summary>What a composed scene depends on: the decoded image (by reference), the parts' version, the canvas and the background index.</summary>
+	private readonly record struct SceneKey(ScenePixels? Source, int PartsVersion, int Width, int Height, double Background);
+
+	/// <summary>The composed scene cached for these inputs, when it is the one.</summary>
+	private bool TryCachedScene(SceneKey key, out ScenePixels? composed)
+	{
+		if (_composedCache is { } cached && ReferenceEquals(cached.Source, key.Source) && cached.PartsVersion == key.PartsVersion
+			&& cached.Width == key.Width && cached.Height == key.Height && cached.Background == key.Background)
 		{
-			Logger.Debug("Scene image not shown: {Message}", ex.Message);
-			previewPane.ScenePixels = null;
+			composed = cached.Composed;
+			return true;
 		}
+		composed = null;
+		return false;
 	}
 
 	/// <summary>
 	/// The scene as the engines, the outline and the export see it: the decoded image (decoded once per file version)
 	/// with the enabled optical parts painted in, or the parts on a blank canvas; null for a canvas without parts.
 	/// Composed once per (image, parts version, canvas size, background index): an unchanged scene returns the same
-	/// reference, which <see cref="RunSpec.SameSceneAs"/> compares, so the scratch runner keeps its engine.
+	/// reference, which <see cref="RunSpec.SameSceneAs"/> compares, so the scratch runner keeps its engine. A worker
+	/// painting these very inputs (<see cref="ComposeScene"/>) is waited for rather than painting them again.
 	/// </summary>
 	private ScenePixels? LoadSceneImage()
 	{
 		ScenePixels? source = DecodeSceneImage();
 		Scene scene = Project.Scene;
-		if (_composedCache is { } cached && ReferenceEquals(cached.Source, source) && cached.PartsVersion == _partsVersion
-			&& cached.Width == scene.Width && cached.Height == scene.Height && cached.Background == scene.RefractiveIndex)
+		var key = new SceneKey(source, _partsVersion, scene.Width, scene.Height, scene.RefractiveIndex);
+		if (TryCachedScene(key, out ScenePixels? composed))
 		{
-			return cached.Composed;
+			return composed;
 		}
-		ScenePixels? composed = PartPainter.Paint(source, scene.Width, scene.Height, scene.RefractiveIndex, Project.Parts);
+		composed = _composition is { } composing && composing.Key == key
+			? composing.Task.GetAwaiter().GetResult()
+			: PartPainter.Paint(source, scene.Width, scene.Height, scene.RefractiveIndex, Project.Parts);
 		_composedCache = (source, _partsVersion, scene.Width, scene.Height, scene.RefractiveIndex, composed);
 		return composed;
 	}
