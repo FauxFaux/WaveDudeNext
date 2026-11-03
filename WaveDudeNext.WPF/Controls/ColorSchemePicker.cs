@@ -279,7 +279,8 @@ public sealed class ColorSchemePicker : ComboBox
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or FormatException or System.Text.Json.JsonException)
 		{
-			Logger.Error(ex, "The colour scheme could not be loaded: {Message}", ex.Message);
+			// the file's text goes into the log under the error (2026-11-03, the user's rule)
+			Logger.Error(new UnreadableFileException(dialog.FileName, ex), "The colour scheme could not be loaded: {Message}", ex.Message);
 		}
 	}
 

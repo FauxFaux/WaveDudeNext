@@ -49,7 +49,8 @@ public sealed class ColorSchemeCatalog
 	public void Load()
 	{
 		var errors = new List<string>();
-		List<ColorScheme> user = ColorSchemeStore.LoadFolder(ColorSchemeStore.UserFolder, errors);
+		// the store logs each unreadable user file itself, with the file's text under the error (2026-11-03)
+		List<ColorScheme> user = ColorSchemeStore.LoadFolder(ColorSchemeStore.UserFolder, null);
 		List<ColorScheme> builtIn = ColorSchemeStore.LoadBuiltIn(errors);
 		_schemes = [.. user, .. builtIn];
 		foreach (string error in errors)

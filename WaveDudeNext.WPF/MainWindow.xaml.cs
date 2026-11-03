@@ -242,7 +242,8 @@ public partial class MainWindow : Window
 		}
 		catch (Exception ex)
 		{
-			Logger.Error(ex, "Error while opening '{Path}'", fileName);
+			// the file's text goes into the log under the error (2026-11-03, the user's rule); the dialog shows the error alone
+			Logger.Error(new UnreadableFileException(fileName, ex), "Error while opening '{Path}'", fileName);
 			ShowError(string.Format((string)FindResource("OpenError"), fileName), ex);
 		}
 	}
@@ -304,7 +305,8 @@ public partial class MainWindow : Window
 		}
 		catch (Exception ex)
 		{
-			Logger.Error(ex, "Error while opening '{Path}'", fileName);
+			// the file's text goes into the log under the error (2026-11-03, the user's rule); the dialog shows the error alone
+			Logger.Error(new UnreadableFileException(fileName, ex), "Error while opening '{Path}'", fileName);
 			ShowError(string.Format((string)FindResource("OpenError"), fileName), ex);
 		}
 	}

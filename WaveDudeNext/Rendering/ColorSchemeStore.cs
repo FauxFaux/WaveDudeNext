@@ -21,6 +21,8 @@ using System.Text;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Serialization;
+using NLog;
+using WaveDudeNext.Model;
 
 namespace WaveDudeNext.Rendering;
 
@@ -47,6 +49,8 @@ public static class ColorSchemeStore
 {
 	/// <summary>Extension of a standalone XML scheme file.</summary>
 	public const string XmlExtension = ".wdscheme";
+
+	private static readonly ILogger Logger = LogManager.GetCurrentClassLogger();
 
 	/// <summary>Prefix of the embedded scheme resources (see the csproj's <c>LogicalName</c>).</summary>
 	private const string ResourcePrefix = "ColorSchemes/";
@@ -250,6 +254,8 @@ public static class ColorSchemeStore
 			}
 			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or InvalidOperationException or FormatException)
 			{
+				// the file's text goes into the log under the error (2026-11-03, the user's rule); the caller's list gets the line
+				Logger.Warn(new UnreadableFileException(file, ex), "Colour scheme file '{File}' not loaded: {Message}", file, ex.Message);
 				errors?.Add(Path.GetFileName(file) + ": " + ex.Message);
 			}
 		}

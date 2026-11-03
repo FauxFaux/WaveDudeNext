@@ -25,6 +25,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using NLog;
 using WaveDudeNext.Engine;
+using WaveDudeNext.Model;
 using WaveDudeNext.Runs;
 using WaveDudeNext.WPF.Docking;
 using WaveDudeNext.WPF.Theming;
@@ -347,7 +348,8 @@ public sealed class Settings : INotifyPropertyChanged
 		}
 		catch (Exception ex) when (ex is InvalidOperationException or XmlException or IOException or UnauthorizedAccessException)
 		{
-			Logger.Error(ex, "The settings file '{Path}' is unreadable, using the defaults", FilePath);
+			// the file's text goes into the log under the error (2026-11-03, the user's rule): the next save overwrites the file
+			Logger.Error(new UnreadableFileException(FilePath, ex), "The settings file '{Path}' is unreadable, using the defaults", FilePath);
 		}
 		return new Settings();
 	}

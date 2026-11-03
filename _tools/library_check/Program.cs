@@ -272,6 +272,7 @@ internal static class Program
 		CheckHistory();
 		CheckClipboard();
 		CheckProjectSchema();
+		CheckUnreadableFile();
 		CheckOpenEdges(W, H);
 		CheckWorkGroups();
 		CheckFrameStore(scene);
@@ -1763,6 +1764,59 @@ internal static class Program
 	/// the CPU captures of every shape equal to it and the GPU's within the card's arithmetic, a store of index
 	/// bytes, the export's refusal of it, a spec with a quality, and a headless run plus a scratch frame in that shape.
 	/// </summary>
+	/// <summary>
+	/// The exception the log carries for an unreadable file (2026-11-03): its text quotes the file under the error, the
+	/// whole of a small file, the first 64 K characters of a large one and then the line an XML error names, and says why
+	/// when the file itself cannot be read.
+	/// </summary>
+	private static void CheckUnreadableFile()
+	{
+		Console.WriteLine("--- unreadable file: the log's quotation");
+		string folder = Path.Combine(Path.GetTempPath(), "library_check-unreadable-" + Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		try
+		{
+			// a duplicate attribute: the reader's error, with a line and a position
+			string small = Path.Combine(folder, "small.wdproj");
+			File.WriteAllText(small, "<?xml version=\"1.0\"?>\n<Project Version=\"3\" Version=\"3\" />\n");
+			Exception? error = null;
+			try
+			{
+				Project.Load(small);
+			}
+			catch (Exception ex)
+			{
+				error = ex;
+			}
+			UnreadableFileException? wrapped = error == null ? null : new UnreadableFileException(small, error);
+			string text = wrapped?.ToString() ?? "";
+			Check(wrapped != null && text.Contains("duplicate attribute", StringComparison.Ordinal) && text.Contains("--- the text of '", StringComparison.Ordinal) && wrapped.Text == File.ReadAllText(small),
+				"a small malformed project: the error names the duplicate attribute, the quotation is the whole file");
+			// a large file, the error on a line beyond the quoted head: a comment of 100,000 characters, then the duplicate
+			string large = Path.Combine(folder, "large.wdproj");
+			File.WriteAllText(large, "<?xml version=\"1.0\"?>\n<!-- " + new string('x', 100_000) + " -->\n<Project Version=\"3\" Version=\"3\" />\n");
+			error = null;
+			try
+			{
+				Project.Load(large);
+			}
+			catch (Exception ex)
+			{
+				error = ex;
+			}
+			wrapped = error == null ? null : new UnreadableFileException(large, error);
+			Check(wrapped != null && wrapped.Text.Length < 70_000 && wrapped.Text.Contains(" more characters", StringComparison.Ordinal)
+				&& wrapped.Text.Contains("--- line 3, position", StringComparison.Ordinal) && wrapped.Text.Contains("<Project Version=\"3\" Version=\"3\" />", StringComparison.Ordinal),
+				"a large malformed project: the first 64 K characters, then the line the XML error names");
+			Check(UnreadableFileException.Excerpt(Path.Combine(folder, "missing.wdscheme"), null).StartsWith("(the file could not be read:", StringComparison.Ordinal),
+				"a missing file: the quotation says why");
+		}
+		finally
+		{
+			Directory.Delete(folder, true);
+		}
+	}
+
 	/// <summary>
 	/// A run's store bytes at another preview quality (the memory warning's arithmetic, 2026-11-03): ⌈frames / frame
 	/// divisor⌉ frames of the canvas at the resolution divisor in the sample format, against the sizes written out, and a

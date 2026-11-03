@@ -75,7 +75,11 @@ harnesses run.
   grid): every engine logs its grid, canvas, rim, edges, stride, sub-steps and work groups when built; a GPU device's
   facts (versions, units, clock, memory, limits) once per process; the scratch request names the newest edit with its
   value (after the debounce, so a typed number shows as typed); every change at Trace as old → new
-  (`PropertyValueChangedEventArgs` from `SetProperty`, carried by `ProjectChange.Values`, `library_check` proves it).
+  (`PropertyValueChangedEventArgs` from `SetProperty`, carried by `ProjectChange.Values`, `library_check` proves it). **A malformed project, colour scheme or settings file is
+  quoted in its error's entry** (2026-11-03, the user's rule): the catch logs an `UnreadableFileException` wrapping the error,
+  whose `ToString` appends the file's text, the first 64 K characters and the line an XML error names beyond them, so the
+  log file and the Messages pane's tooltip carry it while the status bar and the dialog keep the one-line message; the
+  settings file needs it most, since the next save writes the defaults over it (moving it aside is still open).
 - **Do not resurrect**: a probe signal lane, timeline tracks, zoom and pan of the axis, thumbnails, a run progress
   bar, the scratch budget and its "not computed" note, a GPU JPEG front end, a Direct3D display path, a bent
   rotation lever. **Do not change**: the readout showing both frame and step (undecided).
