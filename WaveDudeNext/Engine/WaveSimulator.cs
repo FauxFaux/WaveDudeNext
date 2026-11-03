@@ -236,6 +236,9 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		SetProbes(null);
 	}
 
+	/// <summary>An ordinary snapshot (pinned arrays): the CPU converts into it on the awaiting thread, and no memory is faster for that.</summary>
+	public FrameSnapshot CreateSnapshot(FrameShape shape, bool withIntensity) => new(shape, withIntensity);
+
 	/// <summary>
 	/// Copies the interior of the current buffers into the snapshot's float staging (a plain memory copy, so the
 	/// stepping thread loses little); <see cref="AwaitFrame"/> converts to <see cref="Half"/> on the thread that awaits.
@@ -249,7 +252,7 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		int cells = _canvasWidth * _canvasHeight;
 		snapshot.FieldFloats ??= new float[cells];
 		CopyInterior(_u, snapshot.FieldFloats);
-		snapshot.HasIntensity = needIntensity && _intensityOut != null && snapshot.IntensityBytes != null;
+		snapshot.HasIntensity = needIntensity && _intensityOut != null && snapshot.HasIntensityPlane;
 		if (snapshot.HasIntensity)
 		{
 			snapshot.IntensityFloats ??= new float[cells];
@@ -267,10 +270,10 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		}
 		snapshot.PendingConversion = false;
 		// the shape's shrinking and format (FrameConversion), on the awaiting thread
-		FrameConversion.Convert(snapshot.FieldFloats!, 0, _canvasWidth, snapshot.Shape, false, snapshot.FieldBytes);
+		FrameConversion.Convert(snapshot.FieldFloats!, 0, _canvasWidth, snapshot.Shape, false, snapshot.FieldMemory);
 		if (snapshot.HasIntensity)
 		{
-			FrameConversion.Convert(snapshot.IntensityFloats!, 0, _canvasWidth, snapshot.Shape, true, snapshot.IntensityBytes!);
+			FrameConversion.Convert(snapshot.IntensityFloats!, 0, _canvasWidth, snapshot.Shape, true, snapshot.IntensityMemory);
 		}
 	}
 

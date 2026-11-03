@@ -897,7 +897,8 @@ internal static class Program
 		}
 		double withReadback = clock.Elapsed.TotalMilliseconds / steps;
 		// the run's pattern: capture into a pool of snapshots, await one frame late
-		var snapshots = new[] { new FrameSnapshot(engine.Width, engine.Height, true), new FrameSnapshot(engine.Width, engine.Height, true), new FrameSnapshot(engine.Width, engine.Height, true) };
+		FrameShape full = FrameShape.Full(engine.Width, engine.Height);
+		var snapshots = new[] { engine.CreateSnapshot(full, true), engine.CreateSnapshot(full, true), engine.CreateSnapshot(full, true) };
 		int next = 0;
 		clock.Restart();
 		for (int i = 0; i < steps; i++)
@@ -1023,8 +1024,8 @@ internal static class Program
 			{
 				continue;
 			}
-			var a = new FrameSnapshot(W, H, true);
-			var b = new FrameSnapshot(W, H, true);
+			var a = engine.CreateSnapshot(FrameShape.Full(W, H), true);
+			var b = engine.CreateSnapshot(FrameShape.Full(W, H), true);
 			Run(engine, 100);
 			engine.CaptureFrame(a, true);
 			// keep stepping before awaiting: the capture must still show step 100
@@ -1059,7 +1060,27 @@ internal static class Program
 			engine.CaptureFrame(a, false);
 			engine.AwaitFrame(a);
 			Check(MaxDiff(at100, engine.Stride, W, H, a.Field) < tolerance, name + ": emitters restored, original field again");
+			// the engine's own snapshot (page-locked host memory on the GPU, 2026-11-03) and an ordinary one capture the same
+			// bytes; the engine's planes go with the engine, an ordinary one's stay
+			var plain = new FrameSnapshot(FrameShape.Full(W, H), true);
+			engine.CaptureFrame(a, true);
+			engine.CaptureFrame(plain, true);
+			engine.AwaitFrame(a);
+			engine.AwaitFrame(plain);
+			Check(a.HasIntensity && a.FieldBytes.SequenceEqual(plain.FieldBytes) && a.IntensityBytes.SequenceEqual(plain.IntensityBytes),
+				name + ": the engine's snapshot and an ordinary one capture the same bytes");
 			(engine as IDisposable)?.Dispose();
+			bool gone = false;
+			try
+			{
+				_ = a.FieldBytes.Length;
+			}
+			catch (ObjectDisposedException)
+			{
+				gone = true;
+			}
+			Check(gone == (engine is GpuWaveSimulator) && plain.FieldBytes.Length == FrameShape.Full(W, H).PlaneBytes,
+				name + ": " + (gone ? "the engine's snapshot is released with the engine" : "the snapshot outlives the engine") + ", an ordinary one stays readable");
 		}
 	}
 
@@ -1395,8 +1416,8 @@ internal static class Program
 			FrameShape full = FrameShape.Full(cw, ch);
 			FrameShape index = full with { Format = FrameFormat.Index, FieldBrightness = 30f, IntensityBrightness = 5f };
 			int origin = (rim + 1) * cpu.Stride + rim + 1;
-			var halves = new FrameSnapshot(full, true);
-			var indices = new FrameSnapshot(index, true);
+			var halves = gpu.CreateSnapshot(full, true);
+			var indices = gpu.CreateSnapshot(index, true);
 			gpu.CaptureFrame(halves, true);
 			gpu.CaptureFrame(indices, true);
 			gpu.AwaitFrame(halves);
@@ -1418,7 +1439,7 @@ internal static class Program
 			for (int i = 0; i < cw * ch; i++)
 			{
 				fieldOff += Math.Abs(indexField[i] - indices.FieldBytes[i]) > 1 ? 1 : 0;
-				intenOff += Math.Abs(indexInten[i] - indices.IntensityBytes![i]) > 1 ? 1 : 0;
+				intenOff += Math.Abs(indexInten[i] - indices.IntensityBytes[i]) > 1 ? 1 : 0;
 			}
 			Check(fieldOff == 0 && intenOff == 0, "the 8-bit capture of the prime canvas is within a palette step of the CPU's, field and intensity (" + fieldOff + " / " + intenOff + " cells off)");
 		}
@@ -1686,7 +1707,11 @@ internal static class Program
 			big.CopyLayer(frame, FrameLayer.Intensity, plane);
 		}
 		double readMs = clock.Elapsed.TotalMilliseconds;
-		Check(plane[0] == (Half)bigIntensity[(bigW + 2) + 1] && plane[bigW * bigH - 1] == (Half)bigIntensity[bigH * (bigW + 2) + bigW], "big store reads back what was written");
+		// every sample of both planes of the last frame: the copier's chunks (2026-11-03) must join up exactly
+		big.CopyLayer(bigFrames - 1, FrameLayer.Field, plane);
+		bool fieldSame = plane.AsSpan().SequenceEqual(bigFieldHalf);
+		big.CopyLayer(bigFrames - 1, FrameLayer.Intensity, plane);
+		Check(fieldSame && plane.AsSpan().SequenceEqual(bigIntensityHalf), "big store reads back what was written, every sample of both planes");
 		clock.Restart();
 		big.Dispose();
 		double disposeMs = clock.Elapsed.TotalMilliseconds;
@@ -1825,10 +1850,10 @@ internal static class Program
 			var expectedInten = new byte[shape.PlaneBytes];
 			FrameConversion.Convert(field, stride + 1, stride, shape, false, expectedField);
 			FrameConversion.Convert(inten, stride + 1, stride, shape, true, expectedInten);
-			var snapshot = new FrameSnapshot(shape, true);
+			var snapshot = cpu.CreateSnapshot(shape, true);
 			cpu.CaptureFrame(snapshot, true);
 			cpu.AwaitFrame(snapshot);
-			Check(snapshot.HasIntensity && snapshot.FieldBytes.AsSpan().SequenceEqual(expectedField) && snapshot.IntensityBytes!.AsSpan().SequenceEqual(expectedInten),
+			Check(snapshot.HasIntensity && snapshot.FieldBytes.SequenceEqual(expectedField) && snapshot.IntensityBytes.SequenceEqual(expectedInten),
 				$"CPU capture of 1/{shape.Divisor} {shape.Format}{(shape.IntensityRoot ? "" : ", the intensity as I")} equals the reference conversion");
 		}
 		// the GPU's: halves within the tolerance, indices exact where the card's square root rounds correctly (within one elsewhere)
@@ -1851,7 +1876,7 @@ internal static class Program
 					var expectedInten = new byte[shape.PlaneBytes];
 					FrameConversion.Convert(gpuField, stride + 1, stride, shape, false, expectedField);
 					FrameConversion.Convert(gpuInten, stride + 1, stride, shape, true, expectedInten);
-					var snapshot = new FrameSnapshot(shape, true);
+					var snapshot = gpu.CreateSnapshot(shape, true);
 					gpu.CaptureFrame(snapshot, true);
 					gpu.AwaitFrame(snapshot);
 					int worstIndex = 0;
@@ -1860,7 +1885,7 @@ internal static class Program
 					{
 						for (int i = 0; i < expectedField.Length; i++)
 						{
-							worstIndex = Math.Max(worstIndex, Math.Max(Math.Abs(snapshot.FieldBytes[i] - expectedField[i]), Math.Abs(snapshot.IntensityBytes![i] - expectedInten[i])));
+							worstIndex = Math.Max(worstIndex, Math.Max(Math.Abs(snapshot.FieldBytes[i] - expectedField[i]), Math.Abs(snapshot.IntensityBytes[i] - expectedInten[i])));
 						}
 					}
 					else
@@ -2002,7 +2027,7 @@ internal static class Program
 					arrived.Set();
 				};
 				scratch.Request(spec, 98);
-				Check(arrived.Wait(30000) && result is { Snapshot: not null, Frame: 98 } && result.Snapshot.Shape == spec.Shape && result.Snapshot.FieldBytes.AsSpan().SequenceEqual(expected.FieldBytes),
+				Check(arrived.Wait(30000) && result is { Snapshot: not null, Frame: 98 } && result.Snapshot.Shape == spec.Shape && result.Snapshot.FieldBytes.SequenceEqual(expected.FieldBytes),
 					"a scratch frame 98 in that quality has the spec's shape and the stored bytes (the scratch always computes the exact timeline frame)");
 			}
 			run.Dispose();

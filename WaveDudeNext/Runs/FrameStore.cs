@@ -117,7 +117,7 @@ public sealed unsafe class FrameStore : IFrameSource, IDisposable
 
 	/// <summary>
 	/// The background producer of memory blocks: allocates one per frame of the memory tier, touches every page
-	/// so the writer never takes a page fault, and queues it, at most <see cref="PrepareDepth"/> ahead. Allocates
+	/// so the writer never takes a page fault (<see cref="TouchPages"/>), and queues it, at most <see cref="PrepareDepth"/> ahead. Allocates
 	/// nothing before the memory the budget counts on is released (<see cref="_memoryReleased"/>, the outgoing run's
 	/// store; 2026-10-16: the budget had counted it as free while the old store still held it, a race of tens of
 	/// milliseconds that a machine at its commit limit lost). Ends when every block is made, the store is disposed,
@@ -154,11 +154,7 @@ public sealed unsafe class FrameStore : IFrameSource, IDisposable
 				{
 					break;
 				}
-				byte* bytes = (byte*)block;
-				for (long offset = 0; offset < FrameBytes; offset += PageSize)
-				{
-					bytes[offset] = 0;
-				}
+				TouchPages((IntPtr)block, FrameBytes);
 				try
 				{
 					_prepared.Add((IntPtr)block, token);
@@ -373,6 +369,11 @@ public sealed unsafe class FrameStore : IFrameSource, IDisposable
 				}
 				else
 				{
+					// one plain copy, 1.2 ms for a full-HD frame on one core, and the clock of a 16-bit run in RAM against the card's
+					// 1.3 ms a frame. Every faster copy lost in a run (2026-11-03, measured in the app): chunks on the thread pool
+					// queued behind the presenter's rendering rows; two or four dedicated threads, at normal or above-normal
+					// priority, copied faster but slowed the card's DMA into host memory by more than they gained, the memory bus
+					// being shared with it, the producer's page zeroing and the presenter
 					if (Has(FrameLayer.Field))
 					{
 						field[..length].CopyTo(Plane(memory, FrameLayer.Field));
@@ -412,7 +413,7 @@ public sealed unsafe class FrameStore : IFrameSource, IDisposable
 		{
 			throw new ArgumentException("The snapshot does not match the store's size or format.", nameof(snapshot));
 		}
-		Write(frame, snapshot.FieldBytes, snapshot.HasIntensity ? snapshot.IntensityBytes : null);
+		Write(frame, snapshot.FieldBytes, snapshot.HasIntensity ? snapshot.IntensityBytes : Span<byte>.Empty);
 	}
 
 	/// <summary>Reads one plane as <see cref="Half"/> values; the store's samples must be halves (<see cref="Format"/>). See <see cref="CopyLayer(int, FrameLayer, Span{byte})"/>.</summary>
@@ -534,6 +535,37 @@ public sealed unsafe class FrameStore : IFrameSource, IDisposable
 	/// <summary>A plane of a frame kept in memory, as a span over the native block.</summary>
 	private Span<byte> Plane(void* frameMemory, FrameLayer layer) =>
 		new((byte*)frameMemory + PlaneIndex(layer) * PlaneBytes, (int)PlaneBytes);
+
+	/// <summary>
+	/// Writes one byte per page of a fresh block, so the writer never takes a page fault, on up to four cores: Windows
+	/// hands out and zeroes the pages at 5 GB/s for one thread, 1.7 ms for a full-HD frame's block, which had been the
+	/// clock of a run that fits RAM ahead of the writer's copy (2026-11-03); four threads make it 0.6 ms, eight gain
+	/// nothing more. A block under four megabytes is touched on the calling thread.
+	/// </summary>
+	private static void TouchPages(IntPtr block, long bytes)
+	{
+		long pages = (bytes + PageSize - 1) / PageSize;
+		int threads = bytes < 4L << 20 ? 1 : Math.Min(Environment.ProcessorCount, 4);
+		if (threads < 2)
+		{
+			byte* single = (byte*)block;
+			for (long page = 0; page < pages; page++)
+			{
+				single[page * PageSize] = 0;
+			}
+			return;
+		}
+		long perThread = (pages + threads - 1) / threads;
+		Parallel.For(0, threads, new ParallelOptions { MaxDegreeOfParallelism = threads }, t =>
+		{
+			byte* bytes = (byte*)block;
+			long last = Math.Min(pages, (t + 1) * perThread);
+			for (long page = t * perThread; page < last; page++)
+			{
+				bytes[page * PageSize] = 0;
+			}
+		});
+	}
 
 	/// <summary>The <see cref="Half"/> overloads only apply to a store of halves.</summary>
 	/// <exception cref="InvalidOperationException">The store's samples are palette indices.</exception>

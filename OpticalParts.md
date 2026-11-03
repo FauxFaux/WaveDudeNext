@@ -231,7 +231,6 @@ the check's small canvas, +6 % in a wide one).
 
 - A `PartCheck.ps1` harness (add a part by keys, edit a value, the run goes stale and re-runs, the handle moves with
   the arrows) and example projects for Jeroen (a lens, a cavity, a bent fibre); the planned stage 3.
-- The "+ Part" menu as the way to choose a kind, against a button per kind (decided in practice, never confirmed).
 - Bragg thicknesses in pixels as typed, without an automatic quarter-wave from a source's wavelength.
 - Where example projects live: settled (2026-10-29/31): the curated set in `Examples/`, embedded in the app; Jeroen's
   originals are out of the repository (git history up to 02d0e2d), the four the import checks read sit in

@@ -91,12 +91,11 @@ public sealed class SnapshotFrameSource(FrameSnapshot snapshot) : IFrameSource
 	/// <inheritdoc/>
 	public bool CopyLayer(int frame, FrameLayer layer, Span<byte> destination)
 	{
-		byte[]? plane = layer == FrameLayer.Field ? Snapshot.FieldBytes : Snapshot.HasIntensity ? Snapshot.IntensityBytes : null;
-		if (plane == null)
+		if (layer != FrameLayer.Field && !Snapshot.HasIntensity)
 		{
 			return false;
 		}
-		plane.AsSpan().CopyTo(destination);
+		(layer == FrameLayer.Field ? Snapshot.FieldBytes : Snapshot.IntensityBytes).CopyTo(destination);
 		return true;
 	}
 

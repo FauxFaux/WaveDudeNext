@@ -128,7 +128,15 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   method is in `library_check`); a version-1 file loads as
   Reflective, a version-2 file without a damping edge with none (its default then; files are version 3 since 2026-10-22), an
   import as Reflective with his band; one driver thread at a time, no locking; the kernels over the grid and the captures run in explicit 32 × 8 work groups over a global size rounded up to whole groups (2026-10-27, Jeroen's report: left to the driver, the group had to divide the grid, and a prime width, 1789 for a 1725 px canvas with the rim, got groups one cell wide, 13–19× slower on the RTX 2080; every candidate shape from 16 × 16 to 256 × 1 measured the same); captures
-  deliver planes in the spec's `FrameShape` (halves or palette index bytes, the GPU converting on the card);
+  deliver planes in the spec's `FrameShape` (halves or palette index bytes, the GPU converting on the card) into snapshots
+  the engine made (`IWaveEngine.CreateSnapshot`, 2026-11-03, the user's choice): the GPU's planes are page-locked host
+  memory (`CL_MEM_ALLOC_HOST_PTR`, mapped for the engine's life, released with it, a later read throws), so the capture's
+  read is a DMA the stepping thread does not wait for, on a transfer queue of its own so it overlaps the next steps (two
+  staging sets in turn, the capture kernel waiting for the read that last left its set, the read for the kernel, each
+  queue flushed before the other waits on its event, as the spec requires; 1.9 → 1.3 ms a full-HD frame on the card); a
+  .NET-pinned array is pageable to the driver, which drained the queue and copied on the stepping thread inside the
+  "non-blocking" enqueue, 2.9 of a full-HD frame's 2.96 ms (the old note blamed the single queue: a second queue alone
+  changed nothing). The scratch runner's snapshots stay ordinary, since a result outlives its engine;
   `Reset`, `SetEmitters`, `SetProbes`. Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
   Laplacian, soft sources, EMA intensity; a scene pixel with red 0 is a mirror, n = 1000, his V0.30 rule,
   2026-10-18), verified CPU = GPU by the harness; seeds from `Pcg32` make CPU = GPU
@@ -143,7 +151,10 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   Simulation > RAM cache size (Auto or a share); the
   outgoing run's frames count as reclaimed and the new store waits for their release. No memory mapping, no OS
   cache reliance (both wrote at disk speed). Disposed on the thread pool. Full HD, 2500 steps, both planes: 10.4 GB
-  in 16-bit, half in 8-bit.
+  in 16-bit, half in 8-bit. The producer touches a fresh block's pages on up to four cores (2026-11-03: Windows zeroes
+  pages at 5 GB/s for one thread, 1.7 ms a full-HD block, which had been the writer's clock); the writer's copy into the
+  block stays one plain `CopyTo`, the clock of a 16-bit run in RAM, since every parallel copy slowed the card's DMA by more
+  than it gained (see Numbers). **Do not resurrect**: a parallel or dedicated-thread copy in `FrameStore.Write`.
 - **Reduced preview** (View menu): resolution 1/2/4, frames 1/2/4 (the timeline never changes), samples 16-bit or
   **8-bit palette index, the default**: the stored samples at the palette's 255 colours and the captured brightness,
   half the store; 16-bit keeps the brightness turnable after a run and shows every level of the gradient. In 8-bit a
@@ -409,8 +420,22 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
 
 ## Numbers (workstation: 10-core Xeon without AVX2, RTX 2080, 64 GB)
 
-GPU step at 1080p 0.25–0.5 ms, CPU 6–14 ms; OpenCL build 0.3 s; a full-HD run of 2500 steps 5.4 s in RAM, bound by
-the GPU readback. Renderer per 2880×1080 layer on ten cores (2026-10-23, a table lookup per pixel): 16-bit 0.5 ms,
+GPU step at 1080p 0.25–0.5 ms, CPU 6–14 ms; OpenCL build 0.3 s; a full-HD frame's capture (both planes as halves, 8.3 MB)
+0.9 ms on top of its two steps since the page-locked snapshots (2026-11-03; 2.1 ms before, the stepping thread blocked in
+the driver's copy; `bench 1920 1080`: 1.50 → 0.65 ms a step with captures every 2 steps at 4th order, the DMA on its own
+queue), the DMA itself 0.63 ms at 13 GB/s. In the app the default project's run (2500 steps, 1250 frames, 16-bit, both
+planes, 9.7 GiB) takes 2.7 s (2026-11-03; 3.2 before the transfer queue, about 4 before the page-locked snapshots): the card
+needs about 1.3 ms a frame, the writer 1.6 ms for its copy of a frame into the store on one core (6.8 GB/s) and is the
+clock, the stepping thread parked 1.8 ms a frame for a free snapshot. Measured on the way and settled: the capture's reads
+are flushed at once (NVIDIA holds a small batch back until a blocking call; the writer's wait had been starting the DMA,
+0.8 ms a frame); the store's producer touches a fresh block's pages on four cores (Windows zeroes pages at 5 GB/s for one
+thread, 1.7 ms a full-HD block, which had been the writer's clock before the copy was; 0.6 on four, eight gain nothing);
+every faster copy lost in a run though 0.35 ms on four cores in isolation (torn out, three variants measured in the app):
+chunks on the thread pool queued behind the presenter's rendering rows; two or four dedicated threads, at normal or
+above-normal priority, copied faster but the writer's wait for the card rose by more, the memory bus being shared with
+the DMA, the producer's page zeroing and the presenter — the frame's way into memory is bandwidth-bound on this DDR3
+Xeon, and the plain copy at 6.8 GB/s leaves the DMA its share. Renderer per 2880×1080 layer on ten cores (2026-10-23, a
+table lookup per pixel): 16-bit 0.5 ms,
 8-bit 0.6; a half table built in 0.4 ms; the screen path from 1920×1080 to 914×514 1.4 ms, dithered 1.5. Presenter for
 Example 7 (2880×1080 in a 458×172 picture, both layers, playing): 16-bit 7.3–8.5 ms a frame, dithered 7.7–9.1, 8-bit
 10–11 (its bitmaps are canvas-sized). Presenter about 7 ms a frame quiet, 20 during a run. JPEG 1080p at 4:4:4: WIC 26 ms a frame
@@ -422,7 +447,7 @@ numbers: no GPU JPEG, no OpenCL colouring at presentation, no `Vector256`, no Di
 
 ## Harnesses
 
-`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers).
+`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots).
 UI, all on `Common.ps1`, with their check counts: `PreviewCheck` 43, `RunCheck` 71, `LanguageCheck` 11,
 `ProbeGraphCheck` 39, `ImportCheck` 10, `ExportCheck` 44, `PreviewQualityCheck` 35, `SceneImageCheck` 8,
 `ColorPickerCheck` 13, `KeyboardCheck` 13, `AboutCheck` 18, `SelectionCheck` 10. Test projects `tiny*.wdproj` sit beside them. The
@@ -464,12 +489,11 @@ never reworded per file.
 
 ## Open items
 
-README and a documentation file (he writes them); release (single-file publish, portable archive, signed installer,
-curated examples from Jeroen, his program as preserved assets, repository rename); an integer
-upscale in exports; HEVC; the start-up stall (log milestones first); the GPU readback (a second OpenCL queue);
+README and a documentation file (he writes them); an integer
+upscale in exports; HEVC;
 automatic quality lowering when a run would spill (undecided); dropping the 9-point Laplacian (undecided);
 **optical parts**: the open points at the end of `OpticalParts.md` (a `PartCheck.ps1` harness, example projects,
-the menu versus buttons, Bragg thicknesses in pixels, where examples live) wait for the user.
+Bragg thicknesses in pixels) wait for the user.
 
 **Unsolved: clicks on the intensity picture selected nothing** (2026-10-22, seen once, not reproduced). In
 Jeroen's `logical_elements_example.wdproj` (git history up to 02d0e2d; Example 18 is its curated form), after several

@@ -71,8 +71,10 @@ namespace WaveDudeNext.Engine;
 /// "previous field"; every kernel that reads the field exists twice (index 0/1) with the buffers bound in
 /// opposite order, so a step merely picks the kernel for <see cref="_current"/> instead of re-binding
 /// arguments. The kernels over the grid and the captures run in explicit work groups, the global size rounded up
-/// to whole groups (see <see cref="WorkGroup2D"/> for why). Kernel launches are asynchronous; uploads and
-/// read-backs are blocking. Every OpenCL handle
+/// to whole groups (see <see cref="WorkGroup2D"/> for why). Kernel launches are asynchronous; uploads and the float
+/// read-backs are blocking; a capture's reads are DMA transfers into the page-locked planes of a snapshot made by
+/// <see cref="CreateSnapshot"/>, on a transfer queue of their own so they overlap the steps that follow (two staging
+/// sets in turn, ordered by events; <see cref="EnqueueCapture"/>), awaited later (<see cref="AwaitFrame"/>). Every OpenCL handle
 /// created here is registered in <see cref="_scene"/> (the simulation program, kernels and buffers) or
 /// <see cref="_probes"/> (everything <see cref="SetProbes"/> creates) and released by <see cref="Dispose"/>,
 /// by the constructor when building fails, or — for the probe set — when probes are installed again. The
@@ -220,6 +222,39 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		SetProbes(null);
 	}
 
+	/// <summary>
+	/// A snapshot whose planes are page-locked host memory of this context (<c>CL_MEM_ALLOC_HOST_PTR</c> buffers, mapped
+	/// for the engine's life), so <see cref="CaptureFrame"/>'s reads are DMA transfers the stepping thread does not wait
+	/// for: into an ordinary snapshot's arrays, pageable to the driver, the "non-blocking" read drained the queue and
+	/// copied on the calling thread, 2.9 of a full-HD frame's 2.96 ms (2026-11-03). Released with the engine, after which
+	/// the snapshot's planes throw.
+	/// </summary>
+	public FrameSnapshot CreateSnapshot(FrameShape shape, bool withIntensity)
+	{
+		long bytes = shape.Validate().PlaneBytes;
+		IntPtr field = MapHostBuffer(bytes);
+		IntPtr intensity = withIntensity ? MapHostBuffer(bytes) : IntPtr.Zero;
+		var snapshot = new FrameSnapshot(shape, field, intensity);
+		_hostSnapshots.Add(snapshot);
+		return snapshot;
+	}
+
+	/// <summary>A page-locked host buffer of <paramref name="bytes"/>, mapped for reading and writing; the handle and the mapping go into <see cref="_hostPlanes"/> for <see cref="ReleaseAll"/>.</summary>
+	private IntPtr MapHostBuffer(long bytes)
+	{
+		int err = 0;
+		IntPtr buffer = OpenClApi.clCreateBuffer(_context, OpenClApi.MemReadWrite | OpenClApi.MemAllocHostPtr, new IntPtr(bytes), IntPtr.Zero, ref err);
+		OpenClApi.Check(err, "clCreateBuffer (page-locked plane)");
+		IntPtr mapped = OpenClApi.clEnqueueMapBuffer(_queue, buffer, 1U, OpenClApi.MapReadWrite, IntPtr.Zero, new IntPtr(bytes), 0U, IntPtr.Zero, IntPtr.Zero, ref err);
+		if (err != 0)
+		{
+			Quietly(() => OpenClApi.clReleaseMemObject(buffer));
+			OpenClApi.Check(err, "clEnqueueMapBuffer (page-locked plane)");
+		}
+		_hostPlanes.Add((buffer, mapped));
+		return mapped;
+	}
+
 	/// <inheritdoc/>
 	public void CaptureFrame(FrameSnapshot snapshot, bool needIntensity)
 	{
@@ -232,12 +267,15 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		{
 			throw new InvalidOperationException("The snapshot has a capture in flight; await it first.");
 		}
-		if (_stagingField == IntPtr.Zero)
+		if (_stagingField[0] == IntPtr.Zero)
 		{
 			// lazily: most engines never capture (the harness, the probes-only paths). The staging planes have room
 			// for any shape: a plane is at most the whole canvas as halves
-			_stagingField = CreateBuffer((long)_canvasWidth * _canvasHeight * 2, _scene);
-			_stagingIntensity = _track ? CreateBuffer((long)_canvasWidth * _canvasHeight * 2, _scene) : IntPtr.Zero;
+			for (int set = 0; set < 2; set++)
+			{
+				_stagingField[set] = CreateBuffer((long)_canvasWidth * _canvasHeight * 2, _scene);
+				_stagingIntensity[set] = _track ? CreateBuffer((long)_canvasWidth * _canvasHeight * 2, _scene) : IntPtr.Zero;
+			}
 			_captureHalfKernel = CreateKernel(_scene, _scene.Program, "capture_half");
 			_captureIndexKernel = CreateKernel(_scene, _scene.Program, "capture_index");
 			_captureLocal = WorkGroup2D(_captureHalfKernel, _captureIndexKernel);
@@ -264,20 +302,36 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			}
 		}
 		snapshot.EventCount = 0;
-		EnqueueCapture(_field[_current], _stagingField, snapshot.FieldBytes, snapshot, false);
-		snapshot.HasIntensity = needIntensity && _track && snapshot.IntensityBytes != null;
+		int stagingSet = _stagingSet;
+		_stagingSet = 1 - stagingSet;
+		EnqueueCapture(_field[_current], stagingSet, snapshot.FieldAddress, snapshot, false);
+		snapshot.HasIntensity = needIntensity && _track && snapshot.HasIntensityPlane;
 		if (snapshot.HasIntensity)
 		{
-			EnqueueCapture(_intensityOutBuffer, _stagingIntensity, snapshot.IntensityBytes!, snapshot, true);
+			EnqueueCapture(_intensityOutBuffer, stagingSet, snapshot.IntensityAddress, snapshot, true);
 		}
-		// the reads flush the queue once they run; nothing piles up behind them
+		// submitted now, for two reasons: the next capture's kernel waits for these reads, which the spec allows only
+		// once their queue is flushed; and NVIDIA's driver holds a small batch back until a blocking call, so with the
+		// run's stepping thread parked for a free snapshot the writer's wait had been starting the DMA instead of finding
+		// it done (2026-11-03: one DMA time a frame, 0.8 ms at full HD)
+		OpenClApi.Check(OpenClApi.clFlush(_transferQueue), "clFlush (transfer)");
+		// everything is submitted, and the run's pool bounds how far the host gets ahead of the card, so the periodic
+		// finish of AdvanceOneStep is not needed here (it had drained the card every 16 steps and cost 0.17 ms a step, 2026-11-03)
 		_sinceFinish = 0;
 	}
 
-	/// <summary>Shrinks and converts a padded float buffer to a plane of the snapshot's shape on the card and enqueues its non-blocking read into the pinned plane.</summary>
-	private void EnqueueCapture(IntPtr source, IntPtr staging, byte[] plane, FrameSnapshot snapshot, bool intensity)
+	/// <summary>
+	/// Shrinks and converts a padded float buffer to a plane of the snapshot's shape on the card (staging set
+	/// <paramref name="set"/>) and enqueues its read into the plane at <paramref name="plane"/>
+	/// (<see cref="FrameSnapshot.PlaneBytes"/> bytes, pinned or page-locked) on <see cref="_transferQueue"/>, so the DMA
+	/// overlaps the steps that follow on <see cref="_queue"/>: the capture kernel waits for the read that last left its
+	/// staging set (two captures ago), the read waits for the kernel, and each queue is flushed before the other waits
+	/// on its event, as the spec requires (2026-11-03: 1.9 → 1.4 ms a full-HD frame on the card).
+	/// </summary>
+	private void EnqueueCapture(IntPtr source, int set, IntPtr plane, FrameSnapshot snapshot, bool intensity)
 	{
 		FrameShape shape = snapshot.Shape;
+		IntPtr staging = (intensity ? _stagingIntensity : _stagingField)[set];
 		IntPtr kernel = shape.Format == FrameFormat.Half ? _captureHalfKernel : _captureIndexKernel;
 		SetMem(kernel, 0U, source);
 		SetMem(kernel, 1U, staging);
@@ -291,9 +345,22 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		{
 			SetInt(kernel, 9U, intensity && shape.IntensityRoot ? 1 : 0);
 		}
-		Enqueue(kernel, _captureGrid!, _captureLocal, "capture");
-		OpenClApi.Check(OpenClApi.clEnqueueReadBufferPtr(_queue, staging, 0U, IntPtr.Zero, new IntPtr(plane.Length), FrameSnapshot.AddressOf(plane), 0U, IntPtr.Zero, out IntPtr evt), "clEnqueueReadBuffer (capture)");
-		snapshot.Events[snapshot.EventCount++] = evt;
+		int planeIndex = intensity ? 1 : 0;
+		IntPtr busy = _stagingBusy[set][planeIndex];
+		IntPtr[]? afterRead = busy != IntPtr.Zero ? [busy] : null;
+		OpenClApi.Check(OpenClApi.clEnqueueNDRangeKernelAfter(_queue, kernel, (uint)_captureGrid!.Length, null, _captureGrid, _captureLocal, (uint)(afterRead?.Length ?? 0), afterRead, out IntPtr captured), "clEnqueueNDRangeKernel (capture)");
+		if (busy != IntPtr.Zero)
+		{
+			Quietly(() => OpenClApi.clReleaseEvent(busy));
+			_stagingBusy[set][planeIndex] = IntPtr.Zero;
+		}
+		OpenClApi.Check(OpenClApi.clFlush(_queue), "clFlush (capture)");
+		OpenClApi.Check(OpenClApi.clEnqueueReadBufferPtrAfter(_transferQueue, staging, 0U, IntPtr.Zero, new IntPtr(snapshot.PlaneBytes), plane, 1U, [captured], out IntPtr read), "clEnqueueReadBuffer (capture)");
+		Quietly(() => OpenClApi.clReleaseEvent(captured));
+		// the snapshot's owner releases its reference in AwaitFrame; the staging set keeps one until the next capture into it
+		OpenClApi.Check(OpenClApi.clRetainEvent(read), "clRetainEvent (capture)");
+		_stagingBusy[set][planeIndex] = read;
+		snapshot.Events[snapshot.EventCount++] = read;
 	}
 
 	/// <inheritdoc/>
@@ -346,6 +413,8 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		OpenClApi.Check(err, "clCreateContext");
 		_queue = OpenClApi.clCreateCommandQueue(_context, _device.DeviceId, 0UL, ref err);
 		OpenClApi.Check(err, "clCreateCommandQueue");
+		_transferQueue = OpenClApi.clCreateCommandQueue(_context, _device.DeviceId, 0UL, ref err);
+		OpenClApi.Check(err, "clCreateCommandQueue (transfer)");
 		_scene.Program = BuildProgram(KernelSource(use4thOrderLaplacian), "the program for the GPU");
 
 		// the scene, with a border of one cell like the CPU engine (padded layout)
@@ -1547,6 +1616,41 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			// if this fails the driver is gone or in trouble; release what can be released
 			Quietly(() => OpenClApi.clFinish(_queue));
 		}
+		if (_transferQueue != IntPtr.Zero)
+		{
+			Quietly(() => OpenClApi.clFinish(_transferQueue));
+		}
+		foreach (IntPtr[] set in _stagingBusy)
+		{
+			for (int p = 0; p < set.Length; p++)
+			{
+				if (set[p] != IntPtr.Zero)
+				{
+					IntPtr evt = set[p];
+					Quietly(() => OpenClApi.clReleaseEvent(evt));
+					set[p] = IntPtr.Zero;
+				}
+			}
+		}
+		// the snapshots' planes: told first, so a late reader throws instead of reading freed memory
+		foreach (FrameSnapshot snapshot in _hostSnapshots)
+		{
+			snapshot.Release();
+		}
+		_hostSnapshots.Clear();
+		if (_queue != IntPtr.Zero)
+		{
+			foreach ((IntPtr buffer, IntPtr mapped) in _hostPlanes)
+			{
+				Quietly(() => OpenClApi.clEnqueueUnmapMemObject(_queue, buffer, mapped, 0U, IntPtr.Zero, IntPtr.Zero));
+			}
+			Quietly(() => OpenClApi.clFinish(_queue));
+		}
+		foreach ((IntPtr buffer, _) in _hostPlanes)
+		{
+			Quietly(() => OpenClApi.clReleaseMemObject(buffer));
+		}
+		_hostPlanes.Clear();
 		_probes.Release();
 		if (_probeProgram != IntPtr.Zero)
 		{
@@ -1555,6 +1659,11 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		}
 		_emitters.Release();
 		_scene.Release();
+		if (_transferQueue != IntPtr.Zero)
+		{
+			Quietly(() => OpenClApi.clReleaseCommandQueue(_transferQueue));
+			_transferQueue = IntPtr.Zero;
+		}
 		if (_queue != IntPtr.Zero)
 		{
 			Quietly(() => OpenClApi.clReleaseCommandQueue(_queue));
@@ -1617,6 +1726,12 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 
 	/// <summary>Steps enqueued between two <c>clFinish</c> calls in <see cref="AdvanceOneStep"/>.</summary>
 	private const int FinishInterval = 16;
+
+	/// <summary>The page-locked host buffers behind the snapshots of <see cref="CreateSnapshot"/>, each with its mapping; unmapped and released by <see cref="ReleaseAll"/>.</summary>
+	private readonly List<(IntPtr Buffer, IntPtr Mapped)> _hostPlanes = [];
+
+	/// <summary>The snapshots of <see cref="CreateSnapshot"/>, told by <see cref="ReleaseAll"/> that their planes are gone.</summary>
+	private readonly List<FrameSnapshot> _hostSnapshots = [];
 
 	/// <summary>Rows (steps) the probe history buffer holds before it must be read back to the host.</summary>
 	private const int ProbeRows = 2048;
@@ -1682,11 +1797,17 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	private IntPtr _intensityBuffer;
 	private IntPtr _intensityStage1Buffer;
 
-	/// <summary>Planes the capture kernels write for <see cref="CaptureFrame"/>; created on first use, sized for any shape.</summary>
-	private IntPtr _stagingField;
-	private IntPtr _stagingIntensity;
+	/// <summary>Two sets of planes the capture kernels write for <see cref="CaptureFrame"/>, taken in turn so a capture never waits for the previous capture's read; created on first use, sized for any shape.</summary>
+	private readonly IntPtr[] _stagingField = new IntPtr[2];
+	private readonly IntPtr[] _stagingIntensity = new IntPtr[2];
 	private IntPtr _captureHalfKernel;
 	private IntPtr _captureIndexKernel;
+
+	/// <summary>The staging set the next capture writes (0 or 1).</summary>
+	private int _stagingSet;
+
+	/// <summary>Per staging set and plane (0 the field, 1 the intensity): the retained event of the read that last left the set, which the next capture into the set waits for; released there or by <see cref="ReleaseAll"/>.</summary>
+	private readonly IntPtr[][] _stagingBusy = [new IntPtr[2], new IntPtr[2]];
 
 	/// <summary>The shape the capture kernels' geometry arguments are set for, and the matching global work size.</summary>
 	private FrameShape? _captureShape;
@@ -1701,8 +1822,11 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	/// <summary>OpenCL context on the chosen device; released last in <see cref="ReleaseAll"/>.</summary>
 	private IntPtr _context;
 
-	/// <summary>In-order command queue; every launch and transfer goes through it.</summary>
+	/// <summary>In-order command queue; every launch and the blocking transfers go through it, the captures' reads through <see cref="_transferQueue"/>.</summary>
 	private IntPtr _queue;
+
+	/// <summary>In-order queue for the captures' reads (<see cref="EnqueueCapture"/>): on a queue of their own the DMA transfers overlap the steps on <see cref="_queue"/>, ordered against them by events.</summary>
+	private IntPtr _transferQueue;
 
 	/// <summary>Simulation program (<c>wave_step</c>, <c>apply_sources</c>, <c>apply_object_sources</c>) with its kernels and scene buffers.</summary>
 	private readonly Resources _scene = new Resources();

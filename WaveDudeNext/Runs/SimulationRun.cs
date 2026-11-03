@@ -33,8 +33,8 @@ namespace WaveDudeNext.Runs;
 /// and the store allow, and the preview plays from the store at its own speed.
 /// </summary>
 /// <remarks>
-/// Threads: the worker owns the engine's stepping; it captures frames (on the GPU an asynchronous read into a
-/// pinned snapshot) and hands them to the writer task, which awaits the capture, writes the store and returns
+/// Threads: the worker owns the engine's stepping; it captures frames (on the GPU a DMA read into a snapshot the engine
+/// made in page-locked memory) and hands them to the writer task, which awaits the capture, writes the store and returns
 /// the snapshot to a small pool, so converting and storing one frame overlaps computing the next. Every public
 /// property and event is set or raised through the <see cref="SynchronizationContext"/> given to the constructor
 /// (the WPF dispatcher), so they can be bound directly; with a null context they run on the worker (for
@@ -280,7 +280,8 @@ public sealed class SimulationRun : INotifyPropertyChanged, IDisposable
 			var pool = new BlockingCollection<FrameSnapshot>();
 			for (int i = 0; i < SnapshotPoolSize; i++)
 			{
-				pool.Add(new FrameSnapshot(Spec.Shape, trackIntensity));
+				// the engine's own snapshots: page-locked on the GPU, so its reads are DMA the stepping thread does not wait for (2026-11-03)
+				pool.Add(engine.CreateSnapshot(Spec.Shape, trackIntensity));
 			}
 			var pending = new BlockingCollection<FrameSnapshot>();
 			IWaveEngine captured = engine;

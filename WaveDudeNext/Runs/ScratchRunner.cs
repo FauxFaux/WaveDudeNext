@@ -237,8 +237,9 @@ public sealed class ScratchRunner : IDisposable
 		int index = _nextSnapshot;
 		_nextSnapshot = (index + 1) % _snapshots.Length;
 		FrameSnapshot? snapshot = _snapshots[index];
-		if (snapshot == null || snapshot.Shape != spec.Shape || (spec.TrackIntensity && snapshot.IntensityBytes == null))
+		if (snapshot == null || snapshot.Shape != spec.Shape || (spec.TrackIntensity && !snapshot.HasIntensityPlane))
 		{
+			// ordinary snapshots, not the engine's: the result handed out outlives the engine, which a scene edit replaces
 			snapshot = _snapshots[index] = new FrameSnapshot(spec.Shape, spec.TrackIntensity);
 		}
 		return snapshot;

@@ -112,6 +112,18 @@ internal static class OpenClApi
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, EntryPoint = "clEnqueueReadBuffer", ExactSpelling = true, SetLastError = true)]
 	internal static extern int clEnqueueReadBufferPtr(IntPtr queue, IntPtr buffer, uint blocking, IntPtr offset, IntPtr size, IntPtr ptr, uint numEvents, IntPtr waitList, out IntPtr evt);
 
+	/// <summary>clEnqueueReadBuffer into pinned or page-locked memory at <paramref name="ptr"/> after the events in <paramref name="waitList"/> (<paramref name="numEvents"/> of them, from any queue of the context, each flushed from its own); non-blocking when <paramref name="blocking"/> is 0; <paramref name="evt"/> receives the read's event.</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, EntryPoint = "clEnqueueReadBuffer", ExactSpelling = true, SetLastError = true)]
+	internal static extern int clEnqueueReadBufferPtrAfter(IntPtr queue, IntPtr buffer, uint blocking, IntPtr offset, IntPtr size, IntPtr ptr, uint numEvents, IntPtr[] waitList, out IntPtr evt);
+
+	/// <summary>clEnqueueMapBuffer: maps <paramref name="size"/> bytes of a buffer from <paramref name="offset"/> into host memory and returns the pointer; <paramref name="blocking"/> 1 waits for the mapping. A buffer created with <see cref="MemAllocHostPtr"/> maps to the page-locked memory it lives in, so the pointer takes DMA transfers (<see cref="clEnqueueReadBufferPtr"/>) for as long as the mapping stays. End it with <see cref="clEnqueueUnmapMemObject"/>.</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+	internal static extern IntPtr clEnqueueMapBuffer(IntPtr queue, IntPtr buffer, uint blocking, ulong mapFlags, IntPtr offset, IntPtr size, uint numEvents, IntPtr waitList, IntPtr evt, ref int errcode);
+
+	/// <summary>clEnqueueUnmapMemObject: ends a mapping made by <see cref="clEnqueueMapBuffer"/>; complete once the queue has run it (<see cref="clFinish"/>).</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+	internal static extern int clEnqueueUnmapMemObject(IntPtr queue, IntPtr memObj, IntPtr mappedPtr, uint numEvents, IntPtr waitList, IntPtr evt);
+
 	/// <summary>clWaitForEvents: blocks until every event in <paramref name="events"/> has completed.</summary>
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
 	internal static extern int clWaitForEvents(uint numEvents, IntPtr[] events);
@@ -120,9 +132,21 @@ internal static class OpenClApi
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
 	internal static extern int clReleaseEvent(IntPtr evt);
 
+	/// <summary>clRetainEvent: adds a reference to an event, for a second owner that releases it on its own.</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+	internal static extern int clRetainEvent(IntPtr evt);
+
+	/// <summary>clEnqueueNDRangeKernel that waits for the events in <paramref name="waitList"/> (<paramref name="numEvents"/> of them, from any queue of the context, each flushed from its own; null for none) and returns the launch's event in <paramref name="evt"/>; otherwise as <see cref="clEnqueueNDRangeKernel"/>.</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, EntryPoint = "clEnqueueNDRangeKernel", ExactSpelling = true, SetLastError = true)]
+	internal static extern int clEnqueueNDRangeKernelAfter(IntPtr queue, IntPtr kernel, uint workDim, IntPtr[]? globalOffset, IntPtr[] globalSize, IntPtr[]? localSize, uint numEvents, IntPtr[]? waitList, out IntPtr evt);
+
 	/// <summary>clEnqueueNDRangeKernel: launches the kernel over a <paramref name="workDim"/>-dimensional range; <paramref name="localSize"/> null lets the driver pick the work-group size, which then has to divide <paramref name="globalSize"/> exactly.</summary>
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
 	internal static extern int clEnqueueNDRangeKernel(IntPtr queue, IntPtr kernel, uint workDim, IntPtr[]? globalOffset, IntPtr[] globalSize, IntPtr[]? localSize, uint numEvents, IntPtr waitList, IntPtr evt);
+
+	/// <summary>clFlush: submits every command queued so far to the device without waiting; a driver may otherwise hold a small batch back until a blocking call.</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+	internal static extern int clFlush(IntPtr queue);
 
 	/// <summary>clFinish: blocks until every command queued so far has completed.</summary>
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
@@ -364,6 +388,12 @@ internal static class OpenClApi
 
 	/// <summary>CL_MEM_READ_WRITE (1 &lt;&lt; 0) buffer flag.</summary>
 	internal const ulong MemReadWrite = 1UL;
+
+	/// <summary>CL_MEM_ALLOC_HOST_PTR (1 &lt;&lt; 4) buffer flag: the buffer lives in host memory the driver page-locks, so copies between it and the card are DMA transfers.</summary>
+	internal const ulong MemAllocHostPtr = 16UL;
+
+	/// <summary>CL_MAP_READ | CL_MAP_WRITE (1 &lt;&lt; 0 | 1 &lt;&lt; 1): <see cref="clEnqueueMapBuffer"/> flags for a mapping the host both reads and writes.</summary>
+	internal const ulong MapReadWrite = 3UL;
 
 	/// <summary>CL_CONTEXT_PLATFORM (0x1084): property key for the platform in <see cref="clCreateContext"/>.</summary>
 	internal const int ContextPlatformProperty = 0x1084;

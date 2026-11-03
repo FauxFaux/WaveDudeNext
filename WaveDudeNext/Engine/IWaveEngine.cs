@@ -70,12 +70,26 @@ public interface IWaveEngine
 	void PrepareFrame(bool needField, bool needIntensity);
 
 	/// <summary>
+	/// A snapshot for <see cref="CaptureFrame"/> in the memory this engine fills fastest. The GPU engine's planes are
+	/// page-locked host memory (<c>CL_MEM_ALLOC_HOST_PTR</c> buffers, kept mapped) the card writes by DMA while the
+	/// stepping thread goes on; into an ordinary snapshot's arrays, pageable to the driver, its "non-blocking" read
+	/// drains the queue and copies on the calling thread (2.96 against 1.91 ms a full-HD frame, both planes as halves,
+	/// RTX 2080, 2026-11-03). The CPU engine returns an ordinary snapshot. Engine-owned planes are released with the
+	/// engine and throw afterwards, so a snapshot that outlives its engine, the scratch runner's result, is made with
+	/// the constructor instead.
+	/// </summary>
+	/// <param name="shape">The capture's geometry and format; its canvas must be this engine's.</param>
+	/// <param name="withIntensity">Whether the snapshot gets an intensity plane.</param>
+	FrameSnapshot CreateSnapshot(FrameShape shape, bool withIntensity);
+
+	/// <summary>
 	/// Copies the newest field (and the intensity when asked and tracked) into <paramref name="snapshot"/> as
 	/// planes of its <see cref="FrameShape"/>: the padding stripped, the canvas shrunk by the shape's divisor,
 	/// the samples as halves or palette indices (<see cref="FrameConversion"/> is the reference). The CPU engine
 	/// copies the floats now and converts in <see cref="AwaitFrame"/>; the GPU engine converts on the card and
-	/// enqueues the reads without waiting, so the driver can keep stepping while they land. The snapshot must not
-	/// be touched until <see cref="AwaitFrame"/> returned, and a capture must be awaited before the engine is disposed.
+	/// enqueues the reads without waiting, so the driver can keep stepping while they land into a snapshot of
+	/// <see cref="CreateSnapshot"/> (an ordinary snapshot's read stalls the stepping thread for the copy). The snapshot
+	/// must not be touched until <see cref="AwaitFrame"/> returned, and a capture must be awaited before the engine is disposed.
 	/// </summary>
 	/// <param name="snapshot">A snapshot whose shape has this engine's canvas; its planes receive the data.</param>
 	/// <param name="needIntensity">Also copy the intensity (needs tracking and a snapshot with an intensity plane).</param>
