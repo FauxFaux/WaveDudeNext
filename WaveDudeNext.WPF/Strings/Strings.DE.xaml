@@ -101,6 +101,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationStop">S_topp</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">_GPU verwenden (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Nach Änderungen _automatisch neu starten</s:String>
+	<s:String x:Key="MenuSimulationWarnMemory">_Warnen, wenn ein Lauf nicht in den RAM passt</s:String>
 	<s:String x:Key="MenuSimulationFrameMemory">Größe des RAM-_Caches</s:String>
 	<s:String x:Key="MenuSimulationFrameMemoryAuto">_Auto</s:String>
 	<s:String x:Key="MenuHelp">_Hilfe</s:String>
@@ -270,6 +271,17 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="DialogSave">_Speichern</s:String>
 	<s:String x:Key="DialogDiscard">_Nicht speichern</s:String>
 	<s:String x:Key="DialogCancel">_Abbrechen</s:String>
+	<s:String x:Key="DialogRun">_Starten</s:String>
+	<!-- die Speicherwarnung (Simulation > Warnen, wenn ein Lauf nicht in den RAM passt) -->
+	<s:String x:Key="MemoryWarningTextFormat">Die Bilder des Laufs brauchen {0} Speicher, der RAM-Cache hat {1}. Die Bilder darüber hinaus gehen in die Cache-Datei auf der Festplatte, was langsamer ist.</s:String>
+	<s:String x:Key="MemoryWarningChoices">Einstellungen, die für diesen und spätere Läufe geändert werden:</s:String>
+	<s:String x:Key="MemoryWarningCacheFormat">RAM-Cache auf Auto: {0} für die Bilder (Menü Simulation)</s:String>
+	<s:String x:Key="MemoryWarningResolution">Auflösung halbieren: ein Viertel des Speichers (Menü Ansicht)</s:String>
+	<s:String x:Key="MemoryWarningFrames">Halb so viele Bilder speichern: die Hälfte des Speichers (Menü Ansicht)</s:String>
+	<s:String x:Key="MemoryWarningSamples">8-Bit-Samples: die Hälfte des Speichers (Menü Ansicht)</s:String>
+	<s:String x:Key="MemoryWarningFitsFormat">Die Bilder brauchen dann {0} und passen in den RAM-Cache.</s:String>
+	<s:String x:Key="MemoryWarningSpillsFormat">Die Bilder brauchen dann {0}; {1} davon gehen weiterhin auf die Festplatte.</s:String>
+	<s:String x:Key="MemoryWarningMute">Nicht mehr warnen</s:String>
 	<s:String x:Key="NoSelection">Keine Auswahl</s:String>
 
 	<s:String x:Key="TreeProject">Projekt</s:String>

@@ -89,6 +89,17 @@ public sealed class RunSpec
 	/// <summary>Number of frames actually stored: ⌈<see cref="FrameCount"/> / <see cref="FrameStride"/>⌉ (the store's capacity).</summary>
 	public int StoredFrameCount => (FrameCount + FrameStride - 1) / FrameStride;
 
+	/// <summary>Bytes the stored frames take in memory at the spec's own quality: <see cref="StoredFrameCount"/> frames of <see cref="Shape"/> with <see cref="Layers"/>.</summary>
+	public long StoreBytes => StoreBytesAt(Quality);
+
+	/// <summary>
+	/// Bytes the stored frames would take in memory at another <paramref name="quality"/> on this canvas with these
+	/// layers (the memory warning's arithmetic for each of its choices, 2026-11-03): ⌈<see cref="FrameCount"/> / its frame
+	/// divisor⌉ frames, each of <see cref="Shape"/> at its resolution divisor and sample format.
+	/// </summary>
+	public long StoreBytesAt(PreviewQuality quality) =>
+		FrameStore.MemoryOf(Shape with { Divisor = quality.ResolutionDivisor, Format = quality.Format }, Layers, (FrameCount + quality.FrameDivisor - 1) / quality.FrameDivisor);
+
 	/// <summary>Index in the store of the frame that shows timeline frame <paramref name="frame"/>: the last stored one at or before it.</summary>
 	public int StoredIndexOf(int frame) => frame / FrameStride;
 

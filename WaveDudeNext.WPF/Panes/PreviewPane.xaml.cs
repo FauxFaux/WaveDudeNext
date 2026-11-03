@@ -1004,11 +1004,18 @@ public partial class PreviewPane : UserControl
 			{
 				pane.Position = pane.InPoint; // play the range again from its start
 			}
+			// playing means showing the simulation: the window starts a run when there is none or it is stale. Asked before
+			// the clock starts (2026-11-03, the user's report): a run that does not fit asks in a modal window, whose message
+			// loop had ticked the clock through the stale frames; a refused run turns playback off again, which lands here
+			// with false before the command returns, so the clock stays off then
+			SimulationCommands.EnsureRun.Execute(null, pane);
+			if (!pane.IsPlaying)
+			{
+				return;
+			}
 			pane._carry = 0.0;
 			pane._clock.Restart();
 			pane._timer.Start();
-			// playing means showing the simulation: the window starts a run when there is none or it is stale
-			SimulationCommands.EnsureRun.Execute(null, pane);
 		}
 		else
 		{

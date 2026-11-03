@@ -101,6 +101,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationStop">S_toppen</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">_GPU gebruiken (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Na bewerkingen _automatisch opnieuw starten</s:String>
+	<s:String x:Key="MenuSimulationWarnMemory">_Waarschuwen als een simulatie niet in het RAM past</s:String>
 	<s:String x:Key="MenuSimulationFrameMemory">Grootte van de RAM-_cache</s:String>
 	<s:String x:Key="MenuSimulationFrameMemoryAuto">_Auto</s:String>
 	<s:String x:Key="MenuHelp">_Help</s:String>
@@ -270,6 +271,17 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="DialogSave">_Opslaan</s:String>
 	<s:String x:Key="DialogDiscard">_Niet opslaan</s:String>
 	<s:String x:Key="DialogCancel">_Annuleren</s:String>
+	<s:String x:Key="DialogRun">_Starten</s:String>
+	<!-- de geheugenwaarschuwing (Simulatie > Waarschuwen als een simulatie niet in het RAM past) -->
+	<s:String x:Key="MemoryWarningTextFormat">De beelden van de simulatie hebben {0} geheugen nodig, en de RAM-cache heeft {1}. De beelden daarboven gaan naar het cachebestand op de schijf, wat trager is.</s:String>
+	<s:String x:Key="MemoryWarningChoices">Instellingen die voor deze en latere simulaties veranderen:</s:String>
+	<s:String x:Key="MemoryWarningCacheFormat">RAM-cache op Auto: {0} voor de beelden (menu Simulatie)</s:String>
+	<s:String x:Key="MemoryWarningResolution">Resolutie halveren: een kwart van het geheugen (menu Beeld)</s:String>
+	<s:String x:Key="MemoryWarningFrames">Half zoveel beelden opslaan: de helft van het geheugen (menu Beeld)</s:String>
+	<s:String x:Key="MemoryWarningSamples">8-bits samples: de helft van het geheugen (menu Beeld)</s:String>
+	<s:String x:Key="MemoryWarningFitsFormat">De beelden hebben dan {0} nodig en passen in de RAM-cache.</s:String>
+	<s:String x:Key="MemoryWarningSpillsFormat">De beelden hebben dan {0} nodig; {1} daarvan gaan nog naar de schijf.</s:String>
+	<s:String x:Key="MemoryWarningMute">Niet meer waarschuwen</s:String>
 	<s:String x:Key="NoSelection">Geen selectie</s:String>
 
 	<s:String x:Key="TreeProject">Project</s:String>

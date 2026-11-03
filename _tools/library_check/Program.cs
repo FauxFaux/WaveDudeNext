@@ -277,6 +277,7 @@ internal static class Program
 		CheckFrameStore(scene);
 		CheckFirstStart();
 		CheckPreviewQuality(scene, W, H);
+		CheckStoreBytes();
 		CheckRenderer();
 		CheckColorSchemes();
 		CheckProbeGraph();
@@ -1762,6 +1763,35 @@ internal static class Program
 	/// the CPU captures of every shape equal to it and the GPU's within the card's arithmetic, a store of index
 	/// bytes, the export's refusal of it, a spec with a quality, and a headless run plus a scratch frame in that shape.
 	/// </summary>
+	/// <summary>
+	/// A run's store bytes at another preview quality (the memory warning's arithmetic, 2026-11-03): ⌈frames / frame
+	/// divisor⌉ frames of the canvas at the resolution divisor in the sample format, against the sizes written out, and a
+	/// spec made at that quality needing the same.
+	/// </summary>
+	private static void CheckStoreBytes()
+	{
+		Console.WriteLine("--- store bytes at a preview quality (the memory warning)");
+		var project = new Project();
+		project.Scene.Width = 64;
+		project.Scene.Height = 48;
+		project.Simulation.Steps = 18;
+		project.Simulation.VisualizeEvery = 2;
+		RunSpec full = RunSpec.Create(project, null, preferGpu: false);
+		int planes = full.TrackIntensity ? 2 : 1;
+		long plane = 64L * 48;
+		long halfPlane = 32L * 24;
+		Check(full.FrameCount == 9 && full.StoreBytes == 9 * 2 * plane * planes
+			&& full.StoreBytesAt(new PreviewQuality(2, 1, FrameFormat.Half)) == 9 * 2 * halfPlane * planes
+			&& full.StoreBytesAt(new PreviewQuality(1, 2, FrameFormat.Half)) == 5 * 2 * plane * planes
+			&& full.StoreBytesAt(new PreviewQuality(1, 4, FrameFormat.Half)) == 3 * 2 * plane * planes
+			&& full.StoreBytesAt(new PreviewQuality(1, 1, FrameFormat.Index)) == 9 * plane * planes
+			&& full.StoreBytesAt(new PreviewQuality(2, 2, FrameFormat.Index)) == 5 * halfPlane * planes,
+			"store bytes: 9 frames of 64x48 as halves; half resolution a quarter, every second frame 5 frames, every fourth 3, 8-bit half, all three together");
+		RunSpec reduced = RunSpec.Create(project, null, preferGpu: false, quality: new PreviewQuality(2, 2, FrameFormat.Index));
+		Check(reduced.StoreBytes == full.StoreBytesAt(reduced.Quality) && reduced.StoreBytes == FrameStore.MemoryOf(reduced.Shape, reduced.Layers, reduced.StoredFrameCount),
+			"a spec made at a quality needs what the full spec computes for it: the store's frame bytes times its capacity");
+	}
+
 	private static void CheckPreviewQuality(SceneData scene, int W, int H)
 	{
 		Console.WriteLine("--- preview quality (shrunk and 8-bit frames)");

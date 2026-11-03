@@ -206,6 +206,9 @@ public sealed unsafe class FrameStore : IFrameSource, IDisposable
 	/// <summary>Bytes a file holding <paramref name="capacity"/> frames of this shape takes, for <see cref="FrameCache.CheckSpace"/> (the spilled part of a run).</summary>
 	public static long SizeOf(FrameShape shape, FrameLayers layers, int capacity) => HeaderSize + capacity * FrameBytesOf(shape, layers);
 
+	/// <summary>Bytes <paramref name="frames"/> frames of this shape take in memory, no file header: a run's need against <see cref="FrameMemory.Budget(int, long)"/>.</summary>
+	public static long MemoryOf(FrameShape shape, FrameLayers layers, int frames) => frames * FrameBytesOf(shape, layers);
+
 	/// <summary>How many frames of this shape fit into <paramref name="budget"/> bytes of memory.</summary>
 	public static int FramesInBudget(FrameShape shape, FrameLayers layers, long budget) =>
 		(int)Math.Clamp(Math.Max(0, budget) / FrameBytesOf(shape, layers), 0, int.MaxValue);

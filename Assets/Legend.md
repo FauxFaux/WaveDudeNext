@@ -187,7 +187,8 @@ The Simulation menu.
 3. **Stop**
 4. **Use the GPU (OpenCL)**
 5. **Re-run automatically after edits**
-6. **RAM cache size**
+6. **Warn when a run does not fit in RAM**
+7. **RAM cache size**
 
 ## The Help menu
 

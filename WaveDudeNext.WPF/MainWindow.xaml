@@ -399,6 +399,11 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 				<MenuItem Header="{DynamicResource MenuSimulationAutoRerun}" IsCheckable="True"
 				          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=AutoRerun, Mode=TwoWay}"
 				          AutomationProperties.AutomationId="MenuAutoRerun" />
+				<!-- a run whose frames do not fit in the RAM cache asks first (the memory warning, 2026-11-03, the user's design),
+				     offering a lower preview quality; its "Do not warn me again" clears this -->
+				<MenuItem Header="{DynamicResource MenuSimulationWarnMemory}" IsCheckable="True"
+				          IsChecked="{Binding Source={x:Static p:Settings.Default}, Path=WarnWhenRamInsufficient, Mode=TwoWay}"
+				          AutomationProperties.AutomationId="MenuWarnMemory" />
 				<!-- the memory a run's frames may take before the rest goes to disk: the application decides from what is free
 				     ("Auto", 2026-10-15), a percentage of the RAM is only an upper bound on that -->
 				<MenuItem Header="{DynamicResource MenuSimulationFrameMemory}" controls:MenuIcon.Drawing="FrameMemory" AutomationProperties.AutomationId="MenuFrameMemory"

@@ -103,6 +103,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationStop">S_top</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">Use the _GPU (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Re-run _automatically after edits</s:String>
+	<s:String x:Key="MenuSimulationWarnMemory">_Warn when a run does not fit in RAM</s:String>
 	<s:String x:Key="MenuSimulationFrameMemory">RAM _cache size</s:String>
 	<s:String x:Key="MenuSimulationFrameMemoryAuto">_Auto</s:String>
 	<s:String x:Key="MenuHelp">_Help</s:String>
@@ -272,6 +273,17 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="DialogSave">_Save</s:String>
 	<s:String x:Key="DialogDiscard">_Don't save</s:String>
 	<s:String x:Key="DialogCancel">_Cancel</s:String>
+	<s:String x:Key="DialogRun">_Run</s:String>
+	<!-- the memory warning (Simulation > Warn when a run does not fit in RAM): {0} the run's need, {1} the RAM cache's budget; in the result lines {0} the ticked choice's need, {1} what still goes to disk -->
+	<s:String x:Key="MemoryWarningTextFormat">The run's frames need {0} of memory, and the RAM cache has {1}. The frames beyond that go to the cache file on disk, which is slower.</s:String>
+	<s:String x:Key="MemoryWarningChoices">Settings to change for this and later runs:</s:String>
+	<s:String x:Key="MemoryWarningCacheFormat">RAM cache size to Auto: {0} for the frames (Simulation menu)</s:String>
+	<s:String x:Key="MemoryWarningResolution">Halve the resolution: a quarter of the memory (View menu)</s:String>
+	<s:String x:Key="MemoryWarningFrames">Store half the frames: half the memory (View menu)</s:String>
+	<s:String x:Key="MemoryWarningSamples">8-bit samples: half the memory (View menu)</s:String>
+	<s:String x:Key="MemoryWarningFitsFormat">The frames then need {0} and fit in the RAM cache.</s:String>
+	<s:String x:Key="MemoryWarningSpillsFormat">The frames then need {0}; {1} of them still go to disk.</s:String>
+	<s:String x:Key="MemoryWarningMute">Do not warn me again</s:String>
 	<s:String x:Key="NoSelection">No selection</s:String>
 
 	<s:String x:Key="TreeProject">Project</s:String>

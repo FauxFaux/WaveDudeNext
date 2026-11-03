@@ -101,6 +101,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationStop">_Arrêter</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">Utiliser le _GPU (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Relancer a_utomatiquement après une modification</s:String>
+	<s:String x:Key="MenuSimulationWarnMemory">A_vertir quand une simulation ne tient pas dans la RAM</s:String>
 	<s:String x:Key="MenuSimulationFrameMemory">Taille du _cache RAM</s:String>
 	<s:String x:Key="MenuSimulationFrameMemoryAuto">_Auto</s:String>
 	<s:String x:Key="MenuHelp">_Aide</s:String>
@@ -270,6 +271,17 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="DialogSave">_Enregistrer</s:String>
 	<s:String x:Key="DialogDiscard">_Ne pas enregistrer</s:String>
 	<s:String x:Key="DialogCancel">_Annuler</s:String>
+	<s:String x:Key="DialogRun">_Lancer</s:String>
+	<!-- l'avertissement mémoire (Simulation > Avertir quand une simulation ne tient pas dans la RAM) -->
+	<s:String x:Key="MemoryWarningTextFormat">Les images de la simulation ont besoin de {0} de mémoire ; le cache RAM en offre {1}. Les images au-delà vont dans le fichier cache sur le disque, ce qui est plus lent.</s:String>
+	<s:String x:Key="MemoryWarningChoices">Réglages à changer pour cette simulation et les suivantes :</s:String>
+	<s:String x:Key="MemoryWarningCacheFormat">Cache RAM sur Auto : {0} pour les images (menu Simulation)</s:String>
+	<s:String x:Key="MemoryWarningResolution">Résolution divisée par deux : un quart de la mémoire (menu Affichage)</s:String>
+	<s:String x:Key="MemoryWarningFrames">Moitié moins d'images conservées : la moitié de la mémoire (menu Affichage)</s:String>
+	<s:String x:Key="MemoryWarningSamples">Échantillons 8 bits : la moitié de la mémoire (menu Affichage)</s:String>
+	<s:String x:Key="MemoryWarningFitsFormat">Les images ont alors besoin de {0} et tiennent dans le cache RAM.</s:String>
+	<s:String x:Key="MemoryWarningSpillsFormat">Les images ont alors besoin de {0} ; {1} vont encore sur le disque.</s:String>
+	<s:String x:Key="MemoryWarningMute">Ne plus m'avertir</s:String>
 	<s:String x:Key="NoSelection">Aucune sélection</s:String>
 
 	<s:String x:Key="TreeProject">Projet</s:String>

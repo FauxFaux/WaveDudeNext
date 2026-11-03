@@ -230,7 +230,8 @@ The Simulation menu.
 3. **Stop**: Stops the run (Shift+F5); the frames computed so far stay.
 4. **Use the GPU (OpenCL)**: Computes on the graphics card, many times faster than the processor; the results are the same. Off, or without OpenCL, the processor is used. On by default.
 5. **Re-run automatically after edits**: Starts a new run by itself a moment after you change the scene, a source or a part; off, you run by hand with F5 or Play. On by default.
-6. **RAM cache size**: How much of the memory a run's frames may take: Auto decides from the free memory, or a share from 10 to 100 percent caps it; the frames beyond it go to a cache file on disk.
+6. **Warn when a run does not fit in RAM**: Asks before a run whose frames would not all fit in the memory the RAM cache may take. Tick the RAM cache size to Auto, half the resolution, half the frames or 8-bit samples, each with its effect shown, and Run applies them in the Simulation and View menus for this and later runs; Cancel leaves everything as it is. "Do not warn me again" switches this off. On by default.
+7. **RAM cache size**: How much of the memory a run's frames may take: Auto decides from the free memory, or a share from 10 to 100 percent caps it; the frames beyond it go to a cache file on disk.
 
 ### The Help menu
 

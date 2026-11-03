@@ -97,13 +97,17 @@ public partial class MainWindow : Window
 			{
 				Logger.Info(Settings.Default.UseGpu ? "Use the GPU switched on (Simulation menu)" : "Use the GPU switched off (Simulation menu): runs use the CPU from now on");
 			}
+			else if (args.PropertyName == nameof(Settings.WarnWhenRamInsufficient))
+			{
+				Logger.Info(Settings.Default.WarnWhenRamInsufficient ? "Memory warning switched on (Simulation menu)" : "Memory warning switched off: a run whose frames do not fit in the RAM cache goes to the cache file without asking");
+			}
 			else if (args.PropertyName == nameof(Settings.FrameMemoryPercent))
 			{
 				int percent = Settings.Default.FrameMemoryPercent;
 				double budget = FrameMemory.ToGigabytes(FrameMemory.Budget(percent));
 				if (percent <= FrameMemory.Automatic)
 				{
-					Logger.Info("RAM cache size: automatic (what is free minus {Margin:0.0} GB), {Budget:0.0} GB right now (Simulation menu)", FrameMemory.ToGigabytes(FrameMemory.Margin), budget);
+					Logger.Info("RAM cache size: automatic (what is free minus {Margin:0.0} GB), {Budget:0.0} GB right now (Simulation menu or the memory warning)", FrameMemory.ToGigabytes(FrameMemory.Margin), budget);
 				}
 				else
 				{
@@ -112,7 +116,7 @@ public partial class MainWindow : Window
 			}
 			else if (args.PropertyName is nameof(Settings.PreviewResolution) or nameof(Settings.PreviewFrames) or nameof(Settings.PreviewSampleBytes))
 			{
-				Logger.Info("Preview quality: {Quality} (View menu)", PreviewQualitySetting);
+				Logger.Info("Preview quality: {Quality} (View menu or the memory warning)", PreviewQualitySetting);
 				OnPreviewQualityChanged();
 			}
 			else if (args.PropertyName == nameof(Settings.PreviewDitherBits))

@@ -409,6 +409,21 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   validates a one-of-every-kind project and every example as saved against it with .NET's DTD validator and proves a
   misspelt attribute, a wrong value and a misplaced element are reported. The examples and the harnesses' test projects are
   not re-saved with it yet.
+- **Memory warning** (2026-11-03, the user's design): Simulation > Warn when a run does not fit in RAM
+  (`Settings.WarnWhenRamInsufficient`, default on). A preview run whose frames exceed the budget asks first, F5, Play and
+  the automatic re-run alike (the user's choice, so no spill is silent; an export's run is full quality by rule and never
+  asks): `MemoryWarningWindow`, in the message window's look, names the need and the budget, offers four checkboxes: the
+  RAM cache size to Auto (the user's request the same day; greyed when Auto gains less than a frame) and three that each
+  lower the preview quality a notch (half the resolution, half the frames, 8-bit samples; a lever at the View menu's
+  lowest is greyed), pre-ticked with the fewest ticks that fit and the mildest among as many (the largest need that
+  fits, so the cache comes before any loss of quality), a live line with the ticks' result, and "Do not warn me again",
+  which clears the setting. Run puts the choice into the Simulation and View menu settings
+  (persisted, so the scratch frames match the run and later runs fit without asking; the settings' change schedules a
+  scratch frame and a re-run as the View menu's does, and the run started right after leaves nothing stale for it);
+  Cancel keeps the stale run and says so at Info. Asked every time, no memory of an answer. Play asks before the pane's
+  clock starts and a cancelled warning turns playback off again (2026-11-03, the user's report: the modal window's message
+  loop had ticked the playhead through the stale frames). The arithmetic is
+  `RunSpec.StoreBytesAt`, proven by `library_check`.
 - File types `.wdproj` / `.wdscheme` are registered per user at start-up; unsaved edits ask on close.
 - **Examples** (2026-10-29, the user's request): File > Examples lists the project files of the repository's `Examples`
   folder, embedded in the app (`EmbeddedResource` in the WPF project, `Examples.cs`), in file order with the two-digit
@@ -489,7 +504,7 @@ numbers: no GPU JPEG, no OpenCL colouring at presentation, no `Vector256`, no Di
 
 ## Harnesses
 
-`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots, scene replacement).
+`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots, scene replacement, the memory warning's store bytes).
 UI, all on `Common.ps1`, with their check counts: `PreviewCheck` 43, `RunCheck` 71, `LanguageCheck` 11,
 `ProbeGraphCheck` 39, `ImportCheck` 10, `ExportCheck` 44, `PreviewQualityCheck` 35, `SceneImageCheck` 8,
 `ColorPickerCheck` 13, `KeyboardCheck` 13, `AboutCheck` 18, `SelectionCheck` 10. Test projects `tiny*.wdproj` sit beside them. The
@@ -498,7 +513,9 @@ Wave Dude 2D projects the import checks read (`library_check`, `ImportCheck`, `S
 examples is gone from the repository, in history up to 02d0e2d; `library_check` finds the repository root by the
 fixtures folder). A harness
 sets the persisted settings it expects (split orientation, preview quality). Known flake: a second app start in one
-script sometimes comes up active; only the foreground guard fails then.
+script sometimes comes up active; only the foreground guard fails then. UI Automation files an owned dialog (the message
+window, the memory warning) under its owner, not among the root's children: find its content below the main window and
+walk up to the Window element for its handle (2026-11-03, half an hour lost to a root search).
 **Manual figures** (2026-10-27): `Screenshots.ps1` on `Common.ps1` writes `Assets/*.svg` (the PNG inlined, numbered
 badges at UI Automation rectangles), `Assets/Legend.md` (what each number marks) and `Assets/main-window.png` (the
 window without badges, the README's picture, 2026-10-30): the window, the menus, the tree,
@@ -533,7 +550,7 @@ never reworded per file.
 
 README and a documentation file (he writes them); an integer
 upscale in exports; HEVC;
-automatic quality lowering when a run would spill (undecided); dropping the 9-point Laplacian (undecided);
+dropping the 9-point Laplacian (undecided);
 **optical parts**: the open points at the end of `OpticalParts.md` (a `PartCheck.ps1` harness, example projects,
 Bragg thicknesses in pixels) wait for the user.
 

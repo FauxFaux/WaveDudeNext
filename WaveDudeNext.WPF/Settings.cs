@@ -170,6 +170,20 @@ public sealed class Settings : INotifyPropertyChanged
 		set => Set(ref _autoRerun, value);
 	}
 
+	private bool _warnWhenRamInsufficient = true;
+
+	/// <summary>
+	/// Whether a run whose frames would not all fit in the RAM cache asks first (Simulation > Warn when a run does not fit
+	/// in RAM, 2026-11-03, the user's design): the memory warning offers a lower preview quality for it; off, the frames
+	/// beyond the budget go to the cache file with only the log saying so. The warning's "Do not warn me again" clears it.
+	/// </summary>
+	[XmlAttribute, DefaultValue(true)]
+	public bool WarnWhenRamInsufficient
+	{
+		get => _warnWhenRamInsufficient;
+		set => Set(ref _warnWhenRamInsufficient, value);
+	}
+
 	private bool _useGpu = true;
 
 	/// <summary>Whether runs use the OpenCL engine, falling back to the CPU.</summary>
@@ -287,12 +301,18 @@ public sealed class Settings : INotifyPropertyChanged
 		set => Set(ref _exportHints, value);
 	}
 
-	/// <summary>Sets the three preview quality settings and the dithering as one: a first start's choice for the machine (<see cref="PreviewDefaults"/>).</summary>
-	public void SetPreviewQuality(PreviewQuality quality, int ditherBits)
+	/// <summary>Sets the three preview quality settings as one (the memory warning's choice, 2026-11-03); each raises its change.</summary>
+	public void SetPreviewQuality(PreviewQuality quality)
 	{
 		PreviewResolution = quality.ResolutionDivisor;
 		PreviewFrames = quality.FrameDivisor;
 		PreviewSampleBytes = quality.Format == FrameFormat.Half ? 2 : 1;
+	}
+
+	/// <summary>Sets the three preview quality settings and the dithering as one: a first start's choice for the machine (<see cref="PreviewDefaults"/>).</summary>
+	public void SetPreviewQuality(PreviewQuality quality, int ditherBits)
+	{
+		SetPreviewQuality(quality);
 		PreviewDitherBits = ditherBits;
 	}
 

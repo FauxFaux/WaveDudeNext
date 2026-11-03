@@ -22,6 +22,7 @@ using System.Windows.Threading;
 using WaveDudeNext.Engine;
 using WaveDudeNext.Model;
 using WaveDudeNext.Runs;
+using WaveDudeNext.WPF.Dialogs;
 using WaveDudeNext.WPF.Rendering;
 
 namespace WaveDudeNext.WPF;
@@ -82,7 +83,8 @@ public partial class MainWindow
 	/// <param name="trackIntensity">Store the intensity plane whatever the project needs (an export of the intensity asks for it).</param>
 	/// <param name="fullQuality">Capture every cell of every frame as a half whatever the View menu says (an export needs that).</param>
 	/// <param name="intensityRoot">With <paramref name="fullQuality"/>: store the intensity as its square root, the preview's, or as I (an OpenEXR export of I).</param>
-	private void StartRun(bool automatic = false, bool trackIntensity = false, bool fullQuality = false, bool intensityRoot = true)
+	/// <returns>Whether a run was started: false when the memory warning was cancelled.</returns>
+	private bool StartRun(bool automatic = false, bool trackIntensity = false, bool fullQuality = false, bool intensityRoot = true)
 	{
 		if (!Settings.Default.UseGpu)
 		{
@@ -95,6 +97,39 @@ public partial class MainWindow
 		// below gives them back, and the new store allocates its memory tier only once they are gone (2026-10-16)
 		long budget = FrameMemory.Budget(Settings.Default.FrameMemoryPercent, Run?.Store.RamBytes ?? 0);
 		int ramFrames = Math.Min(spec.StoredFrameCount, FrameStore.FramesInBudget(spec.Shape, spec.Layers, budget));
+		// a preview run that does not fit asks first (the memory warning, 2026-11-03, the user's design: F5, Play and the
+		// automatic re-run alike, so no spill is silent; an export's run must be full quality and never asks). The choice
+		// lands in the View menu settings, so the scratch frames match the run and later runs fit without asking; the
+		// settings' change marks the old run stale and schedules a scratch frame and a re-run, as the View menu's does, and
+		// the run started below makes that re-run find nothing stale
+		if (ramFrames < spec.StoredFrameCount && !fullQuality && Settings.Default.WarnWhenRamInsufficient)
+		{
+			// the budget with the RAM cache size at Auto, the warning's fourth lever: the budget itself when it is Auto already
+			long autoBudget = Settings.Default.FrameMemoryPercent > FrameMemory.Automatic ? FrameMemory.Budget(FrameMemory.Automatic, Run?.Store.RamBytes ?? 0) : budget;
+			MemoryWarningChoice? choice = MemoryWarningWindow.Show(this, spec, budget, autoBudget, quality);
+			if (choice == null)
+			{
+				Logger.Info("{Kind} not started: the memory warning was cancelled", automatic ? "Re-run" : "Run");
+				return false;
+			}
+			if (choice.Mute)
+			{
+				Settings.Default.WarnWhenRamInsufficient = false;
+			}
+			if (choice.CacheAuto)
+			{
+				Settings.Default.FrameMemoryPercent = FrameMemory.Automatic;
+			}
+			if (choice.Quality != quality)
+			{
+				Settings.Default.SetPreviewQuality(choice.Quality);
+				quality = PreviewQualitySetting;
+				spec = RunSpec.Create(Project, LoadSceneImage(), Settings.Default.UseGpu, trackIntensity, quality);
+			}
+			budget = FrameMemory.Budget(Settings.Default.FrameMemoryPercent, Run?.Store.RamBytes ?? 0);
+			ramFrames = Math.Min(spec.StoredFrameCount, FrameStore.FramesInBudget(spec.Shape, spec.Layers, budget));
+			SaveSettings();
+		}
 		if (ramFrames < spec.StoredFrameCount)
 		{
 			FrameCache.CheckSpace(FrameStore.SizeOf(spec.Shape, spec.Layers, spec.StoredFrameCount - ramFrames));
@@ -120,6 +155,7 @@ public partial class MainWindow
 		IsProbesStale = false;
 		Run = run;
 		run.Start();
+		return true;
 	}
 
 	/// <summary>The scene image's full path: as given when rooted, otherwise relative to the project file.</summary>
@@ -148,7 +184,11 @@ public partial class MainWindow
 	/// <summary>Stop applies to a run in progress, or to an export in progress (Esc cancels it).</summary>
 	private void CanStop(object sender, CanExecuteRoutedEventArgs e) => e.CanExecute = Run?.IsActive == true || Export?.IsActive == true;
 
-	/// <summary>Play pressed: a missing or stale run is started like an automatic one (position kept, not followed); errors go to the log and status bar. Not while an export reads the store.</summary>
+	/// <summary>
+	/// Play pressed: a missing or stale run is started like an automatic one (position kept, not followed); errors go to
+	/// the log and status bar. Not while an export reads the store. A run refused in the memory warning turns playback
+	/// off again, before the pane's clock starts (2026-11-03): there is no simulation to show then.
+	/// </summary>
 	private void OnEnsureRun(object sender, ExecutedRoutedEventArgs e)
 	{
 		if (IsExporting || Run?.IsActive == true || (Run != null && !IsRunStale && !IsProbesStale))
@@ -157,7 +197,10 @@ public partial class MainWindow
 		}
 		try
 		{
-			StartRun(automatic: true);
+			if (!StartRun(automatic: true))
+			{
+				previewPane.IsPlaying = false;
+			}
 		}
 		catch (Exception ex) when (ex is RunSpecException or IOException or UnauthorizedAccessException or NotSupportedException)
 		{
