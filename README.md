@@ -26,7 +26,7 @@ Videos are written as MP4, MPEG-1, AVI or QuickTime; frames as PNG or JPEG, in s
 
 ## Speed
 
-The simulation runs on the GPU, or on the CPU where there is no suitable GPU. On the first start, the preview quality is chosen to suit the machine, and the View menu changes it at any time: for slower machines, the preview can run at a reduced resolution or with fewer frames, while exports always use the full quality. On a sufficiently fast machine, the preview can keep floating-point values and dither the pictures, which shows finer gradients. Finished frames stay in memory for scrubbing and go to disk when a run outgrows it.
+The simulation runs on the GPU, or on the CPU where there is no suitable GPU. On the first start, the preview quality is chosen to suit the machine, and the View menu changes it at any time: for slower machines, the preview can run at a reduced resolution or with fewer frames, while exports always use the full quality. On a sufficiently fast machine, the preview can keep floating-point values and dither the pictures, which shows finer gradients. Finished frames stay in memory for scrubbing and go to disk when a run outgrows it. Depending on these settings, the same run of 1500 Full HD frames takes between 740 MB and 11.6 GB.
 
 ## Examples
 
