@@ -528,6 +528,8 @@ public partial class MainWindow
 			if (!TryCachedScene(key, out ScenePixels? composed))
 			{
 				List<OpticalPart> parts = Project.Parts.Select(part => part.Clone()).ToList();
+				// the pool's state, for a report whose compositions take longer than the painter alone (2026-11-03)
+				Logger.Debug("Scene composition starts: thread pool {Threads} threads, {Pending} items pending", ThreadPool.ThreadCount, ThreadPool.PendingWorkItemCount);
 				Task<ScenePixels?> task = Task.Run(() => PartPainter.Paint(key.Source, key.Width, key.Height, key.Background, parts));
 				_composition = (key, task);
 				try

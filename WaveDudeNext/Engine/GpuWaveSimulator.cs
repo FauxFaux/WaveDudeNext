@@ -15,7 +15,9 @@
 // version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 // <https://www.gnu.org/licenses/>.
 
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using WaveDudeNext.Model;
 using WaveDudeNext.Probes;
@@ -156,6 +158,8 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		_grid1D = new[] { new IntPtr(Math.Max(1, _sourceCount)) };
 		_hostField = new float[_cells];
 		_hostIntensity = _track ? new float[_cells] : null;
+		_hostStage1 = _track ? new float[_cells] : null;
+		_hostStage2 = _track ? new float[_cells] : null;
 		_timeDecay = options.TimeDecay;
 		try
 		{
@@ -199,7 +203,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		float intensityAlpha = WaveSimulator.IntensityRetention(_timeDecay, WaveSimulator.LowestSourceLevel(_levelUsed, sourcesInScene));
 		for (int k = 0; k <= 1; k++)
 		{
-			SetFloat(_stepKernel[k], 10U, intensityAlpha);
+			SetFloat(_stepKernel[k], 12U, intensityAlpha);
 		}
 	}
 
@@ -208,7 +212,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	{
 		OpenClApi.Check(OpenClApi.clFinish(_queue), "clFinish");
 		float[] zeros = new float[_cells];
-		foreach (IntPtr buffer in new[] { _field[0], _field[1], _intensityOutBuffer, _intensityBuffer, _intensityStage1Buffer })
+		foreach (IntPtr buffer in new[] { _field[0], _field[1], _intensityBuffer, _intensityStage1Buffer })
 		{
 			if (buffer != IntPtr.Zero)
 			{
@@ -309,7 +313,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		snapshot.HasIntensity = needIntensity && _track && snapshot.HasIntensityPlane;
 		if (snapshot.HasIntensity)
 		{
-			EnqueueCapture(_intensityOutBuffer, stagingSet, snapshot.IntensityAddress, snapshot, true);
+			EnqueueCapture(_intensityStage1Buffer, stagingSet, snapshot.IntensityAddress, snapshot, true);
 		}
 		// submitted now, for two reasons: the next capture's kernel waits for these reads, which the spec allows only
 		// once their queue is flushed; and NVIDIA's driver holds a small batch back until a blocking call, so with the
@@ -336,6 +340,11 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		IntPtr kernel = shape.Format == FrameFormat.Half ? _captureHalfKernel : _captureIndexKernel;
 		SetMem(kernel, 0U, source);
 		SetMem(kernel, 1U, staging);
+		// the intensity is the blend of its two stages, made on the card as it is read (2026-11-03): stage 1 is the source,
+		// stage 2 goes beside it with the scale; a field capture blends nothing (scale 0, the source twice)
+		bool half = shape.Format == FrameFormat.Half;
+		SetMem(kernel, half ? 10U : 11U, intensity ? _intensityBuffer : source);
+		SetFloat(kernel, half ? 11U : 12U, intensity ? _intensityScale : 0f);
 		if (shape.Format == FrameFormat.Index)
 		{
 			SetFloat(kernel, 8U, shape.BrightnessOf(intensity));
@@ -394,16 +403,24 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		{
 			return false;
 		}
+		SceneTables maps = SceneMaps(scene);
+		if (maps.DTable.Length > _dTableCapacity)
+		{
+			// more distinct damping values than the table buffer holds: a rebuild sizes it
+			return false;
+		}
 		OpenClApi.Check(OpenClApi.clFinish(_queue), "clFinish");
-		(float[] c2, float[] damping, float c2Mult) = SceneMaps(scene);
-		Upload(_c2Buffer, c2, _cells);
-		Upload(_dBuffer, damping, _cells);
+		_subSteps = maps.SubSteps;
+		UploadBytes(_c2IndexBuffer, maps.C2Index);
+		UploadShorts(_dIndexBuffer, maps.DIndex);
+		Upload(_c2TableBuffer, maps.C2Table, maps.C2Table.Length);
+		Upload(_dTableBuffer, maps.DTable, maps.DTable.Length);
 		for (int k = 0; k <= 1; k++)
 		{
-			SetFloat(_stepKernel[k], 9U, c2Mult);
+			SetFloat(_stepKernel[k], 11U, maps.C2Mult);
 			if (_openEdges)
 			{
-				SetFloat(_edgeKernel[k], 6U, c2Mult);
+				SetFloat(_edgeKernel[k], 7U, maps.C2Mult);
 			}
 		}
 		(int[] indices, int[] levels) = SourceTables(scene);
@@ -419,13 +436,18 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	}
 
 	/// <summary>
-	/// The scene's per-cell maps in the padded layout (a border of one cell, like the CPU engine), with the sub-steps
-	/// (<see cref="_subSteps"/>, set here) and their corrections: sub-stepping keeps the 4th-order stencil stable without
-	/// changing the physical wave speed or damping, and stays at 1 unless the stencil is in use and this scene's highest
-	/// c² needs it. The damping is pre-scaled to its 1 / sub-steps-th root (unchanged at 1 sub-step), as the CPU engine's,
+	/// The scene's per-cell maps for the card: the kernel is bound by the card's memory bandwidth, so a cell carries a byte
+	/// index into the table of the scene's distinct c² values (at most 256: they come from the image's red levels) and a
+	/// 16-bit index into the table of its distinct damping values (a few hundred: the blue levels and the rim's depths),
+	/// 3 bytes instead of 8 (2026-11-03, the user's choice); the tables hold the very floats the CPU engine computes
+	/// with, so the arithmetic is unchanged. In the padded layout (a border of one cell, like the CPU engine), with the
+	/// sub-steps and their corrections: sub-stepping keeps the 4th-order stencil stable without changing the physical
+	/// wave speed or damping, and stays at 1 unless the stencil is in use and this scene's highest c² needs it. The
+	/// damping table is pre-scaled to its 1 / sub-steps-th root (unchanged at 1 sub-step), as the CPU engine's cells are,
 	/// and the c² multiplier is 1 / sub-steps², exactly 1f at one sub-step (a bit-for-bit no-op multiply in the kernel).
 	/// </summary>
-	private (float[] C2, float[] Damping, float C2Mult) SceneMaps(SceneData scene)
+	/// <exception cref="InvalidOperationException">The scene has more than 256 distinct c² values.</exception>
+	private SceneTables SceneMaps(SceneData scene)
 	{
 		float[] c2 = new float[_cells];
 		float[] damping = new float[_cells];
@@ -434,20 +456,92 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			Array.Copy(scene.C2, y * _width, c2, (y + 1) * _stride + 1, _width);
 			Array.Copy(scene.D, y * _width, damping, (y + 1) * _stride + 1, _width);
 		}
-		_subSteps = _fourthOrder ? WaveSimulator.ComputeSubSteps(WaveSimulator.MaxOf(c2)) : 1;
+		float[] c2Table = Distinct(c2);
+		float[] dTable = Distinct(damping);
+		if (c2Table.Length > 256)
+		{
+			throw new InvalidOperationException("the scene has more than 256 distinct refractive indices, which a byte index cannot address");
+		}
+		byte[] c2Index = new byte[_cells];
+		ushort[] dIndex = new ushort[_cells];
+		Parallel.For(0, _height + 2, row =>
+		{
+			int start = row * _stride;
+			for (int i = start; i < start + _stride; i++)
+			{
+				c2Index[i] = (byte)Array.BinarySearch(c2Table, c2[i]);
+				dIndex[i] = (ushort)Array.BinarySearch(dTable, damping[i]);
+			}
+		});
+		int subSteps = _fourthOrder ? WaveSimulator.ComputeSubSteps(WaveSimulator.MaxOf(c2Table)) : 1;
 		float c2Mult = 1f;
-		if (_subSteps > 1)
+		if (subSteps > 1)
 		{
 			// Damping is applied once per sub-step, so take the sub-step root to keep the per-step decay unchanged.
-			double exponent = 1.0 / _subSteps;
-			for (int i = 0; i < damping.Length; i++)
+			double exponent = 1.0 / subSteps;
+			for (int i = 0; i < dTable.Length; i++)
 			{
-				damping[i] = (float)Math.Pow(damping[i], exponent);
+				dTable[i] = (float)Math.Pow(dTable[i], exponent);
 			}
 			// A sub-step is 1/subSteps long, so c²·dt² shrinks by 1/subSteps².
-			c2Mult = 1f / (_subSteps * _subSteps);
+			c2Mult = 1f / (subSteps * subSteps);
 		}
-		return (c2, damping, c2Mult);
+		return new SceneTables(c2Index, c2Table, dIndex, dTable, subSteps, c2Mult);
+	}
+
+	/// <summary>The scene's maps as the card takes them: per-cell indices, the tables they address, the sub-steps and the c² multiplier (<see cref="SceneMaps"/>).</summary>
+	private sealed record SceneTables(byte[] C2Index, float[] C2Table, ushort[] DIndex, float[] DTable, int SubSteps, float C2Mult);
+
+	/// <summary>The distinct values of <paramref name="values"/>, sorted, so <see cref="Array.BinarySearch(Array, object)"/> finds a value's index; gathered on every core.</summary>
+	private static float[] Distinct(float[] values)
+	{
+		var all = new HashSet<float>();
+		var gate = new Lock();
+		Parallel.ForEach(Partitioner.Create(0, values.Length, 1 << 16), () => new HashSet<float>(), (range, _, local) =>
+		{
+			for (int i = range.Item1; i < range.Item2; i++)
+			{
+				local.Add(values[i]);
+			}
+			return local;
+		}, local =>
+		{
+			lock (gate)
+			{
+				all.UnionWith(local);
+			}
+		});
+		float[] table = [.. all];
+		Array.Sort(table);
+		return table;
+	}
+
+	/// <summary>Blocking upload of a byte array into a device buffer.</summary>
+	private void UploadBytes(IntPtr buffer, byte[] data)
+	{
+		GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+		try
+		{
+			OpenClApi.Check(OpenClApi.clEnqueueWriteBufferPtr(_queue, buffer, 1U, IntPtr.Zero, new IntPtr(data.Length), handle.AddrOfPinnedObject(), 0U, IntPtr.Zero, IntPtr.Zero), "clEnqueueWriteBuffer (bytes)");
+		}
+		finally
+		{
+			handle.Free();
+		}
+	}
+
+	/// <summary>Blocking upload of a 16-bit array into a device buffer.</summary>
+	private void UploadShorts(IntPtr buffer, ushort[] data)
+	{
+		GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+		try
+		{
+			OpenClApi.Check(OpenClApi.clEnqueueWriteBufferPtr(_queue, buffer, 1U, IntPtr.Zero, new IntPtr((long)data.Length * 2L), handle.AddrOfPinnedObject(), 0U, IntPtr.Zero, IntPtr.Zero), "clEnqueueWriteBuffer (shorts)");
+		}
+		finally
+		{
+			handle.Free();
+		}
 	}
 
 	/// <summary>The image sources (the green channel of the scene image) as the kernel's tables, cell index and level per source, noting the levels in use in <see cref="_levelUsed"/> afresh.</summary>
@@ -467,11 +561,11 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 
 	/// <summary>
 	/// Creates the context and queue, compiles <see cref="KernelSource"/>, uploads every buffer for the scene
-	/// and binds the kernel arguments. Mirrors the <see cref="WaveSimulator"/> constructor: c² and damping are
-	/// copied into the padded layout, the sub-step count and the per-sub-step damping / c² corrections are
-	/// derived for the 4th-order stencil, the sources are indexed, and the intensity averaging constant is set
-	/// from the lowest source level in use. When intensity is not tracked the three intensity buffers are
-	/// 1-float dummies so the kernel arguments are still valid. The kernel arguments that change per step
+	/// and binds the kernel arguments. Mirrors the <see cref="WaveSimulator"/> constructor: c² and damping become
+	/// index maps and tables in the padded layout (<see cref="SceneMaps"/>), the sub-step count and the per-sub-step
+	/// damping / c² corrections are derived for the 4th-order stencil, the sources are indexed, and the intensity
+	/// averaging constant is set from the lowest source level in use. When intensity is not tracked the two intensity
+	/// buffers are 1-float dummies so the kernel arguments are still valid. The kernel arguments that change per step
 	/// (time, per-sub-step track flag) are left to <see cref="AdvanceOneStep"/>.
 	/// </summary>
 	/// <param name="scene">Per-cell c² and damping maps plus the image sources.</param>
@@ -484,7 +578,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		float sourceAmplitude = (float)options.SourceAmplitude;
 		bool use4thOrderLaplacian = options.FourthOrderLaplacian;
 		double timeDecayFactor = options.TimeDecay;
-		float intensityScale = (float)options.IntensityScale;
+		_intensityScale = (float)options.IntensityScale;
 		int err = 0;
 		IntPtr[] contextProperties = { new IntPtr(OpenClApi.ContextPlatformProperty), _device.PlatformId, IntPtr.Zero };
 		IntPtr[] deviceIds = { _device.DeviceId };
@@ -496,20 +590,30 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		OpenClApi.Check(err, "clCreateCommandQueue (transfer)");
 		_scene.Program = BuildProgram(KernelSource(use4thOrderLaplacian), "the program for the GPU");
 
-		(float[] c2, float[] damping, float c2Mult) = SceneMaps(scene);
-		IntPtr c2Buffer = _c2Buffer = CreateBuffer(c2, _scene);
-		IntPtr dBuffer = _dBuffer = CreateBuffer(damping, _scene);
+		SceneTables maps = SceneMaps(scene);
+		_subSteps = maps.SubSteps;
+		float c2Mult = maps.C2Mult;
+		_c2IndexBuffer = CreateBuffer(maps.C2Index, _scene);
+		_dIndexBuffer = CreateBuffer(maps.DIndex, _scene);
+		// the tables with room: 256 c² values at most; damping values as many as the scene has, at least DTableRoom, so a
+		// scene swapped in later (TryReplaceScene) fits unless it has more
+		float[] c2Table = new float[256];
+		maps.C2Table.CopyTo(c2Table, 0);
+		_c2TableBuffer = CreateBuffer(c2Table, _scene);
+		_dTableCapacity = Math.Max(DTableRoom, maps.DTable.Length);
+		float[] dTable = new float[_dTableCapacity];
+		maps.DTable.CopyTo(dTable, 0);
+		_dTableBuffer = CreateBuffer(dTable, _scene);
 		float[] zeros = new float[_cells];
 		_field[0] = CreateBuffer(zeros, _scene);
 		_field[1] = CreateBuffer(zeros, _scene);
 		// Not tracked: the kernels still need valid buffer arguments, and they never touch them.
 		float[] intensityInit = _track ? zeros : new float[1];
 		// the two cascaded exponential-filter stages that make up the intensity - see the class summary and
-		// WaveSimulator._intensity / _intensityStage1 (CPU engine); used only inside wave_step, never read back -
-		// what is read back/probed is their blend, _intensityOutBuffer (WaveSimulator._intensityOut on the CPU)
+		// WaveSimulator._intensity / _intensityStage1 (CPU engine); their blend, WaveSimulator._intensityOut on the CPU,
+		// is made where it is read (the captures, the probes, PrepareFrame), not written every step (2026-11-03)
 		IntPtr intensityBuffer = _intensityBuffer = CreateBuffer(intensityInit, _scene);
 		IntPtr intensityStage1Buffer = _intensityStage1Buffer = CreateBuffer(intensityInit, _scene);
-		_intensityOutBuffer = CreateBuffer(intensityInit, _scene);
 
 		// the level-to-frequency table (level 0-255 -> frequency), shared by the image sources and the object sources
 		float[] frequencies = new float[256];
@@ -532,29 +636,30 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			IntPtr step = _stepKernel[k] = CreateKernel(_scene, "wave_step");
 			SetMem(step, 0U, _field[k]);
 			SetMem(step, 1U, _field[1 - k]);
-			SetMem(step, 2U, c2Buffer);
-			SetMem(step, 3U, dBuffer);
-			SetMem(step, 4U, intensityBuffer);
-			SetInt(step, 5U, _width);
-			SetInt(step, 6U, _height);
-			SetInt(step, 7U, _stride);
-			SetInt(step, 8U, _track ? 1 : 0);
-			SetFloat(step, 9U, c2Mult);
-			SetFloat(step, 10U, intensityAlpha);
-			SetMem(step, 11U, intensityStage1Buffer);
-			SetMem(step, 12U, _intensityOutBuffer);
-			SetFloat(step, 13U, intensityScale);
+			SetMem(step, 2U, _c2IndexBuffer);
+			SetMem(step, 3U, _dIndexBuffer);
+			SetMem(step, 4U, _c2TableBuffer);
+			SetMem(step, 5U, _dTableBuffer);
+			SetMem(step, 6U, intensityBuffer);
+			SetInt(step, 7U, _width);
+			SetInt(step, 8U, _height);
+			SetInt(step, 9U, _stride);
+			SetInt(step, 10U, _track ? 1 : 0);
+			SetFloat(step, 11U, c2Mult);
+			SetFloat(step, 12U, intensityAlpha);
+			SetMem(step, 13U, intensityStage1Buffer);
 			if (_openEdges)
 			{
 				// the ring after the step, reading the field the step read and writing the one it wrote
 				IntPtr edges = _edgeKernel[k] = CreateKernel(_scene, "open_edges");
 				SetMem(edges, 0U, _field[k]);
 				SetMem(edges, 1U, _field[1 - k]);
-				SetMem(edges, 2U, c2Buffer);
-				SetInt(edges, 3U, _width);
-				SetInt(edges, 4U, _height);
-				SetInt(edges, 5U, _stride);
-				SetFloat(edges, 6U, c2Mult);
+				SetMem(edges, 2U, _c2IndexBuffer);
+				SetMem(edges, 3U, _c2TableBuffer);
+				SetInt(edges, 4U, _width);
+				SetInt(edges, 5U, _height);
+				SetInt(edges, 6U, _stride);
+				SetFloat(edges, 7U, c2Mult);
 			}
 		}
 		_stepLocal = WorkGroup2D(_stepKernel[0], _stepKernel[1]);
@@ -677,17 +782,18 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		// wave_step: one leapfrog sub-step, one work item per interior cell (x, y in 0..w-1 / 0..h-1).
 		//   u      current field, padded, stride floats per row; the cell is i = (y + 1) * stride + x + 1
 		//   up     previous field on entry, overwritten in place with the new value (leapfrog), same layout
-		//   c2, d  per-cell c² and per-sub-step damping, same layout
+		//   c2i, di  per-cell indices, a byte and a ushort, same layout, into c2t and dt: the scene's distinct c² values and
+		//          per-sub-step damping values (2026-11-03: 3 bytes a cell instead of 8, the kernel being bound by the card's bandwidth)
 		//   lap    4th-order 5-point-per-axis stencil for cells at least two away from the border (needs
 		//          USE_4TH_ORDER), otherwise the 9-point stencil (corners 0.066, edges 0.184, centre -1)
 		//   nv     = u + (u - up)·d + lap·c2·c2Scale, with c2Scale = 1/subSteps²
-		//   inten1 / inten  first and second stage exponential averages of nv², retention intensityAlpha
-		//   intenOut        (stage1 + stage2)/2 · intensityScale; the three are only touched when track != 0
-		source.AppendLine("__kernel void wave_step(__global const float* u, __global float* up, __global const float* c2,");
-		source.AppendLine("                        __global const float* d, __global float* inten,");
+		//   inten1 / inten  first and second stage exponential averages of nv², retention intensityAlpha, only touched
+		//          when track != 0; their blend (stage1 + stage2)/2 · intensityScale is made where it is read (capture_blend,
+		//          the probe kernels, PrepareFrame), not written every step (2026-11-03)
+		source.AppendLine("__kernel void wave_step(__global const float* u, __global float* up, __global const uchar* c2i,");
+		source.AppendLine("                        __global const ushort* di, __global const float* c2t, __global const float* dt, __global float* inten,");
 		source.AppendLine("                        const int w, const int h, const int stride, const int track, const float c2Scale,");
-		source.AppendLine("                        const float intensityAlpha, __global float* inten1, __global float* intenOut,");
-		source.AppendLine("                        const float intensityScale)");
+		source.AppendLine("                        const float intensityAlpha, __global float* inten1)");
 		source.AppendLine("{");
 		source.AppendLine("    int x = get_global_id(0);");
 		source.AppendLine("    int y = get_global_id(1);");
@@ -711,16 +817,14 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		source.AppendLine("    lap = 0.066f * (u[i - stride - 1] + u[i - stride + 1] + u[i + stride - 1] + u[i + stride + 1])");
 		source.AppendLine("        + 0.184f * (u[i - 1] + u[i + 1] + u[i - stride] + u[i + stride]) - uc;");
 		source.AppendLine("#endif");
-		source.AppendLine("    float nv = uc + (uc - up[i]) * d[i] + lap * c2[i] * c2Scale;");
+		source.AppendLine("    float nv = uc + (uc - up[i]) * dt[di[i]] + lap * c2t[c2i[i]] * c2Scale;");
 		source.AppendLine("    up[i] = nv;");
-		// two cascaded one-pole stages, blended (0.5f - see WaveSimulator.IntensityBlend, CPU engine) into what is
-		// read back/probed (intenOut) instead of using the full 2-stage cascade outright - see the class summary
+		// two cascaded one-pole stages; what is read back or probed is their blend (0.5f - see WaveSimulator.IntensityBlend,
+		// CPU engine) instead of the full 2-stage cascade outright - see the class summary
 		source.AppendLine("    if (track != 0) {");
 		source.AppendLine("        float s1 = inten1[i] * intensityAlpha + nv * nv * (1.0f - intensityAlpha);");
 		source.AppendLine("        inten1[i] = s1;");
-		source.AppendLine("        float s2 = inten[i] * intensityAlpha + s1 * (1.0f - intensityAlpha);");
-		source.AppendLine("        inten[i] = s2;");
-		source.AppendLine("        intenOut[i] = (s1 * 0.5f + s2 * 0.5f) * intensityScale;");
+		source.AppendLine("        inten[i] = inten[i] * intensityAlpha + s1 * (1.0f - intensityAlpha);");
 		source.AppendLine("    }");
 		source.AppendLine("}");
 		source.AppendLine();
@@ -887,13 +991,30 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		source.AppendLine("    return sum / (float)((y1 - y0) * (x1 - x0));");
 		source.AppendLine("}");
 		source.AppendLine();
+		// the intensity as the blend of its two stages, cell for cell as the CPU engine's _intensityOut (its multiply and add kept
+		// apart, so no contraction from here on), then the block's mean; a field capture passes a scale of 0 and takes capture_sample
+		source.AppendLine("#pragma OPENCL FP_CONTRACT OFF");
+		source.AppendLine("float capture_blend(__global const float* s1, __global const float* s2, const float scale, const int w, const int h, const int stride, const int div, const int rim, const int x, const int y)");
+		source.AppendLine("{");
+		source.AppendLine("    if (div == 1) { int j = (y + 1 + rim) * stride + x + 1 + rim; return (s1[j] * 0.5f + s2[j] * 0.5f) * scale; }");
+		source.AppendLine("    int x0 = x * div, y0 = y * div;");
+		source.AppendLine("    int x1 = min(w, x0 + div), y1 = min(h, y0 + div);");
+		source.AppendLine("    float sum = 0.0f;");
+		source.AppendLine("    for (int cy = y0; cy < y1; cy++)");
+		source.AppendLine("        for (int cx = x0; cx < x1; cx++) {");
+		source.AppendLine("            int j = (cy + 1 + rim) * stride + cx + 1 + rim;");
+		source.AppendLine("            sum += (s1[j] * 0.5f + s2[j] * 0.5f) * scale;");
+		source.AppendLine("        }");
+		source.AppendLine("    return sum / (float)((y1 - y0) * (x1 - x0));");
+		source.AppendLine("}");
+		source.AppendLine();
 		// the intensity as its square root when the shape says so (2026-10-23, FrameConversion): the block's mean energy, then the root
-		source.AppendLine("__kernel void capture_half(__global const float* src, __global half* dst, const int w, const int h, const int stride, const int div, const int fw, const int fh, const int rim, const int root)");
+		source.AppendLine("__kernel void capture_half(__global const float* src, __global half* dst, const int w, const int h, const int stride, const int div, const int fw, const int fh, const int rim, const int root, __global const float* src2, const float blendScale)");
 		source.AppendLine("{");
 		source.AppendLine("    int x = get_global_id(0);");
 		source.AppendLine("    int y = get_global_id(1);");
 		source.AppendLine("    if (x >= fw || y >= fh) return;");
-		source.AppendLine("    float v = capture_sample(src, w, h, stride, div, rim, x, y);");
+		source.AppendLine("    float v = blendScale > 0.0f ? capture_blend(src, src2, blendScale, w, h, stride, div, rim, x, y) : capture_sample(src, w, h, stride, div, rim, x, y);");
 		source.AppendLine("    vstore_half(root ? sqrt(v) : v, y * fw + x, dst);");
 		source.AppendLine("}");
 		source.AppendLine();
@@ -922,12 +1043,12 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		source.AppendLine("}");
 		source.AppendLine();
 		source.AppendLine("#pragma OPENCL FP_CONTRACT OFF");
-		source.AppendLine("__kernel void capture_index(__global const float* src, __global uchar* dst, const int w, const int h, const int stride, const int div, const int fw, const int fh, const float brightness, const int intensity, const int rim)");
+		source.AppendLine("__kernel void capture_index(__global const float* src, __global uchar* dst, const int w, const int h, const int stride, const int div, const int fw, const int fh, const float brightness, const int intensity, const int rim, __global const float* src2, const float blendScale)");
 		source.AppendLine("{");
 		source.AppendLine("    int x = get_global_id(0);");
 		source.AppendLine("    int y = get_global_id(1);");
 		source.AppendLine("    if (x >= fw || y >= fh) return;");
-		source.AppendLine("    float raw = capture_sample(src, w, h, stride, div, rim, x, y);");
+		source.AppendLine("    float raw = blendScale > 0.0f ? capture_blend(src, src2, blendScale, w, h, stride, div, rim, x, y) : capture_sample(src, w, h, stride, div, rim, x, y);");
 		source.AppendLine("    float v = round_to_half(intensity == 2 ? sqrt(raw) : raw);");
 		source.AppendLine("    int index;");
 		source.AppendLine("    if (intensity == 2)");
@@ -944,26 +1065,26 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		// open_edges: Mur's first-order absorbing condition on the ring, WaveSimulator.ApplyOpenEdges cell for cell and
 		// operation for operation (no contraction, see above): one work item per column of the top and bottom rows
 		// (corners take their diagonal neighbour), then one per row of the left and right columns
-		source.AppendLine("void absorb(__global const float* u, __global float* up, __global const float* c2, const float c2Scale, const int ring, const int inner)");
+		source.AppendLine("void absorb(__global const float* u, __global float* up, __global const uchar* c2i, __global const float* c2t, const float c2Scale, const int ring, const int inner)");
 		source.AppendLine("{");
-		source.AppendLine("    float s = sqrt(c2[inner] * c2Scale) * " + EdgeSpeedFactorLiteral + ";");
+		source.AppendLine("    float s = sqrt(c2t[c2i[inner]] * c2Scale) * " + EdgeSpeedFactorLiteral + ";");
 		source.AppendLine("    float k = (s - 1.0f) / (s + 1.0f);");
 		source.AppendLine("    up[ring] = u[inner] + k * (up[inner] - u[ring]);");
 		source.AppendLine("}");
 		source.AppendLine();
-		source.AppendLine("__kernel void open_edges(__global const float* u, __global float* up, __global const float* c2, const int w, const int h, const int stride, const float c2Scale)");
+		source.AppendLine("__kernel void open_edges(__global const float* u, __global float* up, __global const uchar* c2i, __global const float* c2t, const int w, const int h, const int stride, const float c2Scale)");
 		source.AppendLine("{");
 		source.AppendLine("    int id = get_global_id(0);");
 		source.AppendLine("    if (id < w + 2) {");
 		source.AppendLine("        int x = id;");
 		source.AppendLine("        int ix = clamp(x, 1, w);");
-		source.AppendLine("        absorb(u, up, c2, c2Scale, x, stride + ix);");
-		source.AppendLine("        absorb(u, up, c2, c2Scale, (h + 1) * stride + x, h * stride + ix);");
+		source.AppendLine("        absorb(u, up, c2i, c2t, c2Scale, x, stride + ix);");
+		source.AppendLine("        absorb(u, up, c2i, c2t, c2Scale, (h + 1) * stride + x, h * stride + ix);");
 		source.AppendLine("    } else {");
 		source.AppendLine("        int y = id - (w + 2) + 1;");
 		source.AppendLine("        if (y > h) return;");
-		source.AppendLine("        absorb(u, up, c2, c2Scale, y * stride, y * stride + 1);");
-		source.AppendLine("        absorb(u, up, c2, c2Scale, y * stride + w + 1, y * stride + w);");
+		source.AppendLine("        absorb(u, up, c2i, c2t, c2Scale, y * stride, y * stride + 1);");
+		source.AppendLine("        absorb(u, up, c2i, c2t, c2Scale, y * stride + w + 1, y * stride + w);");
 		source.AppendLine("    }");
 		source.AppendLine("}");
 		return source.ToString();
@@ -1019,6 +1140,22 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		IntPtr size = new IntPtr((long)data.Length * 4L);
 		IntPtr buffer = CreateBuffer(size.ToInt64(), owner);
 		OpenClApi.Check(OpenClApi.clEnqueueWriteBufferInt(_queue, buffer, 1U, IntPtr.Zero, size, data, 0U, IntPtr.Zero, IntPtr.Zero), "clEnqueueWriteBuffer");
+		return buffer;
+	}
+
+	/// <summary>Byte counterpart of <see cref="CreateBuffer(float[], Resources)"/>.</summary>
+	private IntPtr CreateBuffer(byte[] data, Resources owner)
+	{
+		IntPtr buffer = CreateBuffer(data.Length, owner);
+		UploadBytes(buffer, data);
+		return buffer;
+	}
+
+	/// <summary>16-bit counterpart of <see cref="CreateBuffer(float[], Resources)"/>.</summary>
+	private IntPtr CreateBuffer(ushort[] data, Resources owner)
+	{
+		IntPtr buffer = CreateBuffer((long)data.Length * 2L, owner);
+		UploadShorts(buffer, data);
 		return buffer;
 	}
 
@@ -1235,7 +1372,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		{
 			if (_subSteps > 1)
 			{
-				SetInt(_stepKernel[current], 8U, subStep == _subSteps && _track ? 1 : 0);
+				SetInt(_stepKernel[current], 10U, subStep == _subSteps && _track ? 1 : 0);
 			}
 			Enqueue(_stepKernel[current], _grid2D, _stepLocal, "step");
 			if (_openEdges)
@@ -1268,7 +1405,21 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		}
 		if (needIntensity && _hostIntensity != null)
 		{
-			ReadBack(_intensityOutBuffer, _hostIntensity, "intensity");
+			// the blend of the two stages, as the captures and probes make it on the card (the kernel no longer writes it every
+			// step, 2026-11-03); the CPU engine's expression, multiply and add apart
+			ReadBack(_intensityStage1Buffer, _hostStage1!, "intensity stage 1");
+			ReadBack(_intensityBuffer, _hostStage2!, "intensity stage 2");
+			float[] s1 = _hostStage1!, s2 = _hostStage2!, blend = _hostIntensity;
+			float scale = _intensityScale;
+			int stride = _stride;
+			Parallel.For(0, _height + 2, row =>
+			{
+				int end = (row + 1) * stride;
+				for (int i = row * stride; i < end; i++)
+				{
+					blend[i] = (s1[i] * 0.5f + s2[i] * 0.5f) * scale;
+				}
+			});
 		}
 	}
 
@@ -1287,8 +1438,12 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		//   info       4 ints per probe: [start in pix, count, 1 = sample inten instead of u, 1 = divide by count];
 		//              all 0 for line probes, which therefore write 0
 		//   hist       ProbeRows × n floats, row-major: hist[row * n + p] receives this step's value
+		// the intensity at a cell is the blend of its two stages (inten1, inten; 2026-11-03, no longer written every step by
+		// wave_step), the CPU engine's expression with its multiply and add apart, so no contraction in this program
+		source.AppendLine("#pragma OPENCL FP_CONTRACT OFF");
 		source.AppendLine("__kernel void probe_sample(__global const float* u, __global const float* inten, __global const int* pix,");
-		source.AppendLine("                           __global const int* info, __global float* hist, const int row, const int n)");
+		source.AppendLine("                           __global const int* info, __global float* hist, const int row, const int n,");
+		source.AppendLine("                           __global const float* inten1, const float scale)");
 		source.AppendLine("{");
 		source.AppendLine("    int p = get_global_id(0);");
 		source.AppendLine("    if (p >= n) return;");
@@ -1298,7 +1453,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		source.AppendLine("    int mean = info[p * 4 + 3];");
 		source.AppendLine("    float s = 0.0f;");
 		source.AppendLine("    if (useI != 0) {");
-		source.AppendLine("        for (int k = 0; k < count; k++) s += inten[pix[start + k]];");
+		source.AppendLine("        for (int k = 0; k < count; k++) { int j = pix[start + k]; s += (inten1[j] * 0.5f + inten[j] * 0.5f) * scale; }");
 		source.AppendLine("    } else {");
 		source.AppendLine("        for (int k = 0; k < count; k++) s += u[pix[start + k]];");
 		source.AppendLine("    }");
@@ -1314,26 +1469,28 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		// once recording starts
 		source.AppendLine("__kernel void profile_accumulate(__global const float* inten, __global const int* ppix,");
 		source.AppendLine("                                 __global const int* pmode, __global const int* pStartFlag, __global const int* pStartStep,");
-		source.AppendLine("                                 __global float* total, const int step, const int n)");
+		source.AppendLine("                                 __global float* total, const int step, const int n, __global const float* inten1, const float scale)");
 		source.AppendLine("{");
 		source.AppendLine("    int k = get_global_id(0);");
 		source.AppendLine("    if (k >= n) return;");
 		source.AppendLine("    if (pmode[k] != 2) return;");
 		source.AppendLine("    if (pStartFlag[k] != 0 && step < pStartStep[k]) return;");
-		source.AppendLine("    total[k] += inten[ppix[k]];");
+		source.AppendLine("    int j = ppix[k];");
+		source.AppendLine("    total[k] += (inten1[j] * 0.5f + inten[j] * 0.5f) * scale;");
 		source.AppendLine("}");
 		source.AppendLine();
 		// profile_gather: one work item per line-probe pixel k < n; same ppix/pmode layout as above.
 		//   outv[k] = total[k] (mode 2), inten[ppix[k]] (mode 1) or u[ppix[k]] (mode 0)
 		source.AppendLine("__kernel void profile_gather(__global const float* u, __global const float* inten, __global const int* ppix,");
-		source.AppendLine("                             __global const int* pmode, __global const float* total, __global float* outv, const int n)");
+		source.AppendLine("                             __global const int* pmode, __global const float* total, __global float* outv, const int n,");
+		source.AppendLine("                             __global const float* inten1, const float scale)");
 		source.AppendLine("{");
 		source.AppendLine("    int k = get_global_id(0);");
 		source.AppendLine("    if (k >= n) return;");
 		source.AppendLine("    int m = pmode[k];");
 		source.AppendLine("    float v;");
 		source.AppendLine("    if (m == 2) v = total[k];");
-		source.AppendLine("    else if (m == 1) v = inten[ppix[k]];");
+		source.AppendLine("    else if (m == 1) { int j = ppix[k]; v = (inten1[j] * 0.5f + inten[j] * 0.5f) * scale; }");
 		source.AppendLine("    else v = u[ppix[k]];");
 		source.AppendLine("    outv[k] = v;");
 		source.AppendLine("}");
@@ -1428,12 +1585,14 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		{
 			IntPtr kernel = _probeKernel[k] = CreateKernel(_probes, _probeProgram, "probe_sample");
 			SetMem(kernel, 0U, _field[k]);
-			SetMem(kernel, 1U, _intensityOutBuffer);
+			SetMem(kernel, 1U, _intensityBuffer);
 			SetMem(kernel, 2U, pixelBuffer);
 			SetMem(kernel, 3U, infoBuffer);
 			SetMem(kernel, 4U, _historyBuffer);
 			SetInt(kernel, 5U, 0);
 			SetInt(kernel, 6U, count);
+			SetMem(kernel, 7U, _intensityStage1Buffer);
+			SetFloat(kernel, 8U, _intensityScale);
 		}
 		_probeGrid[0] = new IntPtr(count);
 		for (int i = 0; i < count; i++)
@@ -1498,17 +1657,19 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		{
 			IntPtr kernel = _gatherKernel[k] = CreateKernel(_probes, _probeProgram, "profile_gather");
 			SetMem(kernel, 0U, _field[k]);
-			SetMem(kernel, 1U, _intensityOutBuffer);
+			SetMem(kernel, 1U, _intensityBuffer);
 			SetMem(kernel, 2U, pixelBuffer);
 			SetMem(kernel, 3U, modeBuffer);
 			SetMem(kernel, 4U, totalBuffer);
 			SetMem(kernel, 5U, _profileOutBuffer);
 			SetInt(kernel, 6U, totalPixels);
+			SetMem(kernel, 7U, _intensityStage1Buffer);
+			SetFloat(kernel, 8U, _intensityScale);
 		}
 		if (_profileIntegrates)
 		{
 			IntPtr kernel = _accumulateKernel = CreateKernel(_probes, _probeProgram, "profile_accumulate");
-			SetMem(kernel, 0U, _intensityOutBuffer);
+			SetMem(kernel, 0U, _intensityBuffer);
 			SetMem(kernel, 1U, pixelBuffer);
 			SetMem(kernel, 2U, modeBuffer);
 			// "start recording at step #" for the integrated line probes: one entry per pixel (same layout as the
@@ -1517,6 +1678,8 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			SetMem(kernel, 4U, CreateBuffer(startSteps, _probes));
 			SetMem(kernel, 5U, totalBuffer);
 			SetInt(kernel, 7U, totalPixels);
+			SetMem(kernel, 8U, _intensityStage1Buffer);
+			SetFloat(kernel, 9U, _intensityScale);
 		}
 		_profileGrid[0] = new IntPtr(totalPixels);
 	}
@@ -1842,9 +2005,19 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	/// <summary>The level-to-frequency table (256 floats), shared by the image and the object sources.</summary>
 	private IntPtr _frequencyBuffer;
 
-	/// <summary>The padded c² and pre-scaled damping maps bound to the step and edge kernels; refilled by <see cref="TryReplaceScene"/>.</summary>
-	private IntPtr _c2Buffer;
-	private IntPtr _dBuffer;
+	/// <summary>Per-cell indices (a byte, a ushort) into the tables of the scene's distinct c² and pre-scaled damping values, bound to the step and edge kernels (<see cref="SceneMaps"/>); refilled by <see cref="TryReplaceScene"/>.</summary>
+	private IntPtr _c2IndexBuffer;
+	private IntPtr _dIndexBuffer;
+
+	/// <summary>The tables the indices address: 256 floats for c², <see cref="_dTableCapacity"/> for the damping.</summary>
+	private IntPtr _c2TableBuffer;
+	private IntPtr _dTableBuffer;
+
+	/// <summary>Damping values the table buffer has room for; a scene with more needs a rebuild (<see cref="TryReplaceScene"/> says so).</summary>
+	private int _dTableCapacity;
+
+	/// <summary>The least room given to the damping table at <see cref="Build"/>: a scene's blue levels plus a rim's depths come to a few hundred values.</summary>
+	private const int DTableRoom = 4096;
 
 	/// <summary>The image sources' cell indices and levels bound to <c>apply_sources</c> (unset without image sources); refilled by <see cref="TryReplaceScene"/>.</summary>
 	private IntPtr _sourceIndexBuffer;
@@ -1904,13 +2077,12 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	/// <summary>The two ping-pong field buffers (padded, <see cref="_cells"/> floats each); the one at <see cref="_current"/> holds the newest field, the other the previous one.</summary>
 	private readonly IntPtr[] _field = new IntPtr[2];
 
-	/// <summary>
-	/// The blend of the two cascaded filter stages (the <c>inten1</c>/<c>inten</c> buffers, which live only
-	/// inside <c>wave_step</c>), scaled - see the class summary and <c>WaveSimulator._intensityOut</c> (CPU
-	/// engine). Padded; this is what is actually read back into <see cref="_hostIntensity"/> and sampled by the
-	/// probe kernels; a 1-float dummy when not tracking.
-	/// </summary>
-	private IntPtr _intensityOutBuffer;
+	/// <summary>The intensity's scale, applied where the two stages are blended (the captures, the probes, <see cref="PrepareFrame"/>).</summary>
+	private float _intensityScale;
+
+	/// <summary>Host copies of the two intensity stages for <see cref="PrepareFrame"/>, which blends them into <see cref="_hostIntensity"/>; null when not tracking.</summary>
+	private readonly float[]? _hostStage1;
+	private readonly float[]? _hostStage2;
 
 	/// <summary><c>wave_step</c> kernel per field index k: reads <see cref="_field"/>[k], writes <see cref="_field"/>[1 - k].</summary>
 	private readonly IntPtr[] _stepKernel = new IntPtr[2];
@@ -1945,7 +2117,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	/// <summary>Host copy of the newest field, refreshed by <see cref="PrepareFrame"/>; exposed as <see cref="FieldData"/>.</summary>
 	private readonly float[] _hostField;
 
-	/// <summary>Host copy of <see cref="_intensityOutBuffer"/>, refreshed by <see cref="PrepareFrame"/>; null when not tracking.</summary>
+	/// <summary>Host copy of the scaled intensity, the blend of the two stages, refreshed by <see cref="PrepareFrame"/>; null when not tracking.</summary>
 	private readonly float[]? _hostIntensity;
 
 	/// <summary>Elapsed time in steps; passed to the source kernels as the float argument <c>t</c>.</summary>

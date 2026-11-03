@@ -15,6 +15,8 @@
 // version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 // <https://www.gnu.org/licenses/>.
 
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using NLog;
 using WaveDudeNext.Model;
 using WaveDudeNext.Runs;
@@ -111,18 +113,25 @@ public static class PartPainter
 			Logger.Debug("Part '{Name}' ({Type}) lies outside the canvas", part.Name, part.GetType().Name);
 			return;
 		}
-		Logger.Debug("Painting part '{Name}' ({Type}) at ({X}, {Y}), {Angle}°, rows {Y0}..{Y1}", part.Name, part.GetType().Name, part.X, part.Y, part.Angle, y0, y1);
+		long started = Stopwatch.GetTimestamp();
 		if (shape.Absorption > 0)
 		{
 			PaintAbsorption(bgra, stride, shape, x0, y0, x1, y1);
 		}
-		if (!shape.PaintsIndex)
+		if (shape.PaintsIndex)
 		{
-			return;
+			PaintIndex(bgra, stride, shape, x0, y0, x1, y1);
 		}
+		// what a report needs: which part took how long (2026-11-03, when the app's compositions ran 4-10 times slower than the painter alone)
+		Logger.Debug("Painted part '{Name}' ({Type}) at ({X}, {Y}), {Angle}°, rows {Y0}..{Y1} in {Ms:0.0} ms", part.Name, part.GetType().Name, part.X, part.Y, part.Angle, y0, y1, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+	}
+
+	/// <summary>Paints the part's refractive index (red; 0 for a mirror) over the pixel rectangle, supersampling the pixels an edge crosses.</summary>
+	private static void PaintIndex(byte[] bgra, int stride, PartShape shape, int x0, int y0, int x1, int y1)
+	{
 		if (shape.IsMirror)
 		{
-			Parallel.For(y0, y1 + 1, y =>
+			Parallel.For(y0, y1 + 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
 			{
 				int row = y * stride;
 				for (int x = x0; x <= x1; x++)
@@ -138,14 +147,13 @@ public static class PartPainter
 		const double step = 1.0 / Supersample;
 		const double half = step / 2.0;
 		int coating = shape.CoatingWidth;
-		bool innerEdges = shape.HasInnerEdges;
-		Parallel.For(y0, y1 + 1, y =>
+		Parallel.For(y0, y1 + 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
 		{
 			int row = y * stride;
 			for (int x = x0; x <= x1; x++)
 			{
 				int offset = row + x * 4 + 2;
-				double depth = shape.DepthAt(x + 0.5, y + 0.5);
+				(double depth, double inner) = shape.DepthsAt(x + 0.5, y + 0.5);
 				if (depth < -SampleReach)
 				{
 					continue;   // every sample outside
@@ -154,9 +162,10 @@ public static class PartPainter
 				// red 0 is a mirror the engine reads as index 1000; averaging it in as glass of index 1 is the user's rule,
 				// and a graded band rises from the index the pixel had
 				double existing = red == 0 ? 1.0 : red / 100.0;
-				if (!innerEdges && depth > SampleReach && (coating == 0 || Math.Abs(depth - coating) > SampleReach))
+				if (depth > SampleReach && inner > SampleReach && (coating == 0 || Math.Abs(depth - coating) > SampleReach))
 				{
-					// every sample inside, all in the body or all in the coating band: the centre's index stands for the pixel
+					// every sample inside and no edge within reach, neither the outline, an inner edge (a fibre's core, a
+					// stack's layer) nor the coating band's: the centre's index stands for the pixel
 					if (shape.IndexAt(x + 0.5, y + 0.5, existing) is { } whole)
 					{
 						bgra[offset] = (byte)Math.Clamp((int)Math.Round(whole * 100.0), 1, 255);
@@ -204,7 +213,7 @@ public static class PartPainter
 		float[] depths = new float[columns * (y1 - y0 + 1)];
 		double deepest = 0.0;
 		var gate = new Lock();
-		Parallel.For(y0, y1 + 1, () => 0.0, (y, _, local) =>
+		Parallel.For(y0, y1 + 1, () => 0.0, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y, ParallelLoopState _, double local) =>
 		{
 			int row = (y - y0) * columns;
 			for (int x = x0; x <= x1; x++)
@@ -224,7 +233,7 @@ public static class PartPainter
 		double ramp = Math.Min(shape.AbsorptionRamp, deepest);
 		int full = shape.Absorption;
 		Logger.Debug("Absorption {Absorption} over a ramp of {Ramp:0.#} px (the part reaches {Deepest:0.#} px deep)", full, ramp, deepest);
-		Parallel.For(y0, y1 + 1, y =>
+		Parallel.For(y0, y1 + 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
 		{
 			int row = (y - y0) * columns;
 			for (int x = x0; x <= x1; x++)

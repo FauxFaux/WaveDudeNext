@@ -26,7 +26,11 @@ harnesses run.
   targeted probe or screenshot for a local change, `library_check` (20 s) for a library change, a UI harness only
   when its flow changed, **once**. Never loop a harness for a flake, never run the suite after an edit.
 - **Measure properly**: warm the JIT; never poll UI Automation while measuring (it loads the UI thread it
-  measures); the app's own log lines are the measurement.
+  measures); the app's own log lines are the measurement. **A hot loop measured alone may be a tier-1 figure the app never
+  reaches** (2026-11-03: the part painter took 31 ms in a probe and 115–460 ms in the app, the same call; in a busy WPF process
+  the runtime kept its per-pixel methods at tier-0 — the probe pinned there with `DOTNET_TC_CallCounting=0` reproduced the
+  app's 212 ms): compare a probe against the app's log, and take a hot path out of tiering with
+  `[MethodImpl(MethodImplOptions.AggressiveOptimization)]` where the gap is that.
 - **Harnesses are keyboard-only**: post `WM_KEYDOWN`/`WM_CHAR` to the window, read state through UIA properties,
   never UIA patterns, the mouse, `SendKeys` or `SetForegroundWindow` (each activates the window). Modifiers cannot
   be posted, so every command a harness presses has an unmodified key. Everything a harness needs has an
@@ -107,7 +111,7 @@ SimulationRun: stepping loop + writer threads; IWaveEngine (WaveSimulator CPU | 
    CaptureFrame/AwaitFrame -> FrameStore.Write; one heartbeat post (<= 30/s) at Background priority; final post sets
    FrameCount, then State
 ScratchRunner: one kept engine; "frame k of the project as it is now" from step 0, probes sampled; newest request
-   wins; every request is computed
+   wins: one superseded while stepping is abandoned within 16 steps (logged), the newest is computed in full, however long
 FramePresenter: CopyLayer -> 8-bit: FrameRenderer.RenderIndexed at the store's size, WPF scales; 16-bit: ScreenRenderer at
    the picture's size on screen -> the WriteableBitmap, copied on the pool between Lock/Unlock on the UI thread; only
    the newest request is rendered
@@ -141,7 +145,14 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   swapped into the kept engine: the GPU re-uploads c², damping and the source tables into its buffers and keeps the
   compiled program, the sub-steps re-derived; 2026-11-03, the user's choice: the scratch runner uses it, 55 ms for
   Example 16 against the 180–350 ms OpenCL build every part edit had cost; `library_check` proves a replaced engine
-  steps like a fresh one on both engines). Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
+  steps like a fresh one on both engines). The scene reaches the card as compact maps (2026-11-03, the user's choice: the
+  step kernel is bound by the card's bandwidth, about 400 GB/s at 84 bytes a cell a step at 4th order with intensity): a
+  byte index into the table of the scene's at most 256 distinct c² values (the image's red levels) and a 16-bit index
+  into the table of its damping values (the blue levels and the rim's depths, a few hundred; room for 4096, a scene with
+  more rebuilds), the tables holding the CPU's floats, so the arithmetic is unchanged; and the intensity's blend of its
+  two stages is made where it is read (the captures, the probes, `PrepareFrame`), not written every step: 69 bytes a
+  cell, the step 0.47 → 0.38 ms at full HD and 4th order, 0.25 → 0.21 at 9-point. `PrepareFrame`, which no path of the
+  app uses, reads both stages and blends on the host. Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
   Laplacian, soft sources, EMA intensity; a scene pixel with red 0 is a mirror, n = 1000, his V0.30 rule,
   2026-10-18), verified CPU = GPU by the harness; seeds from `Pcg32` make CPU = GPU
   bit for bit on random gaps. A source's frequency level, amplitude and phase take decimals (2026-10-19, Jeroen's point 10); the
@@ -196,7 +207,9 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   of quiet (setting, default on); an automatic run never moves the preview. A probe edit never starts a run: only
   the recordings are stale, the scratch frame refreshes the graph; except that an active probe the run does not
   record (switched on, added) is a simulation edit (2026-10-18). No scratch frame while playback runs. Any run
-  is paused while a scratch frame computes. Every scratch request is computed, however long.
+  is paused while a scratch frame computes. The newest scratch request is computed in full, however long (no time
+  budget, 2026-10-16); a request superseded while stepping is abandoned within 16 steps and logged (the word "every" here
+  misled a reader into offering that as new, 2026-11-03).
 - **A picture changes only when a frame for its position arrives**; otherwise the last picture stays. A long wait
   dims the pictures under a spinner, mirrored on the taskbar.
 - **Brightness** (2026-10-20, Jeroen's point 9) sits in each picture's header strip (`HeaderStrip`: title, a caption that
@@ -426,7 +439,8 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
 
 ## Numbers (workstation: 10-core Xeon without AVX2, RTX 2080, 64 GB)
 
-GPU step at 1080p 0.25–0.5 ms, CPU 6–14 ms; OpenCL build 0.3 s; a full-HD frame's capture (both planes as halves, 8.3 MB)
+GPU step at 1080p 0.21 ms (9-point) to 0.38 ms (4th order, three sub-steps; 0.25–0.47 before the compact maps and the
+deferred intensity blend of 2026-11-03), CPU 6–14 ms; OpenCL build 0.3 s; a full-HD frame's capture (both planes as halves, 8.3 MB)
 0.9 ms on top of its two steps since the page-locked snapshots (2026-11-03; 2.1 ms before, the stepping thread blocked in
 the driver's copy; `bench 1920 1080`: 1.50 → 0.65 ms a step with captures every 2 steps at 4th order, the DMA on its own
 queue), the DMA itself 0.63 ms at 13 GB/s. In the app the default project's run (2500 steps, 1250 frames, 16-bit, both
@@ -454,9 +468,22 @@ coalesced update repainted all four rectangles, one the whole canvas, "composed 
 point and node lists) and paints on the thread pool, one composition in flight, the newest request after it, the UI
 thread taking only the finished pixels (20–24 ms a time, measured on a burst of ten nudges: three compositions of 395,
 212 and 128 ms on the worker); `LoadSceneImage` (a run or scratch request) joins an in-flight composition of the same
-inputs rather than painting again. Still open: the painter itself, 35–60 ns a pixel on ten cores even on a plain
-rectangle (an interior fast path, a cheaper mirror test; profile first), which sets the picture's refresh rate during a
-drag; not an incremental painter, since a coating's band rises from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
+inputs rather than painting again. **The painter's per-pixel path is out of JIT tiering** (2026-11-03, the user's choice):
+alone it took 31 ms for those four parts, in the app 115–460 ms, because the runtime left its methods at tier-0 code in
+the busy process (pinned there, the probe took 212 ms); `AggressiveOptimization` on the shape methods a pixel reaches, the
+painter's row lambdas and the glowing edges' makes a composition 26–35 ms a background and 10–17 ms a box in the app,
+74 ms for the four during a burst of nudges (was 395–460), the pictures 17–32 ms on the UI thread. Each part logs its
+paint time, and a composition logs the thread pool's state when it starts. **A pixel is sampled 16 times only where an
+edge is within reach** — the outline, the coating band's, or an inner edge the shape reports (`InnerEdgeDistance`: a
+fibre's core boundary, a Bragg stack's layer boundaries; the logic gate still says 0, every inside pixel sampled) — where
+every pixel of a fibre had been (2026-11-03, after the user's drag of a fibre node: Example 23's three fibres 138/163/398 →
+43/50/96 ms, its composition 731 → 218 ms; a graded band's pixels are the centre sample now, as every other coated shape's,
+within 0.01 of index where the band curves inside a pixel). A fibre pixel still runs four chord loops (depth, body index,
+face, inner edge), sharable for about another factor of two. Left for later, if wanted: a Lipschitz skip
+in the rows (the depth is a lower bound on the distance to the outline, so a pixel at depth *d* settles the next
+⌈|*d*| − 0.6⌉ pixels: ~20 evaluations a row instead of 600 for a box, the arithmetic itself then a few milliseconds),
+and the pictures' glowing edges, now the larger share of the UI thread's time during a drag; not an incremental
+painter, since a coating's band rises from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
 lens run 105 s full quality (disk-bound), 61 s at half resolution with every second frame, in RAM. Settled by these
 numbers: no GPU JPEG, no OpenCL colouring at presentation, no `Vector256`, no Direct3D display path.
 

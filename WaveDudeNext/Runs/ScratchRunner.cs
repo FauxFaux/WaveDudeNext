@@ -181,7 +181,9 @@ public sealed class ScratchRunner : IDisposable
 		{
 			if (i % CheckInterval == 0 && (HasNewerRequest() || token.IsCancellationRequested))
 			{
-				return; // the loop picks up the newer request
+				// the loop picks up the newer request; said in the log, so a report shows the frames that were never finished (2026-11-03)
+				Logger.Debug("Preview frame {Frame} abandoned after {Done} of {Steps} steps for a newer request", frame, i, steps);
+				return;
 			}
 			engine.AdvanceOneStep();
 			if (sampler != null)

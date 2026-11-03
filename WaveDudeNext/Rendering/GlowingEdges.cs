@@ -15,6 +15,8 @@
 // version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 // <https://www.gnu.org/licenses/>.
 
+using System.Runtime.CompilerServices;
+
 namespace WaveDudeNext.Rendering;
 
 /// <summary>
@@ -54,7 +56,7 @@ public static class GlowingEdges
 			return result;
 		}
 		// rows are independent: a Full HD canvas took 60 ms on one core (2026-10-19)
-		Parallel.For(1, height - 1, y =>
+		Parallel.For(1, height - 1, [MethodImpl(MethodImplOptions.AggressiveOptimization)] (int y) =>
 		{
 			int rowUp = (y - 1) * strideBytes;
 			int rowMid = y * strideBytes;

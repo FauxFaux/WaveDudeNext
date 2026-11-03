@@ -104,6 +104,10 @@ internal static class OpenClApi
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, EntryPoint = "clEnqueueWriteBuffer", ExactSpelling = true, SetLastError = true)]
 	internal static extern int clEnqueueWriteBufferInt(IntPtr queue, IntPtr buffer, uint blocking, IntPtr offset, IntPtr size, int[] data, uint numEvents, IntPtr waitList, IntPtr evt);
 
+	/// <summary>clEnqueueWriteBuffer from memory at <paramref name="ptr"/> (pinned for the call when <paramref name="blocking"/> is 1); <paramref name="offset"/>/<paramref name="size"/> are in bytes.</summary>
+	[DllImport("OpenCL", CharSet = CharSet.Ansi, EntryPoint = "clEnqueueWriteBuffer", ExactSpelling = true, SetLastError = true)]
+	internal static extern int clEnqueueWriteBufferPtr(IntPtr queue, IntPtr buffer, uint blocking, IntPtr offset, IntPtr size, IntPtr ptr, uint numEvents, IntPtr waitList, IntPtr evt);
+
 	/// <summary>clEnqueueReadBuffer into a float array; <paramref name="blocking"/> 1 waits for completion, <paramref name="offset"/>/<paramref name="size"/> are in bytes.</summary>
 	[DllImport("OpenCL", CharSet = CharSet.Ansi, EntryPoint = "clEnqueueReadBuffer", ExactSpelling = true, SetLastError = true)]
 	internal static extern int clEnqueueReadBufferFloat(IntPtr queue, IntPtr buffer, uint blocking, IntPtr offset, IntPtr size, float[] data, uint numEvents, IntPtr waitList, IntPtr evt);
