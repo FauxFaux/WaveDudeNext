@@ -209,18 +209,36 @@ public sealed class ScratchRunner : IDisposable
 		Post(new ScratchResult(spec, frame, snapshot, clock.Elapsed, traces));
 	}
 
-	/// <summary>The kept engine, reset to step 0 and given the spec's emitters; rebuilt when the scene or the options differ.</summary>
+	/// <summary>
+	/// The kept engine, reset to step 0 and given the spec's emitters; given the new scene when only the scene's pixels or
+	/// background changed (<see cref="IWaveEngine.TryReplaceScene"/>, 2026-11-03: a moved part had cost the OpenCL build of
+	/// 180–350 ms before every preview frame); rebuilt when the grid or the options differ.
+	/// </summary>
 	private IWaveEngine EngineFor(RunSpec spec)
 	{
-		if (_engine != null && _engineSpec != null && _engineSpec.SameSceneAs(spec))
+		if (_engine != null && _engineSpec != null)
 		{
-			_engine.Reset();
-			if (!_engineSpec.SameEmittersAs(spec))
+			if (_engineSpec.SameSceneAs(spec))
 			{
-				_engine.SetEmitters(spec.Emitters);
+				_engine.Reset();
 			}
-			_engineSpec = spec;
-			return _engine;
+			else if (_engineSpec.SameGridAs(spec) && ReplaceScene(spec))
+			{
+				// replaced, and reset by that
+			}
+			else
+			{
+				_engineSpec = null;
+			}
+			if (_engineSpec != null)
+			{
+				if (!_engineSpec.SameEmittersAs(spec))
+				{
+					_engine.SetEmitters(spec.Emitters);
+				}
+				_engineSpec = spec;
+				return _engine;
+			}
 		}
 		(_engine as IDisposable)?.Dispose();
 		_engine = null;
@@ -229,6 +247,18 @@ public sealed class ScratchRunner : IDisposable
 		_engineSpec = spec;
 		Logger.Debug("Preview engine: {Engine} in {Elapsed:0} ms{Note}", _engine.Description, clock.ElapsedMilliseconds, note.Length > 0 ? " (" + note + ")" : "");
 		return _engine;
+	}
+
+	/// <summary>Gives the kept engine the spec's scene; false when the engine wants a rebuild instead.</summary>
+	private bool ReplaceScene(RunSpec spec)
+	{
+		var clock = Stopwatch.StartNew();
+		bool replaced = _engine!.TryReplaceScene(spec.BuildScene());
+		if (replaced)
+		{
+			Logger.Debug("Preview engine: scene replaced in {Elapsed:0} ms", clock.ElapsedMilliseconds);
+		}
+		return replaced;
 	}
 
 	/// <summary>A snapshot of the spec's shape, alternating between two so the one handed out last stays valid while the next is computed.</summary>

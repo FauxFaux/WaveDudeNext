@@ -109,6 +109,16 @@ public interface IWaveEngine
 	void Reset();
 
 	/// <summary>
+	/// Swaps in another scene of the same grid (size, rim, edges) with the same number of image sources: the per-cell
+	/// maps and the image sources are replaced, the sub-steps re-derived, and the engine is <see cref="Reset"/> (the
+	/// emitters and options kept; the probes removed as by Reset). The GPU engine keeps its compiled program and buffers,
+	/// which saves the 180–350 ms build a scene edit cost the preview (2026-11-03). False, and nothing changed, when the
+	/// scene differs in a way that needs a new engine. Any capture in flight must have been awaited.
+	/// </summary>
+	/// <param name="scene">The new scene.</param>
+	bool TryReplaceScene(SceneData scene);
+
+	/// <summary>
 	/// Replaces the object-source emitters, keeping the scene and the image sources; emitters outside the
 	/// canvas are dropped as at construction. Takes effect from the next step; the emitters' cycle state
 	/// starts fresh, so call it before <see cref="Reset"/> or at step 0. The intensity averaging constant

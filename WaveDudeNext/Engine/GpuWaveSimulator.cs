@@ -147,6 +147,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		_stride = _width + 2;
 		_cells = _stride * (_height + 2);
 		_track = options.TrackIntensity;
+		_fourthOrder = options.FourthOrderLaplacian;
 		_sourceCount = scene.SourceCount;
 		if (device.MaxAllocation > 0L && (long)_cells * 4L > device.MaxAllocation)
 		{
@@ -386,6 +387,84 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		OpenClApi.Check(OpenClApi.clEnqueueWriteBufferFloat(_queue, buffer, 1U, IntPtr.Zero, new IntPtr((long)count * 4L), data, 0U, IntPtr.Zero, IntPtr.Zero), "clEnqueueWriteBuffer (reset)");
 	}
 
+	/// <inheritdoc/>
+	public bool TryReplaceScene(SceneData scene)
+	{
+		if (scene.Width != _width || scene.Height != _height || scene.Rim != _rim || scene.OpenEdges != _openEdges || scene.SourceCount != _sourceCount)
+		{
+			return false;
+		}
+		OpenClApi.Check(OpenClApi.clFinish(_queue), "clFinish");
+		(float[] c2, float[] damping, float c2Mult) = SceneMaps(scene);
+		Upload(_c2Buffer, c2, _cells);
+		Upload(_dBuffer, damping, _cells);
+		for (int k = 0; k <= 1; k++)
+		{
+			SetFloat(_stepKernel[k], 9U, c2Mult);
+			if (_openEdges)
+			{
+				SetFloat(_edgeKernel[k], 6U, c2Mult);
+			}
+		}
+		(int[] indices, int[] levels) = SourceTables(scene);
+		if (_sourceCount > 0)
+		{
+			OpenClApi.Check(OpenClApi.clEnqueueWriteBufferInt(_queue, _sourceIndexBuffer, 1U, IntPtr.Zero, new IntPtr((long)_sourceCount * 4L), indices, 0U, IntPtr.Zero, IntPtr.Zero), "clEnqueueWriteBuffer (source indices)");
+			OpenClApi.Check(OpenClApi.clEnqueueWriteBufferInt(_queue, _sourceLevelBuffer, 1U, IntPtr.Zero, new IntPtr((long)_sourceCount * 4L), levels, 0U, IntPtr.Zero, IntPtr.Zero), "clEnqueueWriteBuffer (source levels)");
+		}
+		// Reset re-derives the intensity constant from the levels now in use, through SetEmitters
+		Reset();
+		Logger.Debug("Scene replaced on {Device}: {Stencil}", _device.Name, WaveSimulator.StencilText(_fourthOrder, _subSteps));
+		return true;
+	}
+
+	/// <summary>
+	/// The scene's per-cell maps in the padded layout (a border of one cell, like the CPU engine), with the sub-steps
+	/// (<see cref="_subSteps"/>, set here) and their corrections: sub-stepping keeps the 4th-order stencil stable without
+	/// changing the physical wave speed or damping, and stays at 1 unless the stencil is in use and this scene's highest
+	/// c² needs it. The damping is pre-scaled to its 1 / sub-steps-th root (unchanged at 1 sub-step), as the CPU engine's,
+	/// and the c² multiplier is 1 / sub-steps², exactly 1f at one sub-step (a bit-for-bit no-op multiply in the kernel).
+	/// </summary>
+	private (float[] C2, float[] Damping, float C2Mult) SceneMaps(SceneData scene)
+	{
+		float[] c2 = new float[_cells];
+		float[] damping = new float[_cells];
+		for (int y = 0; y < _height; y++)
+		{
+			Array.Copy(scene.C2, y * _width, c2, (y + 1) * _stride + 1, _width);
+			Array.Copy(scene.D, y * _width, damping, (y + 1) * _stride + 1, _width);
+		}
+		_subSteps = _fourthOrder ? WaveSimulator.ComputeSubSteps(WaveSimulator.MaxOf(c2)) : 1;
+		float c2Mult = 1f;
+		if (_subSteps > 1)
+		{
+			// Damping is applied once per sub-step, so take the sub-step root to keep the per-step decay unchanged.
+			double exponent = 1.0 / _subSteps;
+			for (int i = 0; i < damping.Length; i++)
+			{
+				damping[i] = (float)Math.Pow(damping[i], exponent);
+			}
+			// A sub-step is 1/subSteps long, so c²·dt² shrinks by 1/subSteps².
+			c2Mult = 1f / (_subSteps * _subSteps);
+		}
+		return (c2, damping, c2Mult);
+	}
+
+	/// <summary>The image sources (the green channel of the scene image) as the kernel's tables, cell index and level per source, noting the levels in use in <see cref="_levelUsed"/> afresh.</summary>
+	private (int[] Indices, int[] Levels) SourceTables(SceneData scene)
+	{
+		int[] indices = new int[_sourceCount];
+		int[] levels = new int[_sourceCount];
+		Array.Clear(_levelUsed);
+		for (int i = 0; i < _sourceCount; i++)
+		{
+			indices[i] = (scene.SourceY[i] + 1) * _stride + scene.SourceX[i] + 1;
+			levels[i] = scene.SourceLevel[i];
+			_levelUsed[scene.SourceLevel[i]] = true;
+		}
+		return (indices, levels);
+	}
+
 	/// <summary>
 	/// Creates the context and queue, compiles <see cref="KernelSource"/>, uploads every buffer for the scene
 	/// and binds the kernel arguments. Mirrors the <see cref="WaveSimulator"/> constructor: c² and damping are
@@ -417,34 +496,9 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 		OpenClApi.Check(err, "clCreateCommandQueue (transfer)");
 		_scene.Program = BuildProgram(KernelSource(use4thOrderLaplacian), "the program for the GPU");
 
-		// the scene, with a border of one cell like the CPU engine (padded layout)
-		float[] c2 = new float[_cells];
-		float[] damping = new float[_cells];
-		for (int y = 0; y < _height; y++)
-		{
-			Array.Copy(scene.C2, y * _width, c2, (y + 1) * _stride + 1, _width);
-			Array.Copy(scene.D, y * _width, damping, (y + 1) * _stride + 1, _width);
-		}
-		// see the class summary: sub-stepping keeps the 4th order stencil stable without changing the physical
-		// wave speed or damping - _subSteps stays 1 (no sub-stepping) unless the 4th order stencil is in use and
-		// this scene's highest c² actually needs it. The d buffer uploaded below is pre-scaled to match (its
-		// 1 / _subSteps-th root, or unchanged when _subSteps = 1), same as WaveSimulator's _dEffective on the CPU.
-		_subSteps = use4thOrderLaplacian ? WaveSimulator.ComputeSubSteps(WaveSimulator.MaxOf(c2)) : 1;
-		// 1 / _subSteps², or exactly 1f when _subSteps = 1 (a bit-for-bit no-op multiply in the kernel)
-		float c2Mult = 1f;
-		if (_subSteps > 1)
-		{
-			// Damping is applied once per sub-step, so take the sub-step root to keep the per-step decay unchanged.
-			double exponent = 1.0 / _subSteps;
-			for (int i = 0; i < damping.Length; i++)
-			{
-				damping[i] = (float)Math.Pow(damping[i], exponent);
-			}
-			// A sub-step is 1/subSteps long, so c²·dt² shrinks by 1/subSteps².
-			c2Mult = 1f / (_subSteps * _subSteps);
-		}
-		IntPtr c2Buffer = CreateBuffer(c2, _scene);
-		IntPtr dBuffer = CreateBuffer(damping, _scene);
+		(float[] c2, float[] damping, float c2Mult) = SceneMaps(scene);
+		IntPtr c2Buffer = _c2Buffer = CreateBuffer(c2, _scene);
+		IntPtr dBuffer = _dBuffer = CreateBuffer(damping, _scene);
 		float[] zeros = new float[_cells];
 		_field[0] = CreateBuffer(zeros, _scene);
 		_field[1] = CreateBuffer(zeros, _scene);
@@ -464,15 +518,7 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			frequencies[level] = (float)(level / 255.0 * 0.5 * sourceFrequencyScale);
 		}
 		_frequencyBuffer = CreateBuffer(frequencies, _scene);
-		// the image sources (from the green channel of the scene image)
-		int[] indices = new int[_sourceCount];
-		int[] levels = new int[_sourceCount];
-		for (int i = 0; i < _sourceCount; i++)
-		{
-			indices[i] = (scene.SourceY[i] + 1) * _stride + scene.SourceX[i] + 1;
-			levels[i] = scene.SourceLevel[i];
-			_levelUsed[scene.SourceLevel[i]] = true;
-		}
+		(int[] indices, int[] levels) = SourceTables(scene);
 		// the intensity's averaging time constant scales inversely with the frequency of the slowest active source
 		// (image or object; a level of 0 means "no source" and is excluded) - see WaveSimulator's identical
 		// computation (CPU engine) and Simulation.TimeDecay's comment for why. This exponential-average decay
@@ -520,8 +566,8 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 			_device.Name, _width, _height, _canvasWidth, _canvasHeight, _rim, _openEdges ? "open" : "reflective", _stride, GroupText(_stepLocal), WaveSimulator.StencilText(use4thOrderLaplacian, _subSteps));
 		if (_sourceCount > 0)
 		{
-			IntPtr indexBuffer = CreateBuffer(indices, _scene);
-			IntPtr levelBuffer = CreateBuffer(levels, _scene);
+			IntPtr indexBuffer = _sourceIndexBuffer = CreateBuffer(indices, _scene);
+			IntPtr levelBuffer = _sourceLevelBuffer = CreateBuffer(levels, _scene);
 			for (int k = 0; k <= 1; k++)
 			{
 				IntPtr kernel = _sourceKernel[k] = CreateKernel(_scene, "apply_sources");
@@ -1772,6 +1818,9 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 	/// <summary>Whether the intensity is tracked; when false the intensity buffers are 1-float dummies and <see cref="IntensityData"/> is null.</summary>
 	private readonly bool _track;
 
+	/// <summary>Whether the program was compiled for the 4th-order stencil (the sub-steps follow the scene's highest c² then).</summary>
+	private readonly bool _fourthOrder;
+
 	/// <summary>Number of image (green-channel) sources in the scene.</summary>
 	private readonly int _sourceCount;
 
@@ -1792,6 +1841,14 @@ public sealed class GpuWaveSimulator : IWaveEngine, IDisposable
 
 	/// <summary>The level-to-frequency table (256 floats), shared by the image and the object sources.</summary>
 	private IntPtr _frequencyBuffer;
+
+	/// <summary>The padded c² and pre-scaled damping maps bound to the step and edge kernels; refilled by <see cref="TryReplaceScene"/>.</summary>
+	private IntPtr _c2Buffer;
+	private IntPtr _dBuffer;
+
+	/// <summary>The image sources' cell indices and levels bound to <c>apply_sources</c> (unset without image sources); refilled by <see cref="TryReplaceScene"/>.</summary>
+	private IntPtr _sourceIndexBuffer;
+	private IntPtr _sourceLevelBuffer;
 
 	/// <summary>The two cascaded intensity stages (1-float dummies when not tracking), kept so <see cref="Reset"/> can zero them.</summary>
 	private IntPtr _intensityBuffer;

@@ -119,51 +119,16 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		_u = new float[cellCount];
 		_uPrev = new float[cellCount];
 		_c2 = new float[cellCount];
-		float[] damping = new float[cellCount];
+		_damping = new float[cellCount];
 		if (trackIntensity)
 		{
 			_intensity = new float[cellCount];
 			_intensityStage1 = new float[cellCount];
 			_intensityOut = new float[cellCount];
 		}
-		for (int y = 0; y < _height; y++)
-		{
-			Array.Copy(scene.C2, y * _width, _c2, (y + 1) * _stride + 1, _width);
-			Array.Copy(scene.D, y * _width, damping, (y + 1) * _stride + 1, _width);
-		}
-
-		// see the class remarks: sub-stepping keeps the 4th order stencil stable without changing the physical
-		// wave speed or damping - _subSteps stays 1 (no sub-stepping) unless the 4th order stencil is in use and
-		// this scene's highest c² actually needs it
-		_subSteps = use4thOrderLaplacian ? ComputeSubSteps(MaxOf(_c2)) : 1;
-		if (_subSteps > 1)
-		{
-			// Damping is applied once per sub-step, so take the sub-step root to keep the per-step decay unchanged
-			// (_subSteps applications of it compound back to the original d).
-			_damping = new float[cellCount];
-			double exponent = 1.0 / _subSteps;
-			for (int i = 0; i < cellCount; i++)
-			{
-				_damping[i] = (float)Math.Pow(damping[i], exponent);
-			}
-			// A sub-step is 1/subSteps long, so c²·dt² shrinks by 1/subSteps².
-			_c2Mult = 1f / (_subSteps * _subSteps);
-		}
-		else
-		{
-			_damping = damping;
-			_c2Mult = 1f;
-		}
-
-		int sourceCount = scene.SourceCount;
-		_sourceIndex = new int[sourceCount];
-		_sourceLevel = new byte[sourceCount];
-		for (int i = 0; i < sourceCount; i++)
-		{
-			_sourceIndex[i] = (scene.SourceY[i] + 1) * _stride + scene.SourceX[i] + 1;
-			_sourceLevel[i] = scene.SourceLevel[i];
-			_levelUsed[scene.SourceLevel[i]] = true;
-		}
+		_sourceIndex = new int[scene.SourceCount];
+		_sourceLevel = new byte[scene.SourceCount];
+		LoadScene(scene);
 		for (int level = 0; level <= 255; level++)
 		{
 			_levelFrequency[level] = level / 255.0 * 0.5 * sourceFrequencyScale;
@@ -234,6 +199,62 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 		ResetEmitterState();
 		_time = 0.0;
 		SetProbes(null);
+	}
+
+	/// <inheritdoc/>
+	public bool TryReplaceScene(SceneData scene)
+	{
+		if (scene.Width != _width || scene.Height != _height || scene.Rim != _rim || scene.OpenEdges != _openEdges || scene.SourceCount != _sourceIndex.Length)
+		{
+			return false;
+		}
+		LoadScene(scene);
+		Reset();
+		// Reset keeps the emitters' definitions; their intensity constant follows the new image sources' levels
+		SetEmitters(_objSources);
+		return true;
+	}
+
+	/// <summary>
+	/// Fills the per-cell maps and the image-source tables from <paramref name="scene"/>, which must have this engine's
+	/// grid and source count: c² and d into the padded layout, the sub-steps and the per-sub-step damping and c² corrections
+	/// for the 4th-order stencil, the sources indexed, the levels in use noted. The constructor's and <see cref="TryReplaceScene"/>'s.
+	/// </summary>
+	private void LoadScene(SceneData scene)
+	{
+		int cellCount = _c2.Length;
+		for (int y = 0; y < _height; y++)
+		{
+			Array.Copy(scene.C2, y * _width, _c2, (y + 1) * _stride + 1, _width);
+			Array.Copy(scene.D, y * _width, _damping, (y + 1) * _stride + 1, _width);
+		}
+		// see the class remarks: sub-stepping keeps the 4th order stencil stable without changing the physical
+		// wave speed or damping - _subSteps stays 1 (no sub-stepping) unless the 4th order stencil is in use and
+		// this scene's highest c² actually needs it
+		_subSteps = _use4thOrderLaplacian ? ComputeSubSteps(MaxOf(_c2)) : 1;
+		if (_subSteps > 1)
+		{
+			// Damping is applied once per sub-step, so take the sub-step root to keep the per-step decay unchanged
+			// (_subSteps applications of it compound back to the original d).
+			double exponent = 1.0 / _subSteps;
+			for (int i = 0; i < cellCount; i++)
+			{
+				_damping[i] = (float)Math.Pow(_damping[i], exponent);
+			}
+			// A sub-step is 1/subSteps long, so c²·dt² shrinks by 1/subSteps².
+			_c2Mult = 1f / (_subSteps * _subSteps);
+		}
+		else
+		{
+			_c2Mult = 1f;
+		}
+		Array.Clear(_levelUsed);
+		for (int i = 0; i < _sourceIndex.Length; i++)
+		{
+			_sourceIndex[i] = (scene.SourceY[i] + 1) * _stride + scene.SourceX[i] + 1;
+			_sourceLevel[i] = scene.SourceLevel[i];
+			_levelUsed[scene.SourceLevel[i]] = true;
+		}
 	}
 
 	/// <summary>An ordinary snapshot (pinned arrays): the CPU converts into it on the awaiting thread, and no memory is faster for that.</summary>
@@ -945,7 +966,7 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 	/// Leapfrog sub-steps per simulation step (see the class remarks); 1 (no sub-stepping) unless the 4th-order
 	/// stencil is on and this scene's highest c² needs it.
 	/// </summary>
-	private readonly int _subSteps;
+	private int _subSteps;
 
 	/// <summary>
 	/// Per-cell damping applied per sub-step (padded), 1 = lossless: the scene's map itself when
@@ -959,7 +980,7 @@ public sealed class WaveSimulator : IWaveEngine, IDisposable
 	private readonly bool _openEdges;
 
 	/// <summary>1/<see cref="_subSteps"/>², scaling c² for the shorter sub-step (or exactly 1.0F when _subSteps = 1, a bit-for-bit no-op multiply).</summary>
-	private readonly float _c2Mult;
+	private float _c2Mult;
 
 	/// <summary>
 	/// The intensity's exponential-average decay factor for this simulation (replaces the old fixed 0.98F) - see

@@ -137,7 +137,11 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   .NET-pinned array is pageable to the driver, which drained the queue and copied on the stepping thread inside the
   "non-blocking" enqueue, 2.9 of a full-HD frame's 2.96 ms (the old note blamed the single queue: a second queue alone
   changed nothing). The scratch runner's snapshots stay ordinary, since a result outlives its engine;
-  `Reset`, `SetEmitters`, `SetProbes`. Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
+  `Reset`, `SetEmitters`, `SetProbes`, `TryReplaceScene` (another scene of the same grid, edges and image-source count
+  swapped into the kept engine: the GPU re-uploads c², damping and the source tables into its buffers and keeps the
+  compiled program, the sub-steps re-derived; 2026-11-03, the user's choice: the scratch runner uses it, 55 ms for
+  Example 16 against the 180–350 ms OpenCL build every part edit had cost; `library_check` proves a replaced engine
+  steps like a fresh one on both engines). Numerics are Jeroen's (dx = dt = 1, leapfrog, 9-point or 4th-order
   Laplacian, soft sources, EMA intensity; a scene pixel with red 0 is a mirror, n = 1000, his V0.30 rule,
   2026-10-18), verified CPU = GPU by the harness; seeds from `Pcg32` make CPU = GPU
   bit for bit on random gaps. A source's frequency level, amplitude and phase take decimals (2026-10-19, Jeroen's point 10); the
@@ -186,7 +190,9 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
 ## The app's rules
 
 - **Live editing**: a simulation edit (scene, solver, seed, sources) marks the run stale, **stops playback and any
-  active run**, requests a scratch frame for the position (120 ms debounce) and re-runs automatically after 1.5 s
+  active run**, requests a scratch frame for the position (120 ms debounce; the scratch runner keeps its engine across a
+  scene edit of the same grid, `TryReplaceScene`, and rebuilds only for another grid, edges or options) and re-runs
+  automatically after 1.5 s
   of quiet (setting, default on); an automatic run never moves the preview. A probe edit never starts a run: only
   the recordings are stale, the scratch frame refreshes the graph; except that an active probe the run does not
   record (switched on, added) is a simulation edit (2026-10-18). No scratch frame while playback runs. Any run
@@ -441,13 +447,19 @@ Example 7 (2880×1080 in a 458×172 picture, both layers, playing): 16-bit 7.3�
 10–11 (its bitmaps are canvas-sized). Presenter about 7 ms a frame quiet, 20 during a run. JPEG 1080p at 4:4:4: WIC 26 ms a frame
 single-threaded (9 ms a frame in a sequence job on half the cores), in-house 9.8 ms on ten cores (15 in a job);
 MP4 job 16 ms a frame. Part painter on a Full HD canvas (ten cores): a 400 × 330 outline 30 ms, a 400 px lens 5, a hexagon 8, an S-bent fibre across the canvas 51 (156 chords on the cell grid; 1.3 s without it);
-the glowing edges 22 ms; the preview's scene pictures about 100 ms more, so the scene rebuild is coalesced at background priority. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
+the glowing edges 22 ms; the preview's scene pictures about 100 ms more, so the scene rebuild is coalesced at background priority.
+**Dragging a part is choppy because of that composition** (2026-11-03, the log of a drag in Example 16: every coalesced
+update repaints all four rectangles, one the whole canvas, "composed in 115–270 ms" on the UI thread, then 20–30 ms of
+pictures; the painter spends 35–60 ns a pixel on ten cores even on a plain rectangle); the remedies on the table are a
+worker thread with a snapshot of the parts (`OpticalPart.Clone` copies the point and node lists), a faster painter
+(profile first), or no repaint while the mouse button is held; not an incremental painter, since a coating's band rises
+from the index beneath it. Laptop (2 cores, HD 520, HDD): iGPU 4.3 ms a step against CPU 14.7; the ball
 lens run 105 s full quality (disk-bound), 61 s at half resolution with every second frame, in RAM. Settled by these
 numbers: no GPU JPEG, no OpenCL colouring at presentation, no `Vector256`, no Direct3D display path.
 
 ## Harnesses
 
-`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots).
+`library_check` (100+ checks: engines, store, renderer, half tables, screen path, schemes, probes, scratch, reduced preview, importer, export, parts, group move, open edges, work groups on a prime grid, ranges, XOR gate, zone plate, gate port follower, history, clipboard, the project file's DTD, the first start's tiers, the engine's page-locked snapshots, scene replacement).
 UI, all on `Common.ps1`, with their check counts: `PreviewCheck` 43, `RunCheck` 71, `LanguageCheck` 11,
 `ProbeGraphCheck` 39, `ImportCheck` 10, `ExportCheck` 44, `PreviewQualityCheck` 35, `SceneImageCheck` 8,
 `ColorPickerCheck` 13, `KeyboardCheck` 13, `AboutCheck` 18, `SelectionCheck` 10. Test projects `tiny*.wdproj` sit beside them. The

@@ -262,6 +262,7 @@ internal static class Program
 
 		CheckEngines(scene, W, H, Steps);
 		CheckCaptureResetEmitters(scene, W, H);
+		CheckSceneReplacement();
 		CheckDeterminism(scene);
 		CheckEmitterMapping();
 		CheckMirror(W, H);
@@ -1388,6 +1389,42 @@ internal static class Program
 	/// whole groups, and the surplus work items must change nothing: the field with the open ring, and both capture
 	/// formats, agree with the CPU.
 	/// </summary>
+	/// <summary>TryReplaceScene (2026-11-03): an engine given another scene of its grid steps like a fresh one on it, on both engines; another grid is refused.</summary>
+	private static void CheckSceneReplacement()
+	{
+		Console.WriteLine("--- scene replacement");
+		const int W = 96, H = 64;
+		// 4th order, so the sub-steps follow the scene's highest c²: index 1 needs 3, index 1.6 fewer
+		var options = new EngineOptions(1.0, 1.0, true, true, 10.0, 1.0);
+		SceneData first = SceneData.Empty(W, H, -8, 1.0, true);
+		SceneData second = SceneData.Empty(W, H, -8, 1.6, true);
+		SceneData otherGrid = SceneData.Empty(W + 1, H, -8, 1.0, true);
+		List<Emitter> emitters = [Make(W / 2, H / 2, 120, 1.0)];
+		var reference = new WaveSimulator(second, options, emitters);
+		Run(reference, 60);
+		GpuWaveSimulator? gpu = GpuWaveSimulator.TryCreate(first, options, emitters, out string problems);
+		if (gpu == null)
+		{
+			Console.WriteLine("  skip GPU: " + problems);
+		}
+		foreach ((IWaveEngine engine, string name) in new (IWaveEngine, string)[] { (new WaveSimulator(first, options, emitters), "CPU"), (gpu!, "GPU") })
+		{
+			if (engine == null)
+			{
+				continue;
+			}
+			Run(engine, 30);
+			Check(!engine.TryReplaceScene(otherGrid), name + ": a scene of another grid is refused");
+			Check(engine.TryReplaceScene(second), name + ": a scene of the same grid is taken");
+			Run(engine, 60);
+			engine.PrepareFrame(true, true);
+			float tolerance = name == "CPU" ? 0f : 2e-3f * Math.Max(1f, MaxAbs(reference.FieldData));
+			float diff = MaxDiff(reference.FieldData, engine.FieldData);
+			Check(diff <= tolerance && MaxAbs(engine.FieldData) > 0f, name + ": after the replacement the engine steps like a fresh one on the new scene (max diff " + diff + ")");
+			(engine as IDisposable)?.Dispose();
+		}
+	}
+
 	private static void CheckWorkGroups()
 	{
 		Console.WriteLine("--- work groups on a prime grid");

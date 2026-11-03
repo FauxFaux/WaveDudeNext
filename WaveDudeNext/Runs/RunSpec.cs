@@ -194,6 +194,10 @@ public sealed class RunSpec
 	/// <summary>Whether the object sources are the same emitters, value for value.</summary>
 	public bool SameEmittersAs(RunSpec other) => Emitters.AsSpan().SequenceEqual(other.Emitters.AsSpan());
 
+	/// <summary>Whether the engine built for <paramref name="other"/> can take this spec's scene through <see cref="Engine.IWaveEngine.TryReplaceScene"/>: the same grid, edges, options and engine choice, the scene's pixels or background aside.</summary>
+	public bool SameGridAs(RunSpec other) =>
+		Width == other.Width && Height == other.Height && DampingEdge == other.DampingEdge && Edges == other.Edges && Engine == other.Engine && PreferGpu == other.PreferGpu;
+
 	/// <summary>Builds the engine's scene input from the snapshot. Worker; allocates the per-pixel maps.</summary>
 	internal SceneData BuildScene() => Image is { } image
 		? SceneData.FromBgra(image.Bgra, image.Width, image.Height, image.StrideBytes, ImageSources, DampingEdge, Edges == EdgeMode.Open)
