@@ -30,7 +30,21 @@ The simulation runs on the GPU, or on the CPU where there is no suitable GPU. On
 
 ## Examples
 
-A set of example projects opens from the File menu, from a single source and a mirror to fibres, a ball lens and logic gates. WaveDude Next is the successor of Wave Dude 2D by Jeroen Vleggaar (Huygens Optics); it opens Wave Dude 2D projects directly, and the classic examples are included.
+A set of example projects opens from the File menu, from a single source and a mirror to fibres, a ball lens and logic gates, the classic Wave Dude 2D examples among them.
+
+## Improvements over Wave Dude 2D (Classic)
+
+WaveDude Next is the successor of Wave Dude 2D by Jeroen Vleggaar (Huygens Optics). It opens Wave Dude 2D projects directly and computes with the same numerics, so a scene gives the same result. New in WaveDude Next:
+
+- **Optical parts** are built in the program: lenses, mirrors, polygons and other shapes, fibres, Bragg reflectors, gradient-index lenses, zone plates and logic gates, with coatings and absorption, moved and shaped by handles on the picture.
+- **Field and intensity side by side on a timeline**: every frame of a run is kept, for scrubbing, playback at any speed, looping and a range between in and out points.
+- **Live editing**: the frame on screen is recomputed after every change, and the run starts over by itself.
+- **Open edges**: waves leave the canvas through an absorbing rim outside it, so the whole canvas stays usable.
+- **Probes without limit**, with their graphs over the pictures, a logarithmic axis and CSV export.
+- **16-bit frames with dithering** for finer gradients, a frame cache that spills to disk when a run outgrows the memory, and a preview quality chosen for the machine.
+- **More export formats**: MPEG-1, lossless QuickTime, PNG and JPEG sequences and OpenEXR data files, with probe graphs and markers drawn in.
+- **New project format**: a project is a single file, with no root folder to set up and no folders to keep in order; unlimited undo and redo, and copy and paste or drag and drop between projects.
+- **The workspace**: docking panes, a dark and a light theme, English, German, French and Dutch, UI zoom, every control from the keyboard, and a built-in manual.
 
 ## Get it
 
