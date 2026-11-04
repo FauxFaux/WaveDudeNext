@@ -289,8 +289,27 @@ public static class WindowZoom
 	// ---------------------------------------------------------------- trees
 
 	/// <summary>The content under a zoomed root: rounding on the zoomed grid, and with <paramref name="scaled"/> the scale and the Ideal formatting themselves.</summary>
+	/// <summary>
+	/// How text is rasterised in every window and popup: Auto, which is ClearType on a screen, unless the start-up switch
+	/// <c>--greyscale-text</c> made it Grayscale (2026-11-04, the user's rule for the manual's figures: a picture never lands
+	/// on the reader's subpixel grid, so its text carries no colour fringes; the app itself keeps ClearType). Read when
+	/// the styles load, so it is set before any window.
+	/// </summary>
+	public static TextRenderingMode TextRendering { get; set; } = TextRenderingMode.Auto;
+
 	private static void ZoomContent(FrameworkElement content, double zoom, bool scaled)
 	{
+		if (scaled)
+		{
+			if (TextRendering == TextRenderingMode.Auto)
+			{
+				content.ClearValue(TextOptions.TextRenderingModeProperty);
+			}
+			else
+			{
+				TextOptions.SetTextRenderingMode(content, TextRendering);
+			}
+		}
 		if (zoom == 1)
 		{
 			content.ClearValue(FrameworkElement.UseLayoutRoundingProperty);

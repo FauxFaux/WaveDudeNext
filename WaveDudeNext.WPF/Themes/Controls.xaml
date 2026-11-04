@@ -367,6 +367,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 		<Setter Property="HasDropShadow" Value="False" />
 		<Setter Property="LayoutTransform" Value="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource ZoomTransform}}" />
 		<Setter Property="TextOptions.TextFormattingMode" Value="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource ZoomTextFormatting}}" />
+		<Setter Property="TextOptions.TextRenderingMode" Value="{x:Static theming:WindowZoom.TextRendering}" />
 		<Setter Property="theming:WindowZoom.Standalone" Value="True" />
 		<Setter Property="Template">
 			<Setter.Value>
@@ -745,6 +746,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 		<Setter Property="HasDropShadow" Value="False" />
 		<Setter Property="LayoutTransform" Value="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource ZoomTransform}}" />
 		<Setter Property="TextOptions.TextFormattingMode" Value="{Binding Source={x:Static p:Settings.Default}, Path=UiZoom, Converter={StaticResource ZoomTextFormatting}}" />
+		<Setter Property="TextOptions.TextRenderingMode" Value="{x:Static theming:WindowZoom.TextRendering}" />
 		<Setter Property="theming:WindowZoom.Standalone" Value="True" />
 		<Setter Property="Template">
 			<Setter.Value>

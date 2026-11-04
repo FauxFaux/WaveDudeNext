@@ -236,11 +236,14 @@ function WaitFor([scriptblock]$condition, [int]$timeoutMs = 10000, [int]$pollMs 
 # Windows may hand a new window the foreground. Park it on an off-screen window of our own (when the user
 # is busy elsewhere this silently fails and the foreground stays theirs, which is just as good): every
 # check must then leave the app inactive.
-function Start-App([string]$Exe, [string]$ProjectFile = "") {
+function Start-App([string]$Exe, [string]$ProjectFile = "", [string]$Switches = "") {
 	# an edited project asks "save?" on closing (2026-10-14) in the app's own message window (MessageWindow, 2026-10-18); the harnesses
-	# have no business there, so the app is told to discard
+	# have no business there, so the app is told to discard. $Switches are start-up switches put before the file
+	# ("--greyscale-text" for the figures, 2026-11-04)
 	$env:WAVEDUDE_DISCARD_EDITS = "1"
-	if ($ProjectFile -ne "") { $script:p = Start-Process -FilePath $Exe -ArgumentList ('"' + $ProjectFile + '"') -PassThru }
+	$arguments = $Switches
+	if ($ProjectFile -ne "") { $arguments = ($Switches + ' "' + $ProjectFile + '"').Trim() }
+	if ($arguments -ne "") { $script:p = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru }
 	else { $script:p = Start-Process -FilePath $Exe -PassThru }
 	$script:win = $null
 	for ($i = 0; $i -lt 100 -and $script:win -eq $null; $i++) {

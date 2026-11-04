@@ -160,6 +160,7 @@ The Edit menu.
 4. **Copy**
 5. **Paste**
 6. **Delete**
+7. **Select all**
 
 ## The View menu
 
@@ -261,13 +262,13 @@ The File > Examples submenu: the shipped example projects.
    Continuous point source and high refractive index ball lens. Probe 2A-B features 1/r intensity decay from the source with some interference of some reflections superimposed on it.
 22. **22. Coherence and ball lens**  
    A coherent and directional source directing its waves at a ball lens with a high refractive index. It demonstrates Gaussian beam and Airy disk profiles
-23. **23. Fibers**  
-   Simulation of 3 different fibers:
-- Top: single mode fiber
-- Middle: narrow multi-mode fiber
-- Bottom: wide multi-mode fiber
+23. **23. Fibres**  
+   Simulation of 3 different fibres:
+- Top: single mode fibre
+- Middle: narrow multi-mode fibre
+- Bottom: wide multi-mode fibre
 Includes the use of two probes, an A-B (line) field probe and a single point intensity probe.
-24. **24. Fiber cross over**  
+24. **24. Fibre cross over**  
    Two single-mode fibres side by side, their cores a dozen pixels apart: the evanescent field of one reaches into the other, so light launched into fibre A crosses over into fibre B and back along the length, a directional coupler. The probe along A shows the beating, the cross-fibre probe the field across both cores. Switch source A off and B on to launch from the other fibre.
 
 ## The Add part menu

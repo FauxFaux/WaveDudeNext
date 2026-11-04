@@ -600,7 +600,10 @@ the preview and the timeline from `Examples/Example16_Wave_in_2_boxes.wdproj` (a
 properties form of every object kind from `figures.wdproj` beside the harnesses (one of each kind, made with the
 library's adders), plus two crops of the rectangle's form for the manual's sections on the settings several forms share
 (`Properties-Figure` takes a row range, a section heading and the first badge's number, so the crops keep the whole
-form's numbers; 2026-10-30, the user's request); dark theme, English, **UI zoom 1.25** (2026-11-02, the user's choice,
+form's numbers; 2026-10-30, the user's request); dark theme, English, **greyscale text** (the app's `--greyscale-text` switch, the script's `-TextSwitch`; 2026-11-04,
+the user's rule: a figure never lands on the reader's subpixel grid, so its text carries no ClearType fringes, while the
+app itself keeps ClearType; `WindowZoom.TextRendering`, set before any window and read by the standalone popup styles
+too), **UI zoom 1.25** (2026-11-02, the user's choice,
 so the figures are sharp on denser screens; the window 1642 × 1408 px on the monitor at 100 %), the user's 1314 × 1126
 arrangement, his settings put back afterwards. A pointer resting on the window is parked just outside it for a capture and put back at
 the end (2026-10-30: it lay on a probe's graph box, whose hover border changed the main window's picture between two

@@ -47,7 +47,8 @@ param(
 	[string]$Out = (Join-Path $PSScriptRoot "..\..\Assets"),
 	[int]$Frame = 1200,
 	[string]$PngFolder = "",
-	[double]$Zoom = 1.25
+	[double]$Zoom = 1.25,
+	[string]$TextSwitch = "--greyscale-text"
 )
 . (Join-Path $PSScriptRoot "Common.ps1")
 
@@ -528,7 +529,7 @@ $null = $script:legend.AppendLine("# Figures").AppendLine().AppendLine("Generate
 try {
 	# ----- session 1: the example project ---------------------------------------------------------------------
 	Set-FigureSettings 475 563
-	Start-App $Exe $Example
+	Start-App $Exe $Example $TextSwitch
 	try {
 		# waves in the pictures: a scratch frame at the wanted position (PageUp moves ten frames)
 		FocusOn "PreviewTimeline"
@@ -710,7 +711,7 @@ try {
 	# ----- session 2: one object of every kind, a short tree, the properties pane at full height ------------------
 	Restore-Settings
 	Set-FigureSettings 140 1172 1400
-	Start-App $Exe (Join-Path $PSScriptRoot "figures.wdproj")
+	Start-App $Exe (Join-Path $PSScriptRoot "figures.wdproj") $TextSwitch
 	try {
 		$tree = (ByType $script:win "Tree")[0]
 		$ids = @(ByType $tree "TreeItem" | ForEach-Object { $_.Current.AutomationId })

@@ -262,8 +262,9 @@ public partial class App : Application
 	/// <summary>
 	/// Reads the start-up arguments: the switches are applied (<c>--zoom=&lt;factor&gt;</c> sets the UI zoom setting,
 	/// <see cref="Settings.UiZoom"/>, as the View menu does, 0.5 to 8 with a decimal point, 2026-11-01, the user's
-	/// request for the figure harness; an unknown switch is logged and ignored), and the first other argument is the
-	/// project file to open, returned, or null.
+	/// request for the figure harness; <c>--greyscale-text</c> rasterises all text greyscale for this start, for the
+	/// figures, <see cref="WindowZoom.TextRendering"/>; an unknown switch is logged and ignored), and the first other
+	/// argument is the project file to open, returned, or null.
 	/// </summary>
 	private static string? ReadArguments(string[] args)
 	{
@@ -286,6 +287,12 @@ public partial class App : Application
 				{
 					Logger.Warn("The start-up switch {Switch} is ignored: the zoom must be a number from 0.5 to 8", arg);
 				}
+			}
+			else if (arg.Equals("--greyscale-text", StringComparison.OrdinalIgnoreCase))
+			{
+				// the manual's figures (2026-11-04, the user's rule): their text never meets the reader's subpixel grid
+				WindowZoom.TextRendering = System.Windows.Media.TextRenderingMode.Grayscale;
+				Logger.Info("Text is rasterised greyscale ({Switch}), for the figures", arg);
 			}
 			else if (arg.StartsWith("--", StringComparison.Ordinal))
 			{
