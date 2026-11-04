@@ -25,6 +25,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Threading;
 using System.Windows.Threading;
 using WaveDudeNext.Model;
 using WaveDudeNext.Rendering;
@@ -52,9 +53,10 @@ namespace WaveDudeNext.WPF.Panes;
 /// While a run is in progress the axis spans the planned frames (<see cref="PlannedLastFrame"/>)
 /// and <see cref="LastFrame"/> is the last frame that exists so far; <see cref="IsLive"/> keeps
 /// <see cref="Position"/> on that newest frame until the user scrubs, steps or plays, and the
-/// Live button (or F) re-attaches. Playback runs on a <see cref="DispatcherTimer"/> on the UI
-/// thread: a speed of 1 advances <see cref="Fps"/> (the project's video frame rate) frames per
-/// second of wall-clock time, measured with a stopwatch so that a slow tick does not slow the
+/// Live button (or F) re-attaches. Playback runs on a thread timer whose ticks are posted to the UI
+/// thread at render priority (not a <see cref="DispatcherTimer"/>, a Win32 timer message, which a stream of
+/// mouse moves starves, 2026-11-04): a speed of 1 advances <see cref="Fps"/> (the project's video frame rate)
+/// frames per second of wall-clock time, measured with a stopwatch so that a slow tick does not slow the
 /// clock. Play, Pause and Space (toggle) are the built-in <see cref="MediaCommands"/>.
 /// Keyboard: every transport control is a tab stop (play, pause, scrubber, speed, split, and
 /// the splitter between the pictures). The split radios are one stop that lands on the checked
@@ -277,7 +279,8 @@ public partial class PreviewPane : UserControl
 	public static readonly DependencyProperty IntensitySettingsProperty = DependencyProperty.Register(
 		nameof(IntensitySettings), typeof(DisplayLayer), typeof(PreviewPane), new PropertyMetadata(null, (d, e) => ((PreviewPane)d).OnLayerSettingsChanged(FrameLayer.Intensity, e)));
 
-	private readonly DispatcherTimer _timer;
+	private readonly Timer _ticker;
+	private int _tickPending;
 	private readonly DispatcherTimer _busyDelay;
 	private readonly Stopwatch _clock = new();
 	private readonly FramePresenter _presenter;
@@ -339,10 +342,23 @@ public partial class PreviewPane : UserControl
 		SetBinding(SceneHeightProperty, new Binding($"{nameof(Project)}.{nameof(Model.Project.Scene)}.{nameof(Scene.Height)}") { Source = this, Mode = BindingMode.OneWay });
 		UpdateCanvas();
 
-		// render priority, on purpose (2026-10-16): a try at background priority, to put input first, gained nothing
-		// measurable during a run and made the clock wait behind every mouse move while scrubbing
-		_timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1.0 / 60.0) };
-		_timer.Tick += OnTick;
+		// a thread timer that posts the tick to the UI thread at render priority, not a DispatcherTimer (2026-11-04, the
+		// user's report: playback stuttered while the mouse moved; a DispatcherTimer is a Win32 timer message, which
+		// Windows delivers only when no input is queued, so a stream of mouse moves starved the clock and no frame came
+		// for seconds; a posted operation is taken before input). Render priority, on purpose (2026-10-16): a try at
+		// background priority, to put input first, gained nothing measurable during a run and made the clock wait behind
+		// every mouse move while scrubbing. One tick in flight at a time, so a slow UI thread does not pile them up
+		_ticker = new Timer(_ =>
+		{
+			if (Interlocked.Exchange(ref _tickPending, 1) == 0)
+			{
+				Dispatcher.BeginInvoke(DispatcherPriority.Render, () =>
+				{
+					Volatile.Write(ref _tickPending, 0);
+					OnTick();
+				});
+			}
+		});
 		_busyDelay = new DispatcherTimer(DispatcherPriority.Normal) { Interval = BusyOverlayDelay };
 		_busyDelay.Tick += (_, _) =>
 		{
@@ -1015,11 +1031,11 @@ public partial class PreviewPane : UserControl
 			}
 			pane._carry = 0.0;
 			pane._clock.Restart();
-			pane._timer.Start();
+			pane._ticker.Change(0, TickMilliseconds);
 		}
 		else
 		{
-			pane._timer.Stop();
+			pane._ticker.Change(Timeout.Infinite, Timeout.Infinite);
 			pane._clock.Stop();
 		}
 		CommandManager.InvalidateRequerySuggested();
@@ -1047,8 +1063,15 @@ public partial class PreviewPane : UserControl
 	/// Advances <see cref="Position"/> by the frames elapsed since the previous tick. At the out
 	/// point playback stops, or wraps to the in point when <see cref="IsLooping"/>.
 	/// </summary>
-	private void OnTick(object? sender, EventArgs e)
+	/// <summary>The ticker's period: 60 ticks a second asked for, what the system timer gives (about 64 a second, or 32 at its coarser resolution); the stopwatch keeps the pace either way.</summary>
+	private const int TickMilliseconds = 16;
+
+	private void OnTick()
 	{
+		if (!IsPlaying)
+		{
+			return;   // a tick posted just before Pause
+		}
 		double seconds = _clock.Elapsed.TotalSeconds;
 		_clock.Restart();
 		_carry += seconds * Fps * Speed;

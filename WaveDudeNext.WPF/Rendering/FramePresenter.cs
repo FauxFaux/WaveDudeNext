@@ -64,6 +64,10 @@ public sealed class FramePresenter
 	private readonly Stopwatch _renderClock = new();
 	private readonly Stopwatch _copyClock = new(), _colourClock = new(), _writeClock = new();
 	private int _renderCount;
+	// the worst frame of the block beside the averages (2026-11-04, the user's report of a stutter the averages hid):
+	// the longest frame, its longest wait at the bitmap, and the longest gap between two presented frames
+	private long _lastPresented;
+	private double _longestFrame, _longestWrite, _longestGap;
 
 	/// <param name="dispatcher">The UI thread's dispatcher, where the bitmaps live.</param>
 	public FramePresenter(Dispatcher dispatcher) => _dispatcher = dispatcher;
@@ -302,6 +306,8 @@ public sealed class FramePresenter
 		int width = job.Source.Width;
 		int height = job.Source.Height;
 		Logger.Trace("Presenter render: frame {Frame} of {Source} (job {Job})", frame, job.Source.GetType().Name, job.GetHashCode());
+		double renderBefore = _renderClock.Elapsed.TotalMilliseconds;
+		double writeBefore = _writeClock.Elapsed.TotalMilliseconds;
 		_renderClock.Start();
 		var locked = new List<(WriteableBitmap Bitmap, Int32Rect Rect, FrameLayer Layer, bool IsNew)>(2);
 		try
@@ -419,16 +425,27 @@ public sealed class FramePresenter
 		_renderClock.Stop();
 		_renderedFrame = frame;
 		_renderedJob = job;
+		long now = Stopwatch.GetTimestamp();
+		_longestFrame = Math.Max(_longestFrame, _renderClock.Elapsed.TotalMilliseconds - renderBefore);
+		_longestWrite = Math.Max(_longestWrite, _writeClock.Elapsed.TotalMilliseconds - writeBefore);
+		if (_lastPresented != 0)
+		{
+			_longestGap = Math.Max(_longestGap, Stopwatch.GetElapsedTime(_lastPresented, now).TotalMilliseconds);
+		}
+		_lastPresented = now;
 		if (++_renderCount % RenderLogInterval == 0)
 		{
-			// the cost of one presented frame (copy, colouring, bitmap write), averaged; for judging the pipeline at full resolution
-			Logger.Debug("Preview: {Width}x{Height} shown at {ShownWidth}x{ShownHeight}, {Average:0.0} ms per frame over the last {Count} (copy out of the store {Copy:0.0}, colouring {Colour:0.0}, copy into the bitmap {Write:0.0}, all on the pool)",
+			// the cost of one presented frame (copy, colouring, bitmap write), averaged, and the block's worst: for judging
+			// the pipeline at full resolution, and a stutter, which is a gap, not an average
+			Logger.Debug("Preview: {Width}x{Height} shown at {ShownWidth}x{ShownHeight}, {Average:0.0} ms per frame over the last {Count} (copy out of the store {Copy:0.0}, colouring {Colour:0.0}, copy into the bitmap {Write:0.0}, all on the pool); the worst: a frame of {LongestFrame:0.0} ms, a wait at the bitmap of {LongestWrite:0.0}, a gap between frames of {LongestGap:0.0}",
 				width, height, _shownSize.Width, _shownSize.Height, _renderClock.Elapsed.TotalMilliseconds / RenderLogInterval, RenderLogInterval,
-				_copyClock.Elapsed.TotalMilliseconds / RenderLogInterval, _colourClock.Elapsed.TotalMilliseconds / RenderLogInterval, _writeClock.Elapsed.TotalMilliseconds / RenderLogInterval);
+				_copyClock.Elapsed.TotalMilliseconds / RenderLogInterval, _colourClock.Elapsed.TotalMilliseconds / RenderLogInterval, _writeClock.Elapsed.TotalMilliseconds / RenderLogInterval,
+				_longestFrame, _longestWrite, _longestGap);
 			_renderClock.Reset();
 			_copyClock.Reset();
 			_colourClock.Reset();
 			_writeClock.Reset();
+			_longestFrame = _longestWrite = _longestGap = 0.0;
 		}
 	}
 }

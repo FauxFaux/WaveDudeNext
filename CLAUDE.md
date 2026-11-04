@@ -259,7 +259,18 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   picture (the overlays measure to the uniform fit and remeasure on a canvas change) while `PictureFrame` fills its
   cell, so the heading stays at the top.
 - **Play means "show me the simulation"**: it starts an automatic run when needed and holds at the newest frame
-  until the run catches up. Live follows a running run until the user scrubs; it ends with a last follow to the
+  until the run catches up. Space plays or pauses with the focus in the preview, the pane's own binding; a window-level
+  Space that took the key wherever the focused element left it alone was built and reverted the same day (2026-11-04,
+  the user's decision). **The playback clock is a thread timer whose ticks are posted to the
+  UI thread at Render priority** (2026-11-04, the user's report: playback stuttered while the mouse moved, and only a hand
+  on the mouse showed it): a `DispatcherTimer` is a Win32 timer message, which Windows delivers only when no input is
+  queued, so a mouse reporting a thousand times a second starved the clock and no frame came for seconds (a gap of 3.2 s
+  measured under injected moves every millisecond; 63–87 ms at a move every 8 ms); a posted operation is taken before
+  input, and the same flood now leaves gaps of 32–47 ms, 68 at a move every tenth of a millisecond. **The presenter's
+  log line carries the block's worst** beside its averages, the longest frame, the longest wait at the bitmap and the
+  longest gap between two presented frames: a stutter is a gap, which an average over 100 frames hides (it had shown 28
+  frames a second across a 3-second freeze). Measured on the way and settled: the app's input handling is not the cost,
+  injected moves at ten thousand a second changed the frame times by nothing once the clock was posted. Live follows a running run until the user scrubs; it ends with a last follow to the
   final frame. A replaced project goes to frame 0; a discarded run keeps the position. In/out points are steps.
 - **A new source, probe or part lands at the centre of the canvas the preview shows** (2026-10-26, Jeroen's report: one
   at the corner went unnoticed inside the rim); the model's parameterless adders take the scene's size, the window passes
@@ -589,7 +600,13 @@ Wave Dude 2D projects the import checks read (`library_check`, `ImportCheck`, `S
 `_tools/legacy_examples` (2026-10-31, the user's wish: the root folder `Wave_Dude_Examples` with Jeroen's original
 examples is gone from the repository, in history up to 02d0e2d; `library_check` finds the repository root by the
 fixtures folder). A harness
-sets the persisted settings it expects (split orientation, preview quality). Known flake: a second app start in one
+sets the persisted settings it expects (split orientation, preview quality). **A one-off probe may move the real pointer
+when the user says so** (2026-11-04, his instruction for a mouse-related report: `SetCursorPos` and `SendInput` from a
+probe under `%TEMP%`, no clicks, the pointer put back; posted WM_MOUSEMOVE reproduced nothing, and only `SendInput`
+raises the input Windows queues like a device's). **The figure runs can leave a runaway thumbnail cache** (2026-11-04:
+a `dllhost.exe` hosting `thumbcache.dll` had used 81,000 s of CPU, 1.3 cores for seventeen hours, after the night's
+rewrites of the 38 files under Assets; a sampling of every process's CPU while the user moved the mouse found it; the
+user ended it, Windows starts it again when needed). Known flake: a second app start in one
 script sometimes comes up active; only the foreground guard fails then. UI Automation files an owned dialog (the message
 window, the memory warning) under its owner, not among the root's children: find its content below the main window and
 walk up to the Window element for its handle (2026-11-03, half an hour lost to a root search).
