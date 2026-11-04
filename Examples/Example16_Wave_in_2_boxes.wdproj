@@ -18,6 +18,6 @@
 	<Rectangle Name="Left box" X="405" Y="353" RefractiveIndex="1" Length="600" Width="608" />
 	<Rectangle Name="Right box" X="1120" Y="355" RefractiveIndex="1" Length="600" Width="608" />
 	<Rectangle Name="Connection" X="761" Y="359" RefractiveIndex="1" Length="180" Width="62" />
-	<Probe Name="Log Intensity distribution over boxes" Layer="Intensity" Measurement="Value" Kind="Line" AX="107" AY="357" BX="1414" BY="356" BoxX="576" BoxY="670" YScale="Logarithmic" />
+	<Probe Name="Log intensity distribution over boxes" Layer="Intensity" Measurement="Value" Kind="Line" AX="107" AY="357" BX="1414" BY="356" BoxX="576" BoxY="670" YScale="Logarithmic" />
 	<Probe Name="Field amplitude diagonal left box" Kind="Line" AX="105" AY="652" BX="699" BY="57" BoxX="563" BoxY="679" />
 </Project>

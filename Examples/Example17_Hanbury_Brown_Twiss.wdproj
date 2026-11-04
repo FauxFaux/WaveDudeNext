@@ -7,10 +7,10 @@
 		<Field ColorScheme="Yellow purple" BlackLevel="-0.05" />
 		<Intensity ColorScheme="Gray scales" />
 	</Display>
-	<Source Name="Large Incoherent Source" Enabled="false" X="146" Y="520" Mode="Pulsed" OffWidth="50">
+	<Source Name="Large incoherent source" Enabled="false" X="146" Y="520" Mode="Pulsed" OffWidth="50">
 		<Array SizeX="11" SizeY="11" RandomFrequency="30" RandomPhase="179" RandomOffWidth="49" RandomPosition="4" />
 	</Source>
-	<Source Name="Small Incoherent Source" X="156" Y="422" Mode="Pulsed" OffWidth="50">
+	<Source Name="Small incoherent source" X="156" Y="422" Mode="Pulsed" OffWidth="50">
 		<Array SizeX="11" SizeY="11" SpacingX="2" SpacingY="2" RandomFrequency="30" RandomPhase="179" RandomOffWidth="49" RandomPosition="4" />
 	</Source>
 	<GrinLens Name="Telescope 1" X="1863" Y="368" Coating="8" Length="108" />

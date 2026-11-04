@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Version="3" Seed="1567109718">
-	<Description>Simulation of 3 different fibers:
-- Top: single mode fiber
-- Middle: narrow multi-mode fiber
-- Bottom: wide multi-mode fiber
+	<Description>Simulation of 3 different fibres:
+- Top: single mode fibre
+- Middle: narrow multi-mode fibre
+- Bottom: wide multi-mode fibre
 Includes the use of two probes, an A-B (line) field probe and a single point intensity probe.</Description>
 	<Scene DampingEdge="-64" RefractiveIndex="1.01" />
 	<Simulation Steps="6000" WaveSpeed="0.563" />

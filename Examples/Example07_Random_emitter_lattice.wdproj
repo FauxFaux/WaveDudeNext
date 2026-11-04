@@ -8,7 +8,7 @@
 		<Intensity ColorScheme="Default intensity" Brightness="60" />
 		<Video Quality="70" />
 	</Display>
-	<Source Name="emitter lattice" X="937" Y="537" Frequency="90" Mode="Pulsed" PulseWidth="4" OffWidth="1500">
+	<Source Name="Emitter lattice" X="937" Y="537" Frequency="90" Mode="Pulsed" PulseWidth="4" OffWidth="1500">
 		<Array SizeX="41" SizeY="21" SpacingX="50" SpacingY="50" RandomFrequency="30" RandomPhase="180" RandomOffWidth="1500" />
 	</Source>
 	<Probe Name="Probe 1" AX="458" AY="973" BoxX="4" BoxY="880" />

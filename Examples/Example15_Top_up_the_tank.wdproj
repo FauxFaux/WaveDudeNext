@@ -17,7 +17,7 @@
 	<Rectangle Name="Absorber pinhole 1" X="582" Y="353" RefractiveIndex="1" Absorption="255" Length="50" Width="184" />
 	<Rectangle Name="Absorber pinhole 2" X="576" Y="98" RefractiveIndex="1" Absorption="255" Length="50" Width="184" />
 	<Ellipse Name="Reflective cavity" X="1424" Y="655" RefractiveIndex="1" Length="192" Width="186" />
-	<Fiber Name="Fiber" X="1042" Y="223" CoreIndex="1.52" CoreDiameter="7" CladdingIndex="1.41" Ends="Round">
+	<Fiber Name="Fibre" X="1042" Y="223" CoreIndex="1.52" CoreDiameter="7" CladdingIndex="1.41" Ends="Round">
 		<Node X="-109" Y="-3" OutX="67" />
 		<Node X="150" Y="16" InX="-59" InY="-19" OutX="75" OutY="24" />
 		<Node X="305" Y="108" InX="-26" InY="-28" OutX="26" OutY="27" />

@@ -184,8 +184,8 @@ The File > Examples submenu: the example projects shipped with the program, most
 20. **Test glass**: The simulation shows the interference pattern created between two high-refractive index surfaces in close proximity of each other under a small angle.
 21. **Ball lens**: Continuous point source and high refractive index ball lens. Probe 2A-B features 1/r intensity decay from the source with some interference of some reflections superimposed on it.
 22. **Coherence and ball lens**: A coherent and directional source directing its waves at a ball lens with a high refractive index. It demonstrates Gaussian beam and Airy disk profiles
-23. **Fibers**: Simulation of 3 different fibers: top a single mode fiber, middle a narrow multi-mode fiber, bottom a wide multi-mode fiber. Includes the use of two probes, an A-B (line) field probe and a single point intensity probe.
-24. **Fiber cross over**: Two single-mode fibres side by side, their cores a dozen pixels apart: the evanescent field of one reaches into the other, so light launched into fibre A crosses over into fibre B and back along the length, a directional coupler. The probe along A shows the beating, the cross-fibre probe the field across both cores. Switch source A off and B on to launch from the other fibre.
+23. **Fibres**: Simulation of 3 different fibres: top a single mode fibre, middle a narrow multi-mode fibre, bottom a wide multi-mode fibre. Includes the use of two probes, an A-B (line) field probe and a single point intensity probe.
+24. **Fibre cross over**: Two single-mode fibres side by side, their cores a dozen pixels apart: the evanescent field of one reaches into the other, so light launched into fibre A crosses over into fibre B and back along the length, a directional coupler. The probe along A shows the beating, the cross-fibre probe the field across both cores. Switch source A off and B on to launch from the other fibre.
 
 ### The Edit menu
 
