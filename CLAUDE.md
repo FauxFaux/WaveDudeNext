@@ -290,7 +290,17 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   box keeps its own) write the step back into the same project object, the lists refilled and the settings objects
   replaced, so the watcher reports it as an edit (stale run, scratch frame, re-run) and nothing is recorded; the
   selection follows by name, then by index; the title's asterisk clears at the saved step. The Edit menu (between File
-  and View) holds Undo, Redo, Cut, Copy, Paste and Delete; the UI harnesses step over it.
+  and View) holds Undo, Redo, Cut, Copy, Paste, Delete and Select all (2026-11-04, the user's request; Ctrl+A is the
+  command's gesture, so it works in the preview too, a text box keeping its own); the UI harnesses step over it. **Every
+  entry of a menu has a mnemonic of its own, in all four languages** (2026-11-04: the tree's context menu had A, T, P
+  and D shared, so a press moved the highlight and the command needed a second press; a shared string, Cut, Copy, Paste,
+  Select all, the three exports, must be unique in every menu it appears in, the Edit menu, the File > Export submenu,
+  the tree's and the pictures' context menus; proven by posting the Apps key and the letter once on a tree row). **A
+  click on a window's title bar while a menu or a context menu is open lands** (`MenuClickThrough`, 2026-11-04, the
+  user's request: the close button had needed a second click): an open menu holds the mouse for Windows too, so the
+  dismissing click arrives as a client click; it is hit-tested with WM_NCHITTEST and, on the caption, the system menu
+  or a button, posted again as WM_NCLBUTTONDOWN behind the menu's closing; untested by the harnesses, which post no
+  mouse, the user tries it.
 - **Copy, cut, paste, drag and drop** (2026-10-23, the user's choices): `ProjectClipboard` writes sources, parts,
   probes and schemes (the `INamed` items) and the Scene, Simulation and Display objects as a fragment of their own file
   elements, in the app's format and as plain text (read back from text too, so a text editor takes and gives the XML).

@@ -233,6 +233,7 @@ public partial class App : Application
 
 		string? file = ReadArguments(e.Args);
 		WindowZoom.Install();
+		MenuClickThrough.Install();
 		var window = new MainWindow();
 		MainWindow = window;
 		window.Show();

@@ -51,7 +51,10 @@ public static class ProjectCommands
 	public static readonly RoutedUICommand MoveDown = new("Move down", nameof(MoveDown), typeof(ProjectCommands));
 
 	/// <summary>Selects every source, part and probe (Ctrl+A in the tree and on the preview; the tree's context menu).</summary>
-	public static readonly RoutedUICommand SelectAll = new("Select all", nameof(SelectAll), typeof(ProjectCommands));
+	public static readonly RoutedUICommand SelectAll = new("Select all", nameof(SelectAll), typeof(ProjectCommands),
+		// the gesture on the command, so the Edit menu shows it and it works wherever the window's binding is reached, the
+		// preview included; a text box keeps its own Ctrl+A, handled before the window sees the key (2026-11-04)
+		[new KeyGesture(Key.A, ModifierKeys.Control)]);
 
 	/// <summary>Adds the item to the selection or takes it out again (Insert or Ctrl+Space on the tree row; the tree's context menu).</summary>
 	public static readonly RoutedUICommand ToggleSelected = new("Select or deselect", nameof(ToggleSelected), typeof(ProjectCommands));

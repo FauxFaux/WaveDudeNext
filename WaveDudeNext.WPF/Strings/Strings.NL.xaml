@@ -37,7 +37,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuFileExportField">_Veld exporteren...</s:String>
 	<s:String x:Key="MenuFileExportIntensity">_Intensiteit exporteren...</s:String>
 	<s:String x:Key="MenuFileExportBoth">_Beide exporteren...</s:String>
-	<s:String x:Key="MenuFileExportFieldFrame">Veld_beeld exporteren...</s:String>
+	<s:String x:Key="MenuFileExportFieldFrame">V_eldbeeld exporteren...</s:String>
 	<s:String x:Key="MenuFileExportIntensityFrame">Intensiteitsbeel_d exporteren...</s:String>
 	<s:String x:Key="MenuFileExportLast">Laatste export _herhalen</s:String>
 	<s:String x:Key="MenuExportThisFrame">_Dit beeld exporteren...</s:String>
@@ -164,7 +164,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuProjectMoveUp">Om_hoog</s:String>
 	<s:String x:Key="MenuProjectMoveDown">Om_laag</s:String>
 	<s:String x:Key="MenuProjectSelectAll">_Alles selecteren</s:String>
-	<s:String x:Key="MenuProjectToggleSelected">Aan selectie toevoegen of eruit verwij_deren</s:String>
+	<s:String x:Key="MenuProjectToggleSelected">Aan selectie toevoegen of eruit verwijde_ren</s:String>
 	<s:String x:Key="ToolAddSource">Bron</s:String>
 	<s:String x:Key="ToolAddProbe">Sonde</s:String>
 	<s:String x:Key="ToolAddPart">Onderdeel</s:String>

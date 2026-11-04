@@ -39,13 +39,13 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuFileExportBoth">Exporter les _deux...</s:String>
 	<s:String x:Key="MenuFileExportFieldFrame">Exporter l'i_mage du champ...</s:String>
 	<s:String x:Key="MenuFileExportIntensityFrame">Exporter l'image de l'intensi_té...</s:String>
-	<s:String x:Key="MenuFileExportLast">Répéter le _dernier export</s:String>
-	<s:String x:Key="MenuExportThisFrame">Exporter _cette image...</s:String>
+	<s:String x:Key="MenuFileExportLast">Répéter le de_rnier export</s:String>
+	<s:String x:Key="MenuExportThisFrame">Exporter c_ette image...</s:String>
 	<s:String x:Key="MenuBrightness">_Luminosité</s:String>
 	<s:String x:Key="MenuAutoBrightness">Luminosité _automatique</s:String>
 	<s:String x:Key="ButtonAutoBrightness">Auto</s:String>
 	<s:String x:Key="TipAutoBrightness">Ajuster une fois la luminosité à l'image affichée : le demi-pour-cent le plus clair atteint le haut du jeu de couleurs. La luminosité reste ensuite telle quelle.</s:String>
-	<s:String x:Key="MenuExportProbeCsv">Exporter les _données de la sonde en CSV...</s:String>
+	<s:String x:Key="MenuExportProbeCsv">Exporter les données de la sonde en CS_V...</s:String>
 	<s:String x:Key="MenuFileExit">_Quitter</s:String>
 	<s:String x:Key="MenuEdit">_Édition</s:String>
 	<s:String x:Key="MenuEditUndo">_Annuler</s:String>
@@ -141,8 +141,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="ManualContents">Sommaire</s:String>
 	<s:String x:Key="TipManualSplitter">Glisser ou utiliser les flèches pour redimensionner</s:String>
 
-	<s:String x:Key="MenuProjectAddSource">Ajouter une _source</s:String>
-	<s:String x:Key="MenuProjectAddProbe">Ajouter une s_onde</s:String>
+	<s:String x:Key="MenuProjectAddSource">Ajouter une sou_rce</s:String>
+	<s:String x:Key="MenuProjectAddProbe">Ajouter une so_nde</s:String>
 	<s:String x:Key="MenuProjectAddPart">Ajouter un _composant</s:String>
 	<s:String x:Key="MenuAddLens">_Lentille/Miroir</s:String>
 	<s:String x:Key="MenuAddPolygon">_Polygone</s:String>
@@ -164,7 +164,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuProjectMoveUp">_Monter</s:String>
 	<s:String x:Key="MenuProjectMoveDown">D_escendre</s:String>
 	<s:String x:Key="MenuProjectSelectAll">_Tout sélectionner</s:String>
-	<s:String x:Key="MenuProjectToggleSelected">Ajouter à la sélection ou en re_tirer</s:String>
+	<s:String x:Key="MenuProjectToggleSelected">Ajouter à la sélection ou en ret_irer</s:String>
 	<s:String x:Key="ToolAddSource">Source</s:String>
 	<s:String x:Key="ToolAddProbe">Sonde</s:String>
 	<s:String x:Key="ToolAddPart">Composant</s:String>

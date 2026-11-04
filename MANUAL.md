@@ -199,6 +199,7 @@ The Edit menu.
 4. **Copy**: Copies them (Ctrl+C), as text in the project's own format, so they can go into a text editor or another window as well.
 5. **Paste**: Pastes objects behind the selected row (Ctrl+V); a copied Scene, Simulation or Display settings object replaces the project's when pasted on its row or on the project.
 6. **Delete**: Removes the selected objects (Del).
+7. **Select all**: Selects every source, part and probe of the project (Ctrl+A).
 
 ### The View menu
 

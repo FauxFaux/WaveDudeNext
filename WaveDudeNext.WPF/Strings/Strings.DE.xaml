@@ -45,7 +45,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuAutoBrightness">_Automatische Helligkeit</s:String>
 	<s:String x:Key="ButtonAutoBrightness">Auto</s:String>
 	<s:String x:Key="TipAutoBrightness">Die Helligkeit einmal an das gezeigte Bild anpassen: das hellste halbe Prozent erreicht das obere Ende des Farbschemas. Die Helligkeit bleibt danach, wie sie ist.</s:String>
-	<s:String x:Key="MenuExportProbeCsv">Sonden_daten als CSV exportieren...</s:String>
+	<s:String x:Key="MenuExportProbeCsv">Sondendaten als CSV e_xportieren...</s:String>
 	<s:String x:Key="MenuFileExit">_Beenden</s:String>
 	<s:String x:Key="MenuEdit">_Bearbeiten</s:String>
 	<s:String x:Key="MenuEditUndo">_Rückgängig</s:String>
@@ -142,7 +142,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="TipManualSplitter">Ziehen oder Pfeiltasten zum Umverteilen</s:String>
 
 	<s:String x:Key="MenuProjectAddSource">_Quelle hinzufügen</s:String>
-	<s:String x:Key="MenuProjectAddProbe">_Sonde hinzufügen</s:String>
+	<s:String x:Key="MenuProjectAddProbe">S_onde hinzufügen</s:String>
 	<s:String x:Key="MenuProjectAddPart">_Bauteil hinzufügen</s:String>
 	<s:String x:Key="MenuAddLens">_Linse/Spiegel</s:String>
 	<s:String x:Key="MenuAddPolygon">_Polygon</s:String>
@@ -158,12 +158,12 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuAddXorGate">_XOR (Mach-Zehnder)</s:String>
 	<s:String x:Key="MenuAddAndGate">_AND</s:String>
 	<s:String x:Key="MenuAddOrGate">_OR</s:String>
-	<s:String x:Key="MenuProjectToggleEnabled">_Aktiv</s:String>
+	<s:String x:Key="MenuProjectToggleEnabled">Akt_iv</s:String>
 	<s:String x:Key="MenuProjectDuplicate">_Duplizieren</s:String>
-	<s:String x:Key="MenuProjectRemove">_Entfernen</s:String>
-	<s:String x:Key="MenuProjectMoveUp">Nach _oben</s:String>
+	<s:String x:Key="MenuProjectRemove">Ent_fernen</s:String>
+	<s:String x:Key="MenuProjectMoveUp">Nach obe_n</s:String>
 	<s:String x:Key="MenuProjectMoveDown">Nach _unten</s:String>
-	<s:String x:Key="MenuProjectSelectAll">_Alles auswählen</s:String>
+	<s:String x:Key="MenuProjectSelectAll">Alles au_swählen</s:String>
 	<s:String x:Key="MenuProjectToggleSelected">Zur Auswahl hinzufügen oder en_tfernen</s:String>
 	<s:String x:Key="ToolAddSource">Quelle</s:String>
 	<s:String x:Key="ToolAddProbe">Sonde</s:String>

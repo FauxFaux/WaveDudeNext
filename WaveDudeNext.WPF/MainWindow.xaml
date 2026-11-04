@@ -282,6 +282,9 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 				<MenuItem Header="{DynamicResource MenuEditCopy}" Command="ApplicationCommands.Copy" AutomationProperties.AutomationId="MenuCopy" controls:MenuIcon.Glyph="&#xE8C8;" />
 				<MenuItem Header="{DynamicResource MenuEditPaste}" Command="ApplicationCommands.Paste" AutomationProperties.AutomationId="MenuPaste" controls:MenuIcon.Glyph="&#xE77F;" />
 				<MenuItem Header="{DynamicResource MenuEditDelete}" Command="{x:Static commands:EditCommands.Delete}" InputGestureText="Del" AutomationProperties.AutomationId="MenuDelete" controls:MenuIcon.Glyph="&#xE74D;" />
+				<Separator />
+				<!-- the tree's Select all, here too (2026-11-04, the user's request); Ctrl+A is the command's gesture, so it works in the preview as well -->
+				<MenuItem Header="{DynamicResource MenuProjectSelectAll}" Command="{x:Static commands:ProjectCommands.SelectAll}" AutomationProperties.AutomationId="MenuSelectAll" controls:MenuIcon.Glyph="&#xE8B3;" />
 			</MenuItem>
 			<MenuItem Header="{DynamicResource MenuView}">
 				<MenuItem Header="{DynamicResource MenuViewPanes}" controls:MenuIcon.Glyph="&#xE8A0;"
