@@ -653,7 +653,7 @@ try {
 			Add-Badge $fig (New-Object System.Windows.Rect(($x - $Zoom), $timeline.Top, (2 * $Zoom), $timeline.Height)) "above" $mark[0]
 		}
 		foreach ($pair in @(
-			@("PreviewRun", "Run the simulation"), @("PreviewPlay", "Play"), @("PreviewPause", "Pause"),
+			@("PreviewRun", "Run the simulation"), @("PreviewPauseRun", "Pause the simulation"), @("PreviewPlay", "Play"), @("PreviewPause", "Pause"),
 			@("PreviewStepBack", "One frame back"), @("PreviewStepForward", "One frame forward"),
 			@("PreviewSetIn", "Set the in point"), @("PreviewSetOut", "Set the out point"), @("PreviewClearRange", "Clear the in and out points"),
 			@("PreviewLoop", "Loop"), @("PreviewLive", "Live: follow a running run"),

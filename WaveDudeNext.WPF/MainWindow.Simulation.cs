@@ -210,6 +210,11 @@ public partial class MainWindow
 
 	private void OnTogglePause(object sender, ExecutedRoutedEventArgs e) => Run?.TogglePause();
 
+	/// <summary>The timeline's Play and Pause as one command of the window, F7 (2026-11-04): handed to the preview's own binding.</summary>
+	private void CanPlayPause(object sender, CanExecuteRoutedEventArgs e) => e.CanExecute = MediaCommands.TogglePlayPause.CanExecute(null, previewPane);
+
+	private void OnPlayPause(object sender, ExecutedRoutedEventArgs e) => MediaCommands.TogglePlayPause.Execute(null, previewPane);
+
 	/// <summary>Cancels the export when one is running (it has the user's attention then), else stops the run.</summary>
 	private void OnStop(object sender, ExecutedRoutedEventArgs e)
 	{

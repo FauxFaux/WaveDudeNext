@@ -101,6 +101,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationPause">_Pause</s:String>
 	<s:String x:Key="MenuSimulationResume">_Resume</s:String>
 	<s:String x:Key="MenuSimulationStop">S_top</s:String>
+	<s:String x:Key="MenuSimulationPlay">Pla_y</s:String>
+	<s:String x:Key="MenuSimulationPausePlayback">Pause pla_yback</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">Use the _GPU (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Re-run _automatically after edits</s:String>
 	<s:String x:Key="MenuSimulationWarnMemory">_Warn when a run does not fit in RAM</s:String>
@@ -218,6 +220,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="TipPreviewLive">Follow the newest frame while the run is in progress (F)</s:String>
 	<s:String x:Key="TipPreviewRun">Run the simulation from the start (F5)</s:String>
 	<s:String x:Key="TipPreviewStop">Stop the simulation; the frames so far stay (Esc)</s:String>
+	<s:String x:Key="TipPreviewPauseRun">Pause the simulation (F6)</s:String>
+	<s:String x:Key="TipPreviewResumeRun">Resume the simulation (F6)</s:String>
 	<s:String x:Key="TipPreviewShowField">Show the field picture</s:String>
 	<s:String x:Key="TipPreviewShowIntensity">Show the intensity picture</s:String>
 	<s:String x:Key="TipMarkerFormat">{0}: drag to move; with keyboard focus the arrow keys move it by a pixel, ten with Shift</s:String>

@@ -99,6 +99,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationPause">_Pauzeren</s:String>
 	<s:String x:Key="MenuSimulationResume">_Hervatten</s:String>
 	<s:String x:Key="MenuSimulationStop">S_toppen</s:String>
+	<s:String x:Key="MenuSimulationPlay">Afspe_len</s:String>
+	<s:String x:Key="MenuSimulationPausePlayback">Afspe_len pauzeren</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">_GPU gebruiken (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Na bewerkingen _automatisch opnieuw starten</s:String>
 	<s:String x:Key="MenuSimulationWarnMemory">_Waarschuwen als een simulatie niet in het RAM past</s:String>
@@ -216,6 +218,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="TipPreviewLive">Het nieuwste beeld volgen zolang de run loopt (F)</s:String>
 	<s:String x:Key="TipPreviewRun">Simulatie vanaf het begin starten (F5)</s:String>
 	<s:String x:Key="TipPreviewStop">Simulatie stoppen; de berekende beelden blijven (Esc)</s:String>
+	<s:String x:Key="TipPreviewPauseRun">Simulatie pauzeren (F6)</s:String>
+	<s:String x:Key="TipPreviewResumeRun">Simulatie hervatten (F6)</s:String>
 	<s:String x:Key="TipPreviewShowField">Veldbeeld tonen</s:String>
 	<s:String x:Key="TipPreviewShowIntensity">Intensiteitsbeeld tonen</s:String>
 	<s:String x:Key="TipMarkerFormat">{0}: slepen om te verplaatsen; met toetsenbordfocus verplaatsen de pijltoetsen één pixel, tien met Shift</s:String>

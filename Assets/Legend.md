@@ -98,37 +98,39 @@ The timeline with the playhead and the in and out points, and the transport cont
 3. **Out point**
 4. **Run the simulation**  
    Run the simulation from the start (F5)
-5. **Play**  
+5. **Pause the simulation**  
+   Pause the simulation (F6)
+6. **Play**  
    Play (Space)
-6. **Pause**  
+7. **Pause**  
    Pause (Space)
-7. **One frame back**  
+8. **One frame back**  
    Previous frame (,)
-8. **One frame forward**  
+9. **One frame forward**  
    Next frame (.)
-9. **Set the in point**  
+10. **Set the in point**  
    Start the export range at this frame (I)
-10. **Set the out point**  
+11. **Set the out point**  
    End the export range at this frame (O)
-11. **Clear the in and out points**  
+12. **Clear the in and out points**  
    Clear the export range: the whole run is exported (X)
-12. **Loop**  
+13. **Loop**  
    Loop playback over the export range (L)
-13. **Live: follow a running run**  
+14. **Live: follow a running run**  
    Follow the newest frame while the run is in progress (F)
-14. **Position: frame of frames**  
+15. **Position: frame of frames**  
    Frame shown / last frame
-15. **Step of the position**  
+16. **Step of the position**  
    Simulation step of the frame shown
-16. **Playback speed**  
+17. **Playback speed**  
    Playback speed: pick a factor or type one
-17. **Show the field**  
+18. **Show the field**  
    Show the field picture
-18. **Show the intensity**  
+19. **Show the intensity**  
    Show the intensity picture
-19. **Pictures side by side**  
+20. **Pictures side by side**  
    Field and intensity side by side
-20. **Pictures stacked**  
+21. **Pictures stacked**  
    Field above intensity
 
 ## The File menu
@@ -186,10 +188,11 @@ The Simulation menu.
 1. **Run**
 2. **Pause**
 3. **Stop**
-4. **Use the GPU (OpenCL)**
-5. **Re-run automatically after edits**
-6. **Warn when a run does not fit in RAM**
-7. **RAM cache size**
+4. **Play**
+5. **Use the GPU (OpenCL)**
+6. **Re-run automatically after edits**
+7. **Warn when a run does not fit in RAM**
+8. **RAM cache size**
 
 ## The Help menu
 

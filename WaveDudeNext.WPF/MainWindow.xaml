@@ -185,6 +185,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 		<CommandBinding Command="{x:Static commands:SimulationCommands.Run}" CanExecute="CanRun" Executed="OnRun" />
 		<CommandBinding Command="{x:Static commands:SimulationCommands.TogglePause}" CanExecute="CanControlRun" Executed="OnTogglePause" />
 		<CommandBinding Command="{x:Static commands:SimulationCommands.Stop}" CanExecute="CanStop" Executed="OnStop" />
+		<CommandBinding Command="{x:Static commands:PreviewCommands.PlayPause}" CanExecute="CanPlayPause" Executed="OnPlayPause" />
 
 		<!-- export; handlers in MainWindow.Export.cs -->
 		<CommandBinding Command="{x:Static commands:ExportCommands.Field}" CanExecute="CanExport" Executed="OnExportField" />
@@ -394,6 +395,23 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 					</MenuItem.Style>
 				</MenuItem>
 				<MenuItem Command="{x:Static commands:SimulationCommands.Stop}" Header="{DynamicResource MenuSimulationStop}" InputGestureText="Shift+F5" controls:MenuIcon.Glyph="&#xE71A;" />
+				<Separator />
+				<!-- the timeline's Play and Pause, F7, so the keyboard has them from anywhere (2026-11-04, the user's request):
+				     the header and the glyph follow the preview's state, as the run's Pause and Resume do above -->
+				<MenuItem Command="{x:Static commands:PreviewCommands.PlayPause}" AutomationProperties.AutomationId="MenuPlayPause">
+					<MenuItem.Style>
+						<Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource {x:Type MenuItem}}">
+							<Setter Property="Header" Value="{DynamicResource MenuSimulationPlay}" />
+							<Setter Property="controls:MenuIcon.Glyph" Value="&#xE768;" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding IsPlaying, ElementName=previewPane}" Value="True">
+									<Setter Property="Header" Value="{DynamicResource MenuSimulationPausePlayback}" />
+									<Setter Property="controls:MenuIcon.Glyph" Value="&#xE769;" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</MenuItem.Style>
+				</MenuItem>
 				<Separator />
 				<!-- the engine is the application's choice, not the project's: it does not change the result -->
 				<MenuItem Header="{DynamicResource MenuSimulationUseGpu}" IsCheckable="True"

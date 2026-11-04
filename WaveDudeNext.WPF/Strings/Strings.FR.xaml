@@ -99,6 +99,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="MenuSimulationPause">_Pause</s:String>
 	<s:String x:Key="MenuSimulationResume">_Reprendre</s:String>
 	<s:String x:Key="MenuSimulationStop">_Arrêter</s:String>
+	<s:String x:Key="MenuSimulationPlay">L_ecture</s:String>
+	<s:String x:Key="MenuSimulationPausePlayback">Mettre la lecture _en pause</s:String>
 	<s:String x:Key="MenuSimulationUseGpu">Utiliser le _GPU (OpenCL)</s:String>
 	<s:String x:Key="MenuSimulationAutoRerun">Relancer a_utomatiquement après une modification</s:String>
 	<s:String x:Key="MenuSimulationWarnMemory">A_vertir quand une simulation ne tient pas dans la RAM</s:String>
@@ -216,6 +218,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 	<s:String x:Key="TipPreviewLive">Suivre l'image la plus récente pendant l'exécution (F)</s:String>
 	<s:String x:Key="TipPreviewRun">Lancer la simulation depuis le début (F5)</s:String>
 	<s:String x:Key="TipPreviewStop">Arrêter la simulation ; les images calculées restent (Échap)</s:String>
+	<s:String x:Key="TipPreviewPauseRun">Mettre la simulation en pause (F6)</s:String>
+	<s:String x:Key="TipPreviewResumeRun">Reprendre la simulation (F6)</s:String>
 	<s:String x:Key="TipPreviewShowField">Afficher l'image du champ</s:String>
 	<s:String x:Key="TipPreviewShowIntensity">Afficher l'image de l'intensité</s:String>
 	<s:String x:Key="TipMarkerFormat">{0} : glisser pour déplacer ; avec le focus clavier, les flèches déplacent d'un pixel, de dix avec Maj</s:String>

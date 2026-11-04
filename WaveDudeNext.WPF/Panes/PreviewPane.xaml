@@ -24,6 +24,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
              xmlns:converters="clr-namespace:WaveDudeNext.WPF.Converters"
              xmlns:controls="clr-namespace:WaveDudeNext.WPF.Controls"
              xmlns:commands="clr-namespace:WaveDudeNext.WPF.Commands"
+             xmlns:runs="clr-namespace:WaveDudeNext.Runs;assembly=WaveDudeNext"
              xmlns:model="clr-namespace:WaveDudeNext.Model;assembly=WaveDudeNext"
              Background="{DynamicResource DocumentBackground}" Focusable="True" IsTabStop="False">
 
@@ -35,6 +36,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 
 		<!-- "run": a play triangle inside a ring (the author asked for an explicit start button, 2026-10-13) -->
 		<StreamGeometry x:Key="RunGeometry">M0,7 A7,7 0 1 1 14,7 A7,7 0 1 1 0,7 Z M1.4,7 A5.6,5.6 0 1 0 12.6,7 A5.6,5.6 0 1 0 1.4,7 Z M5.2,3.5 L10.8,7 L5.2,10.5 Z</StreamGeometry>
+		<!-- the run's pause: the run's ring with the two bars of a pause inside (2026-11-04) -->
+		<StreamGeometry x:Key="PauseRunGeometry">M0,7 A7,7 0 1 1 14,7 A7,7 0 1 1 0,7 Z M1.4,7 A5.6,5.6 0 1 0 12.6,7 A5.6,5.6 0 1 0 1.4,7 Z M4.5,4 L6.2,4 L6.2,10 L4.5,10 Z M7.8,4 L9.5,4 L9.5,10 L7.8,10 Z</StreamGeometry>
 		<!-- "stop": the same ring with a square inside; the Run button shows it while a run is in progress (2026-10-16) -->
 		<StreamGeometry x:Key="StopGeometry">M0,7 A7,7 0 1 1 14,7 A7,7 0 1 1 0,7 Z M1.4,7 A5.6,5.6 0 1 0 12.6,7 A5.6,5.6 0 1 0 1.4,7 Z M4.7,4.7 L9.3,4.7 L9.3,9.3 L4.7,9.3 Z</StreamGeometry>
 		<!-- the two pictures: a wave for the field, a sun for the intensity -->
@@ -425,34 +428,50 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 						</Style>
 					</Button.Style>
 				</Button>
+				<!-- the run's Pause and Resume, F6, beside Run (2026-11-04, the user's request: the menu's entry had no button
+				     here): the tooltip and the name follow the run's state through the style, as Run's do -->
+				<Button DockPanel.Dock="Left" TabIndex="1" AutomationProperties.AutomationId="PreviewPauseRun" Command="{x:Static commands:SimulationCommands.TogglePause}" Content="{StaticResource PauseRunGeometry}">
+					<Button.Style>
+						<Style TargetType="{x:Type Button}" BasedOn="{StaticResource TransportButton}">
+							<Setter Property="ToolTip" Value="{DynamicResource TipPreviewPauseRun}" />
+							<Setter Property="AutomationProperties.Name" Value="{DynamicResource TipPreviewPauseRun}" />
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding Run.State, ElementName=pane}" Value="{x:Static runs:RunState.Paused}">
+									<Setter Property="ToolTip" Value="{DynamicResource TipPreviewResumeRun}" />
+									<Setter Property="AutomationProperties.Name" Value="{DynamicResource TipPreviewResumeRun}" />
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</Button.Style>
+				</Button>
 				<Rectangle DockPanel.Dock="Left" Width="1" Margin="4,2" Fill="{DynamicResource ToolWindowBorder}" />
-				<Button x:Name="playButton" DockPanel.Dock="Left" TabIndex="1" Style="{StaticResource TransportButton}" Content="{StaticResource PlayGeometry}"
+				<Button x:Name="playButton" DockPanel.Dock="Left" TabIndex="2" Style="{StaticResource TransportButton}" Content="{StaticResource PlayGeometry}"
 				        Command="MediaCommands.Play" ToolTip="{DynamicResource TipPreviewPlay}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewPlay}" AutomationProperties.AutomationId="PreviewPlay" />
-				<Button x:Name="pauseButton" DockPanel.Dock="Left" TabIndex="2" Style="{StaticResource TransportButton}" Content="{StaticResource PauseGeometry}"
+				<Button x:Name="pauseButton" DockPanel.Dock="Left" TabIndex="3" Style="{StaticResource TransportButton}" Content="{StaticResource PauseGeometry}"
 				        Command="MediaCommands.Pause" ToolTip="{DynamicResource TipPreviewPause}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewPause}" AutomationProperties.AutomationId="PreviewPause" />
 				<Rectangle DockPanel.Dock="Left" Width="1" Margin="4,2" Fill="{DynamicResource ToolWindowBorder}" />
-				<Button DockPanel.Dock="Left" TabIndex="3" Style="{StaticResource TransportButton}" Content="{StaticResource StepBackGeometry}"
+				<Button DockPanel.Dock="Left" TabIndex="4" Style="{StaticResource TransportButton}" Content="{StaticResource StepBackGeometry}"
 				        Command="{x:Static commands:PreviewCommands.StepBack}" ToolTip="{DynamicResource TipPreviewStepBack}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewStepBack}" AutomationProperties.AutomationId="PreviewStepBack" />
-				<Button DockPanel.Dock="Left" TabIndex="4" Style="{StaticResource TransportButton}" Content="{StaticResource StepForwardGeometry}"
+				<Button DockPanel.Dock="Left" TabIndex="5" Style="{StaticResource TransportButton}" Content="{StaticResource StepForwardGeometry}"
 				        Command="{x:Static commands:PreviewCommands.StepForward}" ToolTip="{DynamicResource TipPreviewStepForward}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewStepForward}" AutomationProperties.AutomationId="PreviewStepForward" />
 				<Rectangle DockPanel.Dock="Left" Width="1" Margin="4,2" Fill="{DynamicResource ToolWindowBorder}" />
-				<Button DockPanel.Dock="Left" TabIndex="5" Style="{StaticResource TransportButton}" Content="{StaticResource SetInGeometry}"
+				<Button DockPanel.Dock="Left" TabIndex="6" Style="{StaticResource TransportButton}" Content="{StaticResource SetInGeometry}"
 				        Command="{x:Static commands:PreviewCommands.SetInPoint}" ToolTip="{DynamicResource TipPreviewSetIn}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewSetIn}" AutomationProperties.AutomationId="PreviewSetIn" />
-				<Button DockPanel.Dock="Left" TabIndex="6" Style="{StaticResource TransportButton}" Content="{StaticResource SetOutGeometry}"
+				<Button DockPanel.Dock="Left" TabIndex="7" Style="{StaticResource TransportButton}" Content="{StaticResource SetOutGeometry}"
 				        Command="{x:Static commands:PreviewCommands.SetOutPoint}" ToolTip="{DynamicResource TipPreviewSetOut}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewSetOut}" AutomationProperties.AutomationId="PreviewSetOut" />
-				<Button DockPanel.Dock="Left" TabIndex="7" Style="{StaticResource TransportButton}" Content="{StaticResource ClearRangeGeometry}"
+				<Button DockPanel.Dock="Left" TabIndex="8" Style="{StaticResource TransportButton}" Content="{StaticResource ClearRangeGeometry}"
 				        Command="{x:Static commands:PreviewCommands.ClearRange}" ToolTip="{DynamicResource TipPreviewClearRange}"
 				        AutomationProperties.Name="{DynamicResource TipPreviewClearRange}" AutomationProperties.AutomationId="PreviewClearRange" />
-				<ToggleButton DockPanel.Dock="Left" TabIndex="8" Style="{StaticResource TransportToggle}" Content="{StaticResource LoopGeometry}"
+				<ToggleButton DockPanel.Dock="Left" TabIndex="9" Style="{StaticResource TransportToggle}" Content="{StaticResource LoopGeometry}"
 				              IsChecked="{Binding IsLooping, ElementName=pane}" ToolTip="{DynamicResource TipPreviewLoop}"
 				              AutomationProperties.Name="{DynamicResource TipPreviewLoop}" AutomationProperties.AutomationId="PreviewLoop" />
-				<ToggleButton DockPanel.Dock="Left" TabIndex="9" Style="{StaticResource TransportToggle}" Content="{StaticResource LiveGeometry}"
+				<ToggleButton DockPanel.Dock="Left" TabIndex="10" Style="{StaticResource TransportToggle}" Content="{StaticResource LiveGeometry}"
 				              IsChecked="{Binding IsLive, ElementName=pane}" ToolTip="{DynamicResource TipPreviewLive}"
 				              IsEnabled="{Binding Run.IsActive, ElementName=pane, FallbackValue=False}"
 				              AutomationProperties.Name="{DynamicResource TipPreviewLive}" AutomationProperties.AutomationId="PreviewLive" />
@@ -461,7 +480,7 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 				<!-- right-docked items: the first declared is the rightmost -->
 				<!-- one tab stop, the checked radio (IsTabStop follows IsChecked); the arrow keys move to the
 				     neighbour and check it, in code, since WPF's directional navigation skips non-tab-stops -->
-				<StackPanel x:Name="splitGroup" DockPanel.Dock="Right" Orientation="Horizontal" KeyboardNavigation.TabIndex="13"
+				<StackPanel x:Name="splitGroup" DockPanel.Dock="Right" Orientation="Horizontal" KeyboardNavigation.TabIndex="14"
 				            KeyDown="OnSplitGroupKeyDown">
 					<RadioButton Style="{StaticResource TransportToggle}" Content="{StaticResource SideBySideGeometry}" GroupName="Split"
 					             ToolTip="{DynamicResource TipPreviewSideBySide}"
@@ -475,18 +494,18 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 					             IsTabStop="{Binding IsChecked, RelativeSource={RelativeSource Self}, Mode=OneWay}" />
 				</StackPanel>
 				<!-- show or hide each picture (the layer's Preview setting; the author wanted one picture at a time, point 4) -->
-				<ToggleButton DockPanel.Dock="Right" TabIndex="12" Style="{StaticResource TransportToggle}" Content="{StaticResource IntensityGeometry}"
+				<ToggleButton DockPanel.Dock="Right" TabIndex="13" Style="{StaticResource TransportToggle}" Content="{StaticResource IntensityGeometry}"
 				              IsChecked="{Binding IntensitySettings.Preview, ElementName=pane, Mode=TwoWay}"
 				              IsEnabled="{Binding IntensitySettings, ElementName=pane, Converter={StaticResource NotNull}}"
 				              ToolTip="{DynamicResource TipPreviewShowIntensity}"
 				              AutomationProperties.Name="{DynamicResource TipPreviewShowIntensity}" AutomationProperties.AutomationId="PreviewShowIntensity" />
-				<ToggleButton DockPanel.Dock="Right" TabIndex="11" Style="{StaticResource TransportToggle}" Content="{StaticResource FieldGeometry}"
+				<ToggleButton DockPanel.Dock="Right" TabIndex="12" Style="{StaticResource TransportToggle}" Content="{StaticResource FieldGeometry}"
 				              IsChecked="{Binding FieldSettings.Preview, ElementName=pane, Mode=TwoWay}"
 				              IsEnabled="{Binding FieldSettings, ElementName=pane, Converter={StaticResource NotNull}}"
 				              ToolTip="{DynamicResource TipPreviewShowField}"
 				              AutomationProperties.Name="{DynamicResource TipPreviewShowField}" AutomationProperties.AutomationId="PreviewShowField" />
 				<Rectangle DockPanel.Dock="Right" Width="1" Margin="4,2" Fill="{DynamicResource ToolWindowBorder}" />
-				<ComboBox x:Name="speedBox" DockPanel.Dock="Right" TabIndex="10" Width="64" IsEditable="True" ItemsSource="{x:Static local:PreviewPane.SpeedPresets}"
+				<ComboBox x:Name="speedBox" DockPanel.Dock="Right" TabIndex="11" Width="64" IsEditable="True" ItemsSource="{x:Static local:PreviewPane.SpeedPresets}"
 				          Text="{Binding Speed, ElementName=pane, Mode=TwoWay, Converter={StaticResource DoubleText}}" ToolTip="{DynamicResource TipPreviewSpeed}"
 				          AutomationProperties.Name="{DynamicResource LabelPreviewSpeed}" AutomationProperties.AutomationId="PreviewSpeed"
 				          PreviewKeyDown="OnSpeedBoxPreviewKeyDown" />

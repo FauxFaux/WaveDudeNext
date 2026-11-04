@@ -98,22 +98,23 @@ The timeline with the playhead and the in and out points, and the transport cont
 2. **In point**: The start of the export range; drag the bracket to move it.
 3. **Out point**: The end of the export range.
 4. **Run the simulation**: Runs the simulation from the start (F5): every frame of the project as it is now. The pictures follow the run while it computes.
-5. **Play**: Plays the frames at the playback speed (Space). When there is no run yet, or the project has changed since the last one, Play starts a run and follows it.
-6. **Pause**: Pauses playback (Space).
-7. **One frame back**: Previous frame (,).
-8. **One frame forward**: Next frame (.).
-9. **Set the in point**: Starts the export range at this frame (I).
-10. **Set the out point**: Ends the export range at this frame (O).
-11. **Clear the in and out points**: Clears the export range: the whole run is exported (X).
-12. **Loop**: Loops playback over the export range (L).
-13. **Live**: Follows the newest frame while the run is in progress (F); scrubbing ends it.
-14. **Position**: The frame shown and the last frame of the run.
-15. **Step of the position**: The simulation step of the frame shown. A frame is kept every so many steps, as set by Visualize every in the Simulation settings.
-16. **Playback speed**: Pick a factor or type one.
-17. **Show the field**: Shows or hides the field picture.
-18. **Show the intensity**: Shows or hides the intensity picture.
-19. **Pictures side by side**: Field and intensity side by side.
-20. **Pictures stacked**: Field above intensity.
+5. **Pause the simulation**: Pauses the run, and resumes it (F6).
+6. **Play**: Plays the frames at the playback speed (Space). When there is no run yet, or the project has changed since the last one, Play starts a run and follows it.
+7. **Pause**: Pauses playback (Space).
+8. **One frame back**: Previous frame (,).
+9. **One frame forward**: Next frame (.).
+10. **Set the in point**: Starts the export range at this frame (I).
+11. **Set the out point**: Ends the export range at this frame (O).
+12. **Clear the in and out points**: Clears the export range: the whole run is exported (X).
+13. **Loop**: Loops playback over the export range (L).
+14. **Live**: Follows the newest frame while the run is in progress (F); scrubbing ends it.
+15. **Position**: The frame shown and the last frame of the run.
+16. **Step of the position**: The simulation step of the frame shown. A frame is kept every so many steps, as set by Visualize every in the Simulation settings.
+17. **Playback speed**: Pick a factor or type one.
+18. **Show the field**: Shows or hides the field picture.
+19. **Show the intensity**: Shows or hides the intensity picture.
+20. **Pictures side by side**: Field and intensity side by side.
+21. **Pictures stacked**: Field above intensity.
 
 The letter shortcuts work while the preview pane has the focus. The in and out points are the From step and To step of the Display settings, so they are saved with the project; the range is what File > Export writes and what Loop plays.
 
@@ -229,10 +230,11 @@ The Simulation menu.
 1. **Run**: Runs the simulation from the start (F5).
 2. **Pause**: Pauses the run, and resumes it (F6).
 3. **Stop**: Stops the run (Shift+F5); the frames computed so far stay.
-4. **Use the GPU (OpenCL)**: Computes on the graphics card, many times faster than the processor; the results are the same. Off, or without OpenCL, the processor is used. On by default.
-5. **Re-run automatically after edits**: Starts a new run by itself a moment after you change the scene, a source or a part; off, you run by hand with F5 or Play. On by default.
-6. **Warn when a run does not fit in RAM**: Asks before a run whose frames would not all fit in the memory the RAM cache may take. Tick the RAM cache size to Auto, half the resolution, half the frames or 8-bit samples, each with its effect shown, and Run applies them in the Simulation and View menus for this and later runs; Cancel leaves everything as it is. "Do not warn me again" switches this off. On by default.
-7. **RAM cache size**: How much of the memory a run's frames may take: Auto decides from the free memory, or a share from 10 to 100 percent caps it; the frames beyond it go to a cache file on disk.
+4. **Play**: Plays the frames at the playback speed, and pauses them (F7): the timeline's Play and Pause.
+5. **Use the GPU (OpenCL)**: Computes on the graphics card, many times faster than the processor; the results are the same. Off, or without OpenCL, the processor is used. On by default.
+6. **Re-run automatically after edits**: Starts a new run by itself a moment after you change the scene, a source or a part; off, you run by hand with F5 or Play. On by default.
+7. **Warn when a run does not fit in RAM**: Asks before a run whose frames would not all fit in the memory the RAM cache may take. Tick the RAM cache size to Auto, half the resolution, half the frames or 8-bit samples, each with its effect shown, and Run applies them in the Simulation and View menus for this and later runs; Cancel leaves everything as it is. "Do not warn me again" switches this off. On by default.
+8. **RAM cache size**: How much of the memory a run's frames may take: Auto decides from the free memory, or a share from 10 to 100 percent caps it; the frames beyond it go to a cache file on disk.
 
 ### The Help menu
 

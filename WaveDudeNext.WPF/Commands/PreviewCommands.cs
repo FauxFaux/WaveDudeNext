@@ -32,6 +32,13 @@ public static class PreviewCommands
 	/// <summary>Shows the previous frame.</summary>
 	public static readonly RoutedUICommand StepBack = new("Previous frame", nameof(StepBack), typeof(PreviewCommands));
 
+	/// <summary>
+	/// Plays or pauses the timeline from anywhere, F7 (2026-11-04, the user's request): the window binds it and hands it to
+	/// the preview's <see cref="MediaCommands.TogglePlayPause"/>, whose binding is the pane's; the Simulation menu shows it.
+	/// </summary>
+	public static readonly RoutedUICommand PlayPause = new("Play or pause", nameof(PlayPause), typeof(PreviewCommands),
+		[new KeyGesture(Key.F7)]);
+
 	/// <summary>Shows the next frame.</summary>
 	public static readonly RoutedUICommand StepForward = new("Next frame", nameof(StepForward), typeof(PreviewCommands));
 

@@ -261,7 +261,12 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
 - **Play means "show me the simulation"**: it starts an automatic run when needed and holds at the newest frame
   until the run catches up. Space plays or pauses with the focus in the preview, the pane's own binding; a window-level
   Space that took the key wherever the focused element left it alone was built and reverted the same day (2026-11-04,
-  the user's decision). **The playback clock is a thread timer whose ticks are posted to the
+  the user's decision). **The run's and the playback's controls are in both places** (2026-11-04, the user's request):
+  the transport bar has Run, then Pause the simulation (F6, the same `TogglePause` command as the menu's, its tooltip
+  and glyph switching to Resume on a paused run), then the timeline's Play and Pause; the Simulation menu has Run, Pause,
+  Stop, then Play (F7, `PreviewCommands.PlayPause`, a window command handed to the preview pane's own
+  `MediaCommands.TogglePlayPause` binding, so it works from anywhere; the entry reads Pause playback while playing).
+  The timeline figure's badges and the manual's two lists count the new entries. **The playback clock is a thread timer whose ticks are posted to the
   UI thread at Render priority** (2026-11-04, the user's report: playback stuttered while the mouse moved, and only a hand
   on the mouse showed it): a `DispatcherTimer` is a Win32 timer message, which Windows delivers only when no input is
   queued, so a mouse reporting a thousand times a second starved the clock and no frame came for seconds (a gap of 3.2 s
