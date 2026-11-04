@@ -136,11 +136,16 @@ public partial class MainWindow
 		}
 		Task memoryReleased = DiscardRun();
 		FrameStore store = FrameStore.Create(FrameCache.NewPath(), spec.Shape, spec.Layers, spec.StoredFrameCount, spec.CaptureEvery, budget, memoryReleased);
-		// the run's progress lands on the UI thread below input priority (2026-10-16): posted at normal priority, the
-		// frame counts kept the input queue starved for the whole run, since a new one was posted the moment the last
-		// was handled, and every click and key was delivered after the run (the watchdog's input-priority ticks were
-		// late, the normal-priority ones on time)
-		var run = new SimulationRun(spec, store, new DispatcherSynchronizationContext(Dispatcher, DispatcherPriority.Background), automatic);
+		// the run's progress lands on the UI thread at Loaded priority (2026-11-04): the lowest priority the dispatcher
+		// still processes ahead of queued input. Background and Input priority are its "background" range, which it
+		// serves only when no input is pending, else through a 1 ms Win32 timer, a message Windows delivers after every
+		// queued input message; a mouse reporting a thousand times a second kept input pending the whole time, so the
+		// heartbeat, the Live follow with it and the run's final state waited until the hand came off the mouse (a
+		// flood of 4 s left the status at the step where it started and the pictures still). The 2026-10-16 choice of
+		// Background had cured the opposite, every click and key delivered after the run, when the progress was posted
+		// at normal priority as separate posts, each the moment the last was handled; since the one paced heartbeat
+		// (at most 30 a second, a few milliseconds each) input has its turn between two of them at any priority
+		var run = new SimulationRun(spec, store, new DispatcherSynchronizationContext(Dispatcher, DispatcherPriority.Loaded), automatic);
 		run.PropertyChanged += (_, args) =>
 		{
 			if (args.PropertyName == nameof(SimulationRun.State))

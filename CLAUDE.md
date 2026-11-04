@@ -271,7 +271,17 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   on the mouse showed it): a `DispatcherTimer` is a Win32 timer message, which Windows delivers only when no input is
   queued, so a mouse reporting a thousand times a second starved the clock and no frame came for seconds (a gap of 3.2 s
   measured under injected moves every millisecond; 63–87 ms at a move every 8 ms); a posted operation is taken before
-  input, and the same flood now leaves gaps of 32–47 ms, 68 at a move every tenth of a millisecond. **The presenter's
+  input, and the same flood now leaves gaps of 32–47 ms, 68 at a move every tenth of a millisecond. **The run's
+  heartbeat is posted at Loaded priority** for the same reason (2026-11-04, the user's report: the Live follow of a
+  running run stuttered the same way): the dispatcher's background range is Background and Input, served only when no
+  input is pending, else through a 1 ms Win32 timer that queued input starves; at Background a flood of 4 s on Example 7
+  left the status at the step where the flood began, no picture came, and the run's Completed state landed 7 s after the
+  stepping ended; at Loaded, the lowest priority ahead of input, the follow went on at 100 frames in 3.3 s with a
+  worst gap of 71 ms, the status counting. Background had been chosen on 2026-10-16 against the opposite, keys and
+  clicks delivered after the run, when the progress was several posts a second each posted the moment the last was
+  handled; the one paced heartbeat leaves input its turn at any priority (RunCheck's 71 checks, which press keys
+  during a run, pass). The scene composition's coalescing and the debounce timers stay at Background: they are meant
+  to wait for the hand to rest. **The presenter's
   log line carries the block's worst** beside its averages, the longest frame, the longest wait at the bitmap and the
   longest gap between two presented frames: a stutter is a gap, which an average over 100 frames hides (it had shown 28
   frames a second across a 3-second freeze). Measured on the way and settled: the app's input handling is not the cost,
