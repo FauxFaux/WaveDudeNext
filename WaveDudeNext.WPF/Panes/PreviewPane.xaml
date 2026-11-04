@@ -604,7 +604,8 @@ version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 											<Image Source="{Binding Path=(local:PreviewPane.OverlayImage), RelativeSource={RelativeSource TemplatedParent}}"
 											       Stretch="Uniform" IsHitTestVisible="False" />
 											<!-- the handles: sources, emitter dots, probe points and lines. Styled here, not implicitly: WPF applies
-											     implicit styles inside a template only to Controls, and the overlay is a Panel -->
+											     implicit styles inside a template only to Controls, and the overlay is a Panel. Its drawing is three child
+											     layers, the sources' one a bitmap cache (SceneOverlay.DrawingLayer, 2026-11-04) -->
 											<controls:SceneOverlay SourceStyle="{StaticResource SourceMarker}" PartStyle="{StaticResource PartMarker}" GripStyle="{StaticResource PartGripMarker}" PointStyle="{StaticResource PartPointMarker}" HandleStyle="{StaticResource FiberHandleMarker}" ProbeStyle="{StaticResource ProbeMarker}" AngleStyle="{StaticResource AngleMarker}"
 											                       LineBrush="{DynamicResource PictureHandle}" LabelBrush="{DynamicResource PictureHandle}" AccentBrush="{DynamicResource PictureSelection}"
 											                       Project="{Binding Project, RelativeSource={RelativeSource AncestorType={x:Type local:PreviewPane}}}"

@@ -107,15 +107,15 @@ public sealed class SceneOverlay : Panel
 
 	/// <summary>Identifies the <see cref="LineBrush"/> property.</summary>
 	public static readonly DependencyProperty LineBrushProperty = DependencyProperty.Register(
-		nameof(LineBrush), typeof(Brush), typeof(SceneOverlay), new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
+		nameof(LineBrush), typeof(Brush), typeof(SceneOverlay), new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender, (d, _) => ((SceneOverlay)d).InvalidateDrawing()));
 
 	/// <summary>Identifies the <see cref="LabelBrush"/> property.</summary>
 	public static readonly DependencyProperty LabelBrushProperty = DependencyProperty.Register(
-		nameof(LabelBrush), typeof(Brush), typeof(SceneOverlay), new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
+		nameof(LabelBrush), typeof(Brush), typeof(SceneOverlay), new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender, (d, _) => ((SceneOverlay)d).InvalidateDrawing()));
 
 	/// <summary>Identifies the <see cref="AccentBrush"/> property.</summary>
 	public static readonly DependencyProperty AccentBrushProperty = DependencyProperty.Register(
-		nameof(AccentBrush), typeof(Brush), typeof(SceneOverlay), new FrameworkPropertyMetadata(Brushes.DodgerBlue, FrameworkPropertyMetadataOptions.AffectsRender));
+		nameof(AccentBrush), typeof(Brush), typeof(SceneOverlay), new FrameworkPropertyMetadata(Brushes.DodgerBlue, FrameworkPropertyMetadataOptions.AffectsRender, (d, _) => ((SceneOverlay)d).InvalidateDrawing()));
 
 	/// <summary>Identifies the <see cref="HandlesInPreview"/> property.</summary>
 	public static readonly DependencyProperty HandlesInPreviewProperty = DependencyProperty.Register(
@@ -168,6 +168,58 @@ public sealed class SceneOverlay : Panel
 		Focusable = false;
 		// objects dragged from another window's tree are dropped onto the picture (2026-10-23)
 		AllowDrop = true;
+		_layers = [new DrawingLayer(this, Band.ProbeLines), new DrawingLayer(this, Band.Sources) { CacheMode = new BitmapCache() }, new DrawingLayer(this, Band.PartsAndLabels)];
+		AddLayers();
+	}
+
+	/// <summary>The drawing's three bands as children, below the handles; see <see cref="DrawingLayer"/>.</summary>
+	private readonly DrawingLayer[] _layers;
+
+	/// <summary>Puts the bands below the handles, first in the children, after a <see cref="Rebuild"/> cleared them.</summary>
+	private void AddLayers()
+	{
+		foreach (DrawingLayer layer in _layers)
+		{
+			Children.Add(layer);
+		}
+	}
+
+	/// <summary>Has the bands drawn again, all of them or one.</summary>
+	private void InvalidateDrawing(Band? band = null)
+	{
+		foreach (DrawingLayer layer in _layers)
+		{
+			if (band == null || layer.Band == band)
+			{
+				layer.InvalidateVisual();
+			}
+		}
+	}
+
+	/// <summary>The overlay's drawing in the order it is laid down: the line probes, then the sources with their emitter dots, then the parts, the marquee and the labels.</summary>
+	private enum Band
+	{
+		ProbeLines,
+		Sources,
+		PartsAndLabels,
+	}
+
+	/// <summary>
+	/// One band of the overlay's drawing as a child of its own, the three in the order the one drawing had (2026-11-04,
+	/// the user's report: Example 7, a lattice of thousands of emitter dots, stuttered in playback with every frame in
+	/// RAM). The pictures change every frame, and WPF's render thread then rasterised the overlay's retained drawing
+	/// again every frame, every dot with its halo, and the presenter's lock of the bitmap waited behind it, 51 ms of a
+	/// 59 ms frame. The sources' band is a bitmap cache, rasterised once per change and composed as a texture; the
+	/// other two draw as they always did, so the labels keep ClearType, which a cache cannot give, and the probe lines,
+	/// the parts and the handles stay pixel for pixel as they were. Not hit-testable, not focusable: the overlay takes
+	/// the mouse and the handles the keyboard, as before.
+	/// </summary>
+	private sealed class DrawingLayer(SceneOverlay owner, Band band) : FrameworkElement
+	{
+		public Band Band { get; } = band;
+
+		/// <inheritdoc/>
+		protected override void OnRender(DrawingContext dc) => owner.RenderBand(dc, Band, RenderSize);
 	}
 
 	/// <summary>The project whose sources and probes are shown; null shows nothing.</summary>
@@ -365,9 +417,10 @@ public sealed class SceneOverlay : Panel
 		}
 		_pointLists.Clear();
 		Children.Clear();
+		AddLayers();
 		if (Project is not { } project)
 		{
-			InvalidateVisual();
+			InvalidateDrawing();
 			return;
 		}
 		foreach (Source source in project.Sources)
@@ -449,7 +502,7 @@ public sealed class SceneOverlay : Panel
 			}
 		}
 		UpdateSelection();
-		InvalidateVisual();
+		InvalidateDrawing();
 	}
 
 	private void Subscribe(INotifyPropertyChanged item)
@@ -506,7 +559,7 @@ public sealed class SceneOverlay : Panel
 			return;
 		}
 		InvalidateArrange();
-		InvalidateVisual();
+		InvalidateDrawing();
 	}
 
 	/// <summary>Keeps a composite source's emitter dots current while it is edited (they are only regenerated for a run otherwise).</summary>
@@ -530,7 +583,7 @@ public sealed class SceneOverlay : Panel
 	private void UpdateSelection()
 	{
 		object? selected = SelectedItem;
-		foreach (MarkerThumb thumb in Children)
+		foreach (MarkerThumb thumb in Children.OfType<MarkerThumb>())
 		{
 			thumb.IsSelectedMarker = IsSelected(thumb.Item);
 			// handles hidden by Display (2026-10-29, the user's design) except a selected item's, which shows them either way; the
@@ -539,7 +592,7 @@ public sealed class SceneOverlay : Panel
 			bool shown = HandlesInPreview || thumb.IsSelectedMarker;
 			thumb.Visibility = shown && (!IsDetail(thumb.Role) || ReferenceEquals(thumb.Item, selected)) ? Visibility.Visible : Visibility.Collapsed;
 		}
-		InvalidateVisual();
+		InvalidateDrawing();
 	}
 
 	/// <summary>The items with the selected one last, so what is drawn for it lies over the others (the user's rule, 2026-10-18).</summary>
@@ -870,7 +923,11 @@ public sealed class SceneOverlay : Panel
 	protected override Size ArrangeOverride(Size finalSize)
 	{
 		Rect picture = PictureRect(finalSize);
-		foreach (MarkerThumb thumb in Children)
+		foreach (DrawingLayer layer in _layers)
+		{
+			layer.Arrange(new Rect(finalSize));
+		}
+		foreach (MarkerThumb thumb in Children.OfType<MarkerThumb>())
 		{
 			(int x, int y) = PointOf(thumb);
 			Point centre = thumb.Role switch
@@ -895,10 +952,16 @@ public sealed class SceneOverlay : Panel
 	}
 
 	/// <inheritdoc/>
-	protected override void OnRender(DrawingContext dc)
+	/// <summary>
+	/// Draws one band for its <see cref="DrawingLayer"/>, clipped to the picture; the labels, outside the clip, go with the last
+	/// band. By the layer's size, <paramref name="size"/>, never this element's: WPF renders an element at the end of its own
+	/// Arrange, and the layers are arranged from inside this element's ArrangeOverride, before its own size is updated, so
+	/// this element's size is a layout behind at that moment (2026-11-04, the user's report: a resize left the dots, the lines
+	/// and the labels at the previous size).
+	/// </summary>
+	private void RenderBand(DrawingContext dc, Band band, Size size)
 	{
-		base.OnRender(dc);
-		if (Project is not { } project || ActualWidth <= 0 || ActualHeight <= 0)
+		if (Project is not { } project || size.Width <= 0 || size.Height <= 0)
 		{
 			return;
 		}
@@ -907,7 +970,29 @@ public sealed class SceneOverlay : Panel
 		// emitter dots over the menu bar): an emitter or a line end outside the canvas is clipped here, the handles
 		// are children and sit on clamped positions, and the labels below are kept inside by their placement. The
 		// picture's rectangle, not this element's: the element fills the cell and the picture is letterboxed in it
-		dc.PushClip(new RectangleGeometry(PictureRect(RenderSize)));
+		dc.PushClip(new RectangleGeometry(PictureRect(size)));
+		switch (band)
+		{
+			case Band.ProbeLines:
+				RenderProbeLines(dc, project, selected, size);
+				break;
+			case Band.Sources:
+				RenderSources(dc, project, selected, size);
+				break;
+			default:
+				RenderParts(dc, project, selected, size);
+				break;
+		}
+		dc.Pop();
+		if (band == Band.PartsAndLabels)
+		{
+			RenderLabels(dc, size);
+		}
+	}
+
+	/// <summary>The line probes: a dark line under a dashed light one, so the line reads on any picture.</summary>
+	private void RenderProbeLines(DrawingContext dc, Project project, object? selected, Size size)
+	{
 		foreach (Probe probe in SelectedLast(project.Probes, selected))
 		{
 			bool isSelected = IsSelected(probe);
@@ -915,12 +1000,17 @@ public sealed class SceneOverlay : Panel
 			{
 				continue;
 			}
-			Point a = ToView(probe.AX, probe.AY);
-			Point b = ToView(probe.BX, probe.BY);
+			Point a = ToView(probe.AX, probe.AY, size);
+			Point b = ToView(probe.BX, probe.BY, size);
 			// a dark line under the dashed light one, so the line reads on any picture
 			dc.DrawLine(new Pen(HaloBrush, isSelected ? 3.5 : 3.0), a, b);
 			dc.DrawLine(new Pen(isSelected ? AccentBrush : LineBrush, isSelected ? 1.5 : 1.0) { DashStyle = DashStyles.Dash }, a, b);
 		}
+	}
+
+	/// <summary>The sources: the current one's axis to its rotation handle and every composite source's emitter dots; the cached band.</summary>
+	private void RenderSources(DrawingContext dc, Project project, object? selected, Size size)
+	{
 		foreach (Source source in SelectedLast(project.Sources, selected))
 		{
 			bool isSelected = IsSelected(source);
@@ -929,19 +1019,26 @@ public sealed class SceneOverlay : Panel
 				continue;
 			}
 			Brush dots = isSelected ? AccentBrush : LineBrush;
+			// frozen: a lattice has thousands of dots, and an unfrozen pen is cloned by every draw call that takes it
 			var halo = new Pen(HaloBrush, 1.5);
+			halo.Freeze();
 			if (ReferenceEquals(source, selected))
 			{
 				// the row axis from the centre to the rotation handle, so the turn reads as a lever; with the handle, only while selected
-				Point axisEnd = AnglePoint(source, RenderSize);
-				dc.DrawLine(new Pen(HaloBrush, 3.0), ToView(source.X, source.Y), axisEnd);
-				dc.DrawLine(new Pen(dots, 1.0) { DashStyle = DashStyles.Dot }, ToView(source.X, source.Y), axisEnd);
+				Point axisEnd = AnglePoint(source, size);
+				dc.DrawLine(new Pen(HaloBrush, 3.0), ToView(source.X, source.Y, size), axisEnd);
+				dc.DrawLine(new Pen(dots, 1.0) { DashStyle = DashStyles.Dot }, ToView(source.X, source.Y, size), axisEnd);
 			}
 			foreach (SourceElement element in source.Elements)
 			{
-				dc.DrawEllipse(dots, halo, ToView(element.X, element.Y), ElementDotRadius, ElementDotRadius);
+				dc.DrawEllipse(dots, halo, ToView(element.X, element.Y, size), ElementDotRadius, ElementDotRadius);
 			}
 		}
+	}
+
+	/// <summary>The selected parts' outlines, the current one's axis and a fibre's Bézier handle lines, and the marquee.</summary>
+	private void RenderParts(DrawingContext dc, Project project, object? selected, Size size)
+	{
 		foreach (OpticalPart part in SelectedLast(project.Parts, selected))
 		{
 			if (!IsSelected(part))
@@ -956,11 +1053,11 @@ public sealed class SceneOverlay : Panel
 				using (StreamGeometryContext context = geometry.Open())
 				{
 					(double x0, double y0) = part.ToCanvas(outline[0].X, outline[0].Y);
-					context.BeginFigure(ToViewExact(x0, y0, RenderSize), false, part.OutlineClosed);
+					context.BeginFigure(ToViewExact(x0, y0, size), false, part.OutlineClosed);
 					for (int i = 1; i < outline.Length; i++)
 					{
 						(double x, double y) = part.ToCanvas(outline[i].X, outline[i].Y);
-						context.LineTo(ToViewExact(x, y, RenderSize), true, true);
+						context.LineTo(ToViewExact(x, y, size), true, true);
 					}
 				}
 				geometry.Freeze();
@@ -970,9 +1067,9 @@ public sealed class SceneOverlay : Panel
 			if (ReferenceEquals(part, selected))
 			{
 				// the part's axis from the centre to its rotation handle, the lever, while it is the current item
-				Point axisEnd = AnglePoint(part, RenderSize);
-				dc.DrawLine(new Pen(HaloBrush, 3.0), ToView(part.X, part.Y), axisEnd);
-				dc.DrawLine(new Pen(AccentBrush, 1.0) { DashStyle = DashStyles.Dot }, ToView(part.X, part.Y), axisEnd);
+				Point axisEnd = AnglePoint(part, size);
+				dc.DrawLine(new Pen(HaloBrush, 3.0), ToView(part.X, part.Y, size), axisEnd);
+				dc.DrawLine(new Pen(AccentBrush, 1.0) { DashStyle = DashStyles.Dot }, ToView(part.X, part.Y, size), axisEnd);
 				if (part is FiberPart fiber)
 				{
 					// each node's Bézier handles on dotted lines from the node (the handle thumbs sit at their ends)
@@ -982,18 +1079,18 @@ public sealed class SceneOverlay : Panel
 					{
 						FiberNode node = fiber.Nodes[i];
 						(double nx, double ny) = fiber.ToCanvas(node.X, node.Y);
-						Point at = ToViewExact(nx, ny, RenderSize);
+						Point at = ToViewExact(nx, ny, size);
 						if (i > 0)
 						{
 							(double hx, double hy) = fiber.ToCanvas(node.In.X, node.In.Y);
-							Point handle = ToViewExact(hx, hy, RenderSize);
+							Point handle = ToViewExact(hx, hy, size);
 							dc.DrawLine(handleHalo, at, handle);
 							dc.DrawLine(handleLine, at, handle);
 						}
 						if (i < fiber.Nodes.Count - 1)
 						{
 							(double hx, double hy) = fiber.ToCanvas(node.Out.X, node.Out.Y);
-							Point handle = ToViewExact(hx, hy, RenderSize);
+							Point handle = ToViewExact(hx, hy, size);
 							dc.DrawLine(handleHalo, at, handle);
 							dc.DrawLine(handleLine, at, handle);
 						}
@@ -1009,7 +1106,11 @@ public sealed class SceneOverlay : Panel
 			fill.Freeze();
 			dc.DrawRectangle(fill, new Pen(AccentBrush, 1.0) { DashStyle = DashStyles.Dash }, marquee);
 		}
-		dc.Pop();
+	}
+
+	/// <summary>The names beside the main handles, outside the picture's clip, kept inside by their placement.</summary>
+	private void RenderLabels(DrawingContext dc, Size size)
+	{
 		double pixelsPerDip = DevicePixels.PerDip(this);
 		foreach (MarkerThumb thumb in Children.OfType<MarkerThumb>().OrderBy(thumb => thumb.IsSelectedMarker))
 		{
@@ -1019,13 +1120,13 @@ public sealed class SceneOverlay : Panel
 				continue;
 			}
 			(int x, int y) = PointOf(thumb);
-			Point centre = ToView(x, y);
+			Point centre = ToView(x, y, size);
 			string name = thumb.Item switch { Source source => source.Name, OpticalPart part => part.Name, _ => ((Probe)thumb.Item).Name };
 			var label = new FormattedText(name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LabelTypeface, 11, thumb.IsSelectedMarker ? AccentBrush : LabelBrush, pixelsPerDip);
 			// beside the point; below it for a composite source or a part, whose rotation handle sits beside it at 0 degrees
 			bool below = thumb.Item is Source { Array: not null } or OpticalPart;
-			double lx = below ? Math.Clamp(centre.X - label.Width / 2, 0, Math.Max(0, ActualWidth - label.Width)) : Math.Min(centre.X + LabelOffset, Math.Max(0, ActualWidth - label.Width));
-			double ly = below ? Math.Min(centre.Y + LabelOffset, Math.Max(0, ActualHeight - label.Height)) : Math.Clamp(centre.Y - label.Height / 2, 0, Math.Max(0, ActualHeight - label.Height));
+			double lx = below ? Math.Clamp(centre.X - label.Width / 2, 0, Math.Max(0, size.Width - label.Width)) : Math.Min(centre.X + LabelOffset, Math.Max(0, size.Width - label.Width));
+			double ly = below ? Math.Min(centre.Y + LabelOffset, Math.Max(0, size.Height - label.Height)) : Math.Clamp(centre.Y - label.Height / 2, 0, Math.Max(0, size.Height - label.Height));
 			var origin = new Point(lx, ly);
 			// the text's outline in dark first (a halo), then the text
 			dc.DrawGeometry(null, new Pen(HaloBrush, 3.0) { LineJoin = PenLineJoin.Round }, label.BuildGeometry(origin));
@@ -1123,7 +1224,7 @@ public sealed class SceneOverlay : Panel
 			CaptureMouse();
 		}
 		_marquee = new Rect(start, at);
-		InvalidateVisual();
+		InvalidateDrawing(Band.PartsAndLabels);
 	}
 
 	/// <inheritdoc/>
@@ -1157,7 +1258,7 @@ public sealed class SceneOverlay : Panel
 		{
 			ReleaseMouseCapture();
 		}
-		InvalidateVisual();
+		InvalidateDrawing(Band.PartsAndLabels);
 	}
 
 	/// <summary>
@@ -1172,7 +1273,7 @@ public sealed class SceneOverlay : Panel
 			return;
 		}
 		var covered = new List<object>();
-		foreach (MarkerThumb thumb in Children)
+		foreach (MarkerThumb thumb in Children.OfType<MarkerThumb>())
 		{
 			if (!MovesWhole(thumb.Role) || covered.Contains(thumb.Item))
 			{

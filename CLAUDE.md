@@ -508,7 +508,25 @@ Xeon, and the plain copy at 6.8 GB/s leaves the DMA its share. Renderer per 2880
 table lookup per pixel): 16-bit 0.5 ms,
 8-bit 0.6; a half table built in 0.4 ms; the screen path from 1920×1080 to 914×514 1.4 ms, dithered 1.5. Presenter for
 Example 7 (2880×1080 in a 458×172 picture, both layers, playing): 16-bit 7.3–8.5 ms a frame, dithered 7.7–9.1, 8-bit
-10–11 (its bitmaps are canvas-sized). Presenter about 7 ms a frame quiet, 20 during a run. JPEG 1080p at 4:4:4: WIC 26 ms a frame
+10–11 (its bitmaps are canvas-sized). Presenter about 7 ms a frame quiet, 20 during a run. **The handle overlay draws in
+three child layers, the sources' one a bitmap cache** (`SceneOverlay.DrawingLayer`, 2026-11-04, the user's report:
+Example 7, a lattice of thousands of emitter dots, stuttered in playback with every frame in RAM): the pictures change
+every frame, so WPF's render thread rasterised the overlay's retained drawing again every frame, every dot with its halo,
+and the presenter's lock of the bitmap at Render priority waited behind it, 51 ms of a 59 ms frame. A cache on the whole
+overlay gave 10–14 ms a frame but rendered the labels greyscale, since a cache has no opaque background for ClearType,
+and moved every antialiased edge by a few levels; the user's rule: ClearType in the app. So the drawing is split in its
+order, the line probes, then the sources (axes and dots, cached), then the parts, the marquee and the labels: the figures
+with and without the cache differ on the dot rows alone, at most 53 levels at an antialiased edge, and the frame is
+14–21 ms with 6–8 at the bitmap. The dots' halo pen is frozen, since an unfrozen pen is cloned by every draw call. The
+probe graph overlay stays uncached: its drawing changes with the frame by design. The measurement is the presenter's log
+line during playback after a completed run, with Loop on, F5 and Space posted; a stale Debug build had once "proven" the
+whole-overlay cache harmless, so the figure script's build is checked against the source now. **A child element drawn
+from its parent's ArrangeOverride must draw by its own size** (2026-11-04, the user's report: a resize left the dots, the
+lines and the labels at the previous size while the handles moved): WPF renders an element at the end of its own Arrange
+call, so a layer arranged from inside the overlay's ArrangeOverride draws before the overlay's own RenderSize is updated;
+the band methods take the layer's size, which its Arrange set a moment before. Proven by a probe that captures the
+picture, resizes the window by SetWindowPos, captures again and resizes back: the drawing follows the picture, and the
+first and third captures agree. JPEG 1080p at 4:4:4: WIC 26 ms a frame
 single-threaded (9 ms a frame in a sequence job on half the cores), in-house 9.8 ms on ten cores (15 in a job);
 MP4 job 16 ms a frame. Part painter on a Full HD canvas (ten cores, the bench's figures less its 3 ms canvas, 2026-11-04):
 a 400 × 330 outline 0.8 ms (30 on 2026-10-19, 3.6 before the runs), a 400 px lens 0.6, a hexagon 0.7 (was 2.3), an S-bent
