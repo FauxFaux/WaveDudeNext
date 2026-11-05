@@ -4,14 +4,38 @@ import { PreviewPane } from './Panes/PreviewPane'
 import { ProjectTree } from './Panes/ProjectTree'
 import type { ProjectSelection } from './Panes/ProjectTree'
 import { PropertiesPane } from './Panes/PropertiesPane'
-import { createSource } from './Views/SourceView'
+import { addSource, createProject } from './Model/Project'
+import { applySourceDraft, createSourceDraft } from './Views/SourceDraft'
+import type { SourceDraft } from './Views/SourceDraft'
 import './MainWindow.css'
 
 export function MainWindow() {
-  const [selection, setSelection] = useState<ProjectSelection>('source')
-  const [source, setSource] = useState(createSource)
+  const [selection, setSelection] = useState<ProjectSelection>({ kind: 'source', index: 0 })
+  const [project, setProject] = useState(() => addSource(createProject()))
+  const [sourceDrafts, setSourceDrafts] = useState<Record<number, SourceDraft>>({})
   const [isModified, setIsModified] = useState(false)
   const [orientation, setOrientation] = useState<'stacked' | 'side-by-side'>('stacked')
+  const selectedIndex = typeof selection !== 'string' ? selection.index : undefined
+  const selectedSource = selectedIndex !== undefined ? project.sources[selectedIndex] : undefined
+  const sourceDraft = selectedIndex !== undefined && selectedSource
+    ? sourceDrafts[selectedIndex] ?? createSourceDraft(selectedSource) : undefined
+
+  function addProjectSource() {
+    const next = addSource(project)
+    setProject(next)
+    setSelection({ kind: 'source', index: next.sources.length - 1 })
+    setIsModified(true)
+  }
+
+  function changeSource(draft: SourceDraft) {
+    if (selectedIndex === undefined || !selectedSource) return
+    setSourceDrafts(current => ({ ...current, [selectedIndex]: draft }))
+    setProject(current => ({
+      ...current,
+      sources: current.sources.map((source, index) => index === selectedIndex ? applySourceDraft(source, draft) : source),
+    }))
+    setIsModified(true)
+  }
 
   useEffect(() => {
     document.title = `WaveDude Next — Untitled${isModified ? '*' : ''}`
@@ -35,8 +59,9 @@ export function MainWindow() {
   }, [])
 
   function newProject() {
-    setSource(createSource())
-    setSelection('source')
+    setProject(addSource(createProject()))
+    setSourceDrafts({})
+    setSelection({ kind: 'source', index: 0 })
     setIsModified(false)
     document.querySelectorAll<HTMLDetailsElement>('.main-menu details').forEach(menu => { menu.open = false })
   }
@@ -72,8 +97,8 @@ export function MainWindow() {
       </header>
       <main class="workspace">
         <aside class="project-column" aria-label="Project and properties">
-          <ProjectTree selection={selection} onSelect={setSelection} sourceName={source.name} />
-          <PropertiesPane selection={selection} source={source} onSourceChange={next => { setSource(next); setIsModified(true) }} />
+          <ProjectTree selection={selection} onSelect={setSelection} sources={project.sources} onAddSource={addProjectSource} />
+          <PropertiesPane selection={selection} source={sourceDraft} onSourceChange={changeSource} />
         </aside>
         <PreviewPane orientation={orientation} onOrientationChange={setOrientation} />
       </main>

@@ -11,10 +11,13 @@ WPF provides the reference for terminology, workflows, controls, and behaviour.
 The browser implementation uses Preact, TypeScript, CSS, and browser APIs.
 
 The current implementation is a structural shell. It has a project hierarchy,
-a local source editor, two empty preview canvases, a timeline, and transport
-controls. There is no server connection, computed preview, project persistence,
-or working run/playback/export operation yet. Source edits survive selection
-changes within the page but are lost on reload. Other property editors are
+local source creation and editing, two empty preview canvases, a timeline, and
+transport controls. There is no server connection, computed preview, project
+persistence, or working run/playback/export operation yet. The Source + button
+appends and selects a source, using the first unused “Source n” name
+(case-insensitive) and the scene centre, as in `Project.AddSource`. The tree lists
+the sources and their count. Source edits survive selection changes within the
+page but are lost on reload. Other property editors are
 placeholders. Brightness is local UI state; it does not render an image yet.
 
 Keep unavailable operations visibly disabled. Empty previews and frame/step
@@ -142,17 +145,31 @@ they are references, not browser tests or Linux-runnable verification.
 
 ## State, controls and accessibility
 
-MainWindow owns state needed by multiple panes: selection, the source draft,
-modified state, and preview orientation. PropertiesPane dispatches to the
+MainWindow owns state needed by multiple panes: the local project, selection,
+source drafts, modified state, and preview orientation. PropertiesPane dispatches to the
 selected editor. Editors report changes through callbacks. Picture-local
 presentation settings can stay with the picture until shared state is needed.
 
-SourceView keeps number fields as strings so an intermediate edit can be empty
-without turning into `NaN` or unexpectedly resetting the input. Native min/max
-attributes communicate the intended ranges; they are not complete validation.
+`src/Model/` mirrors the currently supported portion of the shared model: project
+version, seed and description, scene metadata, and ordered sources with typed
+numbers, enums and optional array settings. Simulation/display settings, parts,
+probes and colour schemes are not mirrored yet. Generated emitters and binary
+image data belong to the backend. These client types are not workspace API DTOs.
+The shell starts with one source, as before; `createProject` itself returns an empty
+source list, matching the shared model. New project resets the model and all drafts.
+Selection uses source indices while the list supports appending only; renaming
+does not change selection. Revisit identity when removal, reordering or API IDs arrive.
+
+`Views/SourceDraft.ts` keeps number fields as strings so an intermediate edit can
+be empty without turning into `NaN` or unexpectedly resetting the input. Native min/max
+attributes communicate the intended ranges. Draft edits update the matching
+source in the project; only finite, in-range numbers are copied into the model,
+with whole numbers required for integer fields. Invalid fields retain their draft
+text and expose `aria-invalid`; each source's draft survives selection changes.
 When API editing is added, parse and validate at the commit boundary, handle
 validation errors, and use the server's authoritative returned state. The local
-SourceDraft is temporary UI state, not an agreed API contract.
+SourceDraft remains temporary UI state, not an agreed API contract. Source creation
+and editing make no network calls; save remains disabled.
 
 Prefer native buttons, labelled inputs, selects, checkboxes, range inputs, and
 `details`/`summary` disclosures. Keep every enabled action keyboard reachable and
