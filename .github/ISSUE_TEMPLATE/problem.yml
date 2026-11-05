@@ -37,6 +37,7 @@ body:
       label: Version
       description: In WaveDude Next, open Help > About. The version is the line under the name, the number before the brackets.
       options:
+        - 0.1.3
         - 0.1.2
         - 0.1.1
         - 0.1.0
