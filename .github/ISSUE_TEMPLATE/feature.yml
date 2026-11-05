@@ -18,6 +18,7 @@
 # The issue form for a feature request: what the user wants to do, the feature as imagined, and how it is done today.
 name: Feature request
 description: Something WaveDude Next should be able to do
+labels: [enhancement]
 body:
   - type: markdown
     attributes:

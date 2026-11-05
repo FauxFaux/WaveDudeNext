@@ -118,7 +118,9 @@ harnesses run.
   `obj\...\win-x64\R2R`, which both profiles share: a publish after a composite one reused the composite's component stubs
   without their image, so the EXE died at start with a fail-fast before its first log line (both profiles;
   `DOTNET_ReadyToRun=0` let it start, which named the cause); that folder would need a clean before every publish. Version in
-  `Directory.Build.props`; the commit hash lands in About. The license header is the `.editorconfig`
+  `Directory.Build.props`; the commit hash lands in About. **A release adds its version to the problem form before its tag**
+  (2026-11-05, the user's choice): the Version dropdown in `.github/ISSUE_TEMPLATE/problem.yml` is a fixed list, since GitHub's
+  forms cannot read releases, so the new version goes in at the top, in the commit that bumps `Directory.Build.props`. The license header is the `.editorconfig`
   `file_header_template` (its warranty sentence ends in a full stop: Roslyn cuts the value at `;`). LICENSE.md is
   the FSF's GPL-3.0 Markdown verbatim, nothing else (GitHub's detector rejects additions); the About dialog shows
   it as a document built by `Build/Documents.targets`, whose converter `Build/MarkdownToFlowDocument.cs` (an inline
@@ -326,8 +328,9 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   click on a window's title bar while a menu or a context menu is open lands** (`MenuClickThrough`, 2026-11-04, the
   user's request: the close button had needed a second click): an open menu holds the mouse for Windows too, so the
   dismissing click arrives as a client click; it is hit-tested with WM_NCHITTEST and, on the caption, the system menu
-  or a button, posted again as WM_NCLBUTTONDOWN behind the menu's closing; untested by the harnesses, which post no
-  mouse, the user tries it.
+  or a button, posted again as WM_NCLBUTTONDOWN behind the menu's closing; the harnesses post no mouse, so the user
+  tested it by hand (2026-11-05: it works, and it is the behaviour he wants, as other applications have it: a click in
+  the non-client area while a menu is open closes the menu and still lands, rather than being swallowed).
 - **Copy, cut, paste, drag and drop** (2026-10-23, the user's choices): `ProjectClipboard` writes sources, parts,
   probes and schemes (the `INamed` items) and the Scene, Simulation and Display objects as a fragment of their own file
   elements, in the app's format and as plain text (read back from text too, so a text editor takes and gives the XML).

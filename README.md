@@ -70,7 +70,7 @@ dotnet publish WaveDudeNext.WPF\WaveDudeNext.WPF.csproj -p:PublishProfile=Single
 
 ## Problems
 
-Report problems on the [issue tracker](https://github.com/graealex/WaveDudeNext/issues). The report template asks for the system information, which Help > About copies to the clipboard with one click, and for the log file `WaveDudeNext.WPF.log` from the folder of the program.
+Report problems on the [issue tracker](https://github.com/graealex/WaveDudeNext/issues). The report template asks for the version shown in Help > About, for the system information, which the same dialog copies to the clipboard with one click, and for the log file `WaveDudeNext.WPF.log` from the folder of the program. A separate template exists for feature requests there as well.
 
 ## Credits and license
 
