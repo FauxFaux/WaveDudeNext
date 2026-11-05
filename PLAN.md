@@ -223,15 +223,16 @@ The transport choices follow the UI's different kinds of work:
 | UI work | Transport | Reason |
 | --- | --- | --- |
 | Project tree, properties, examples and capabilities | JSON GET through `fetch` | Read authoritative state on demand |
-| Committed edits, run/pause/resume/cancel, scratch requests and export creation | JSON POST/PUT through `fetch` | Validate each operation and return its result or job identity |
+| Committed project edits | Whole-project JSON PUT through `fetch` | One editing contract for properties, removal and reordering |
+| Object creation, undo/redo, run control, scratch requests and export creation | JSON POST through `fetch` | Reuse backend operations and return state or a job identity |
 | Run state, steps done, available frame extent, preview readiness and export state | One SSE connection per application tab | Small server-to-browser updates while background work proceeds |
 | Selected field/intensity pictures and probe ranges | Binary GET for pictures; JSON GET for modest probe data | Fetch only what the current view needs |
 | Project/image imports and project/export downloads | Binary or multipart HTTP transfers | Keep file contents out of JSON and the event stream |
 | Selection, focus, drag feedback, layout and playback clock | Browser state | Immediate interaction without a server round trip |
 
 JSON is a payload format; SSE and WebSockets are communication mechanisms. JSON commands and SSE
-notifications complement each other. Use GET for reads and POST/PUT for changes rather than sending
-every operation as a JSON POST. Exact routes and edit DTO shapes will be agreed with the first flow.
+notifications complement each other. Use GET for reads, PUT for the complete editable project document,
+and POST for application operations. Do not introduce per-field endpoints or a generic path-based editor.
 
 ### Technology choices
 
@@ -361,10 +362,94 @@ The API should cover the frontend's selected workflows:
 
 The backend remains authoritative for validation and computed results. Include project/run revisions in
 state and preview responses so the frontend can identify results belonging to an earlier edit or run.
-Agree the first API contracts alongside the first working frontend flow; exact routes are still open.
 Serialise edits per project and validate an expected project revision atomically with applying the edit.
 Return the authoritative normalised values and new revision. Keep incomplete number-field drafts local;
 commit related property changes together, and coalesce drag updates rather than sending every pointer event.
+
+### Whole-project editing
+
+Optimise the editing API for maintainability in the local application. Send the complete editable JSON
+project document for a committed edit. Do not use JSONPath updates, JSON Patch or Merge Patch, generate
+CRUD routes for model properties, or require a separate request DTO for every property.
+
+Measured on 2026-11-05: the 24 shipped examples are 692–3,193 bytes as sparse XML. A temporary .NET probe
+loaded them through `Project.Load` and projected their persisted model members to compact JSON, with
+defaults included, string enums, camel-case names and a part-kind discriminator. That projection was
+1,719–5,544 bytes, median 2,570.5 bytes. This measures a candidate representation, not a finished API
+response; workspace metadata and object IDs will add some bytes. Image bytes, generated emitters,
+computed properties, simulation frames and probe recordings are excluded. Example 7's 861 generated
+emitters are represented by one source and its array parameters; its projected document is 2,075 bytes.
+The project has no fixed maximum size, but the existing examples give no reason for delta updates.
+
+Use this small set of project routes, under `/api/workspaces/{workspaceId}`:
+
+| Method and route | Behaviour |
+| --- | --- |
+| `GET /project` | Return the complete editable project document and revision |
+| `PUT /project` | Accept `{ expectedRevision, project }`; validate, normalise, persist and return `{ revision, project }` |
+| `POST /project/objects` | Create a source, part, probe or colour scheme through the existing backend add methods; return the complete document and revision |
+| `POST /project/undo` and `POST /project/redo` | Move through workspace history, persist the resulting state and return the complete document and revision |
+
+Property changes, removal and reordering use the same PUT. An object-creation request identifies a
+closed object kind, the part kind where applicable, and an optional canvas position, plus the expected
+revision. Reuse `Project.AddSource`, `AddPart`, `AddProbe` and `AddColorScheme` for defaults, naming and
+initial geometry. A single explicit handler dispatches these known kinds; it does not expose arbitrary
+.NET types or methods. Keep import/load, run control, scratch, frame and export operations as ordinary
+hand-written endpoints. Generate the shared data contract, not the endpoints or an RPC framework.
+
+Give editable objects stable workspace IDs so a full round trip preserves identity across renames and
+reordering. Keep these IDs and asset references in the JSON contract without changing the existing
+`.wdproj` format. Normal project responses contain only editable model state and those references;
+derived values and job status are separate responses. The complete project document is also the edit
+input, so do not mix read-only computed results into it.
+
+Reject a stale expected revision with `409 Conflict`, without partial changes. Serialise mutations in
+the browser as well as the workspace: at most one model mutation is in flight. Keep later input as
+drafts, then build the next complete document from the acknowledged state and those drafts; an earlier
+response must not erase unsent edits. Each committed edit is one undo step, with related changes grouped.
+
+Reconcile the previous and incoming project centrally on the server. Whole-project delivery must still
+distinguish simulation, probe and display changes, preserve scheme-rename and gate-follower behaviour,
+and avoid restarting a simulation for an unrelated display edit. Reuse the library's rules and test
+these cases through the same commit path. This is application logic, independent of HTTP granularity.
+
+### Generated Zod contract
+
+Generate Zod source for the browser from the C# JSON contract and infer TypeScript types with
+`z.infer<typeof ProjectSchema>`. Zod is the preferred frontend schema asset; do not maintain a parallel
+hand-written TypeScript project hierarchy or make JSON Schema the frontend contract. Keep handwritten
+editor-specific refinements in a wrapper around the generated schemas, never inside generated files.
+
+Define the JSON member selection, naming, enum representation, nullability and part-kind discriminators
+once, and use that same contract for server serialisation and generation. Reuse the model's types and
+existing range/default/description metadata rather than duplicating those constraints in DTOs and UI
+code. XML-only annotations do not automatically configure `System.Text.Json`; computed members and
+image bytes need an explicit exclusion policy, with asset references supplied by the workspace layer.
+
+Use a small .NET generator under `_tools/contract_gen/` to emit
+`web/src/Api/Project.generated.ts` directly. Scope it to the contract's actual types: objects, arrays,
+strings, booleans, bounded numbers, string enums, nullable values and discriminated part variants. Fail
+generation on unsupported contract shapes rather than emitting `any` or silently weakening validation.
+The generated module exports individual object schemas as well as the complete project schema, so
+editors can validate their fields without defining the same rules again.
+
+For example, the existing source frequency metadata should generate
+`z.number().min(0.01).max(255).meta({ default: 100 })`. Defaults are descriptive metadata, not automatic
+replacement for missing required fields. New objects come from the backend creation operation; the
+generator must not bake a random project seed or other context-dependent defaults into static code.
+Form drafts remain strings until commit, separately from the numeric project contract. The backend
+still validates and normalises every update and owns rules that depend on other model values.
+
+Add generation and a check for stale generated output to the normal build procedure when introducing
+the first contract. Verify real serialised example projects against the generated Zod schema, including
+every part kind, nullability and range boundaries. No server process should be needed for generation.
+Zod's schema composition leaves room for browser-specific validation as the interface grows, while
+generated declarations stay reproducible.
+
+References: [Zod schemas](https://zod.dev/api), [inferred TypeScript types](https://zod.dev/basics#inferring-types),
+[schema metadata](https://zod.dev/metadata).
+
+### Background operation lifetimes
 
 Starting a run, a scratch computation or an export must return an operation identity promptly (normally
 `202 Accepted` with a status URL), rather than keeping a request open for the computation. The server
@@ -470,9 +555,10 @@ References: [fetch cancellation](https://developer.mozilla.org/en-US/docs/Web/AP
 
 1. Add a Linux-runnable server host referencing the shared library and owning isolated workspaces.
    Load an example, compute a frame and return state as JSON and the picture as a binary response.
-2. Connect the existing Preact project with workspace attachment and recovery persistence. Show
-   field/intensity canvases, edit a few properties and request an updated preview. Verify reload and
-   duplicate-tab behaviour, and measure the complete edit-to-picture latency including autosave.
+2. Generate the shared Zod project contract and connect the existing Preact project with workspace
+   attachment, whole-project PUT editing and recovery persistence. Show field/intensity canvases,
+   edit a few properties and request an updated preview. Verify reload and duplicate-tab behaviour,
+   and measure the complete edit-to-picture latency including autosave.
 3. Add run control, one SSE status stream, timeline seeking and probes. Implement workspace release
    and cache retention; verify reconnect resynchronisation, bounded delivery to a slow browser, and
    that stale HTTP responses or SSE events cannot replace newer state.

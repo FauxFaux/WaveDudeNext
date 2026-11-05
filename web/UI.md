@@ -192,9 +192,9 @@ and ensure the same action remains available through a visible control.
 ## Connecting the planned server
 
 Follow PLAN.md: use native `fetch` for JSON commands/state and binary pictures/files,
-with one native `EventSource` SSE stream per tab for background status. Exact routes
-and DTOs are still open. Model validation, wave simulation, frame storage, and
-computed values belong to the shared backend.
+with one native `EventSource` SSE stream per tab for background status. Model
+validation, wave simulation, frame storage, and computed values belong to the
+shared backend.
 The browser owns transient selection, focus, drag feedback, and display state.
 
 The tab attaches to a server-owned workspace that always contains an open project,
@@ -213,7 +213,23 @@ Reload retrieves the current project and operation state. Closing the tab does
 not itself discard the recovery copy or cancel a run; do not rely on an unload
 handler to save the project. See PLAN.md for release and restart behaviour.
 
-Introduce explicit request/response types alongside the first working flow.
+Normal edits submit the complete editable project document with its expected
+revision using `PUT /api/workspaces/{workspaceId}/project`. Removal and reordering
+use this same route. Do not introduce per-field APIs or JSONPath/Patch updates.
+Object creation uses the backend add operation for its defaults and naming;
+undo/redo and other application operations use their explicit command routes.
+Each successful model mutation returns the complete normalised project and new
+revision. Serialise mutations and retain later unsent drafts when applying a
+response. A stale revision is a conflict, not an instruction to overwrite.
+
+Use the planned generated Zod schemas in `src/Api/Project.generated.ts` and infer
+TypeScript types from them. The generator reads the C# JSON contract and model
+metadata; do not maintain duplicate project types, ranges or enum lists in the
+frontend. Editor-specific schema extensions belong in handwritten modules.
+Keep number-field drafts separate from the numeric project contract. This
+generation is planned alongside the first API flow; the current SourceDraft
+remains local placeholder state until then.
+
 Use JSON for commands and metadata, binary transfers for pictures and files.
 Keep outstanding preview requests bounded and reject stale results using
 project/run revisions and the current display request identity, including after
