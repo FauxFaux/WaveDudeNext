@@ -8,7 +8,7 @@ export interface ProbeGraphData {
   stepsSampled: number
 }
 
-/** The endpoint already cuts histories to the displayed step and supplies its exact line profile. */
+/** Frame recordings cut histories to the displayed step and supplies its exact line profile. */
 export function frameProbeData(recording: FrameProbe | undefined): ProbeGraphData {
   return {
     values: recording?.values,

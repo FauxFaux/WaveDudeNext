@@ -31,12 +31,3 @@ export function applySourceDraft(source: Source, draft: SourceDraft): Source {
   }
   return next
 }
-
-/** Apply normalised acknowledgements while keeping incomplete number strings local. */
-export function acknowledgeSourceDraft(source: Source, draft: SourceDraft): SourceDraft {
-  const acknowledged = createSourceDraft(source)
-  for (const key of numberFields) {
-    if (!isSourceNumberValid(key, draft[key])) acknowledged[key] = draft[key]
-  }
-  return acknowledged
-}

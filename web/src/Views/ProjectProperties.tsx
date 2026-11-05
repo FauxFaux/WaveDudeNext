@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { PropertyPath } from '../Model/Project'
+import { initialValue } from '../Model/SchemaDefaults'
 
 const labels: Record<string, string> = {
   colorText: 'Colour', colorScheme: 'Colour scheme', colorSchemes: 'Colour schemes',
@@ -20,19 +21,6 @@ interface ProjectPropertiesProps {
   value: Record<string, unknown>
   onChange: ChangeProperty
   disabled?: boolean
-}
-
-/** Defaults for optional subobjects and list entries come from the shared contract. */
-function initialValue(schema: z.ZodType, key = ''): unknown {
-  const preset = schema.meta()?.default
-  if (preset !== undefined) return preset
-  if (schema instanceof z.ZodNullable) return null
-  if (schema instanceof z.ZodObject) return Object.fromEntries(Object.entries(schema.shape).map(([key, child]) => [key, initialValue(child as z.ZodType, key)]))
-  if (schema instanceof z.ZodArray) return []
-  if (schema instanceof z.ZodNumber) return Math.max(0, schema.minValue ?? 0)
-  if (schema instanceof z.ZodBoolean) return false
-  if (schema instanceof z.ZodEnum) return schema.options[0]
-  return key === 'colorText' ? '#ffffff' : ''
 }
 
 function ScalarProperty({ schema, value, label, disabled, onChange }: {

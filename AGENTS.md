@@ -28,7 +28,7 @@ Use Docker with BuildKit, Node.js 24/npm and Just for browser builds. `_tools/bu
 - `just check-probe-graph`: run the existing browser probe graph calculation checks.
 - `just check-wasm`: publish Wasm and verify the shared solver through its JavaScript export under Node.
 
-The retained UI still calls `/api` and has not yet been connected to Wasm. There is no server or Vite API proxy on this branch. Do not claim that building the static site makes editing or simulation controls functional.
+The UI owns one in-memory Project in root Preact state, with local editing, reset and JSON text open/save. There is no server, workspace API or Vite API proxy. Simulation and examples remain disabled pending their Wasm/static integration.
 
 The desktop solution remains independent:
 

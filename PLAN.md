@@ -15,9 +15,11 @@ The shared library and Windows desktop solution remain unchanged.
   `web/dist/` are ignored. Response compression belongs to the web server.
 - `web/src/Wasm/Runtime.ts` provides a lazy, base-path-aware runtime loader. The initial `SmokeTest`
   export executes a small deterministic scene with the shared CPU solver.
-- The retained Preact UI includes project/property panes, canvas frame rendering, a timeline and
-  probe graphs. Its `src/Api/` modules still use HTTP/SSE; replacing them is the next iteration.
-  The application cannot load projects or run simulations from this static build yet.
+- The Preact root owns one in-memory Project. Project/property panes edit it locally; File
+  resets the project or opens/saves validated JSON through a text area. Reload clears the project.
+  Workspace creation, HTTP/SSE and server mutation queues have been removed.
+- Canvas frame rendering, the timeline and probe graphs are retained. Simulation, examples and
+  shared colour-scheme loading remain unconnected and do not issue server requests.
 - The generated Zod project schema is retained as a snapshot for existing frontend types.
   Its old server-dependent generator and contract verification are not part of this branch.
 
@@ -26,10 +28,11 @@ carried across. Existing examples and Windows harnesses already present in `orig
 
 ## Next iterations
 
-1. Introduce a long-lived worker hosting the .NET runtime. Replace workspace creation and the
-   HTTP client with worker commands. Define a project contract using the shared model's defaults,
+1. Introduce a long-lived worker hosting the .NET runtime, taking the root-owned Project as input.
+   Define a project contract using the shared model's defaults,
    ranges and normalisation; restore schema generation independently of any server if needed.
-   Start with creating a project, reading its state, editing a source and computing one preview.
+   Replace the schema-snapshot defaults used by local editing with the shared model contract,
+   and start with computing one preview after a source edit.
 2. Add bounded batches of simulation steps. Process stop and edit messages between batches so
    cancellation remains responsive. Do not assume desktop task/thread scheduling works unchanged
    in a single-threaded Wasm runtime. Measure edit-to-picture latency and worker responsiveness.

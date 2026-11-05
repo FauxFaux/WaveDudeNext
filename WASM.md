@@ -93,8 +93,9 @@ Run `just check-wasm` to publish and exercise this export under Node. After an e
 `npm --prefix web run check-wasm` checks the generated bundle without publishing again.
 `just check-probe-graph` runs the retained graph calculation checks.
 
-The retained UI still calls `/api` and is not connected to these exports. There is no API proxy
-or server on this branch. See [PLAN.md](PLAN.md) for the worker and frontend migration steps.
+The UI edits one Project in root Preact state and opens/saves JSON text without a server.
+Simulation is not connected to these exports yet; its controls and examples remain disabled.
+See [PLAN.md](PLAN.md) for the worker and frontend migration steps.
 
 References: [Microsoft's browser interop guidance](https://learn.microsoft.com/en-us/aspnet/core/client-side/dotnet-interop/wasm-browser-app?view=aspnetcore-10.0)
 and [Vite public assets](https://vite.dev/guide/assets.html#the-public-directory).

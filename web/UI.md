@@ -10,11 +10,11 @@ The browser UI is a separate consumer of the shared WaveDude Next backend.
 WPF provides the reference for terminology, workflows, controls, and behaviour.
 The browser implementation uses Preact, TypeScript, CSS, and browser APIs.
 
-The retained UI was developed against an HTTP workspace API. Its project tree,
-property editors, canvas renderers, timeline and probe graphs are carried across,
-but `src/Api/` still calls `/api` and listens for SSE. This branch has no server
-or API proxy, so project loading and simulation controls will not work until the
-worker migration in PLAN.md is implemented.
+MainWindow owns one Project in Preact state. The project tree and property editors
+edit it locally. File resets it or opens/saves validated JSON through a text area;
+reload clears it. There is no workspace, HTTP API or SSE connection. Canvas
+renderers, the timeline and probe graphs are retained, while simulation and
+examples stay disabled until their integration in PLAN.md is implemented.
 
 `src/Wasm/Runtime.ts` lazily loads the new .NET runtime from Vite's static assets.
 Its solver smoke export verifies build and interop only. Do not start simulations
@@ -141,21 +141,22 @@ they are references, not browser tests or Linux-runnable verification.
 
 ## State, controls and accessibility
 
-MainWindow owns shared selection, source drafts, modified state and preview
-orientation. It currently obtains project state through `useWorkspace`; that
-transport is awaiting migration. PropertiesPane dispatches to the selected editor.
+MainWindow owns the Project, shared selection, source drafts, modified state and
+preview orientation. Functional state updates apply local edits to the current
+Project. PropertiesPane dispatches to the selected editor.
 Editors report changes through callbacks, while picture-local presentation
 settings can stay with the picture until shared state is needed.
 
 The existing `src/Api/Project.generated.ts` is a schema snapshot used by current
 frontend types. The old generator depended on server code and was not retained.
-Re-establish a model-derived contract at the Wasm boundary rather than duplicating
-model defaults, ranges, enums or normalisation rules in TypeScript.
+Local project and object creation use its default metadata, with contextual
+defaults matching the shared model's constructors. Re-establish contract generation
+at the Wasm boundary before expanding numerical or normalisation behaviour.
 
 `Views/SourceDraft.ts` keeps number fields as strings so an intermediate edit can
 be empty without turning into `NaN` or resetting the input. Keep these drafts
-separate from validated numeric model values. Preserve drafts until the worker
-acknowledges a change, and apply its normalised project state.
+separate from numeric project values. Valid edits enter root state immediately;
+incomplete number strings remain in the editor. Reset and Open clear old drafts.
 
 Prefer native buttons, labelled inputs, selects, checkboxes, range inputs, and
 `details`/`summary` disclosures. Keep every enabled action keyboard reachable and
@@ -177,7 +178,7 @@ and ensure the same action remains available through a visible control.
 
 ## Connecting the Wasm worker
 
-Follow PLAN.md for the staged replacement of HTTP/SSE with worker messages.
+Follow PLAN.md for connecting the root-owned Project to a Wasm worker.
 Model validation, wave simulation and numerical results belong to the shared
 .NET code. The browser owns transient selection, focus, drag feedback and display
 state. Keep the main thread responsive while the worker computes bounded batches.
