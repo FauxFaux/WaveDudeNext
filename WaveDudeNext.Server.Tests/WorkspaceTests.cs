@@ -21,6 +21,7 @@ using System.Net.ServerSentEvents;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using WaveDudeNext.Server.Workspaces;
 
@@ -147,6 +148,23 @@ public sealed class WorkspaceTests
 		Assert.AreEqual(2L, remaining.Current.Data.StatusSequence);
 		service.Dispose();
 		Assert.IsFalse(await remaining.MoveNextAsync());
+	}
+
+	[TestMethod]
+	public async Task HostShutdownEndsHttpStreamWithoutAnUnhandledCancellation()
+	{
+		await using var factory = new WebApplicationFactory<Program>();
+		using var client = factory.CreateClient();
+		using var creation = await client.PostAsync("/api/workspaces", null);
+		using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+		using var response = await client.GetAsync(creation.Headers.Location,
+			HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+		await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+		await using var events = SseParser.Create(stream).EnumerateAsync(timeout.Token).GetAsyncEnumerator();
+		Assert.IsTrue(await events.MoveNextAsync());
+		var pending = events.MoveNextAsync().AsTask();
+		factory.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+		Assert.IsFalse(await pending);
 	}
 
 	[TestMethod]

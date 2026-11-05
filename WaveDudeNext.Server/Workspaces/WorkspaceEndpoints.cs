@@ -16,6 +16,8 @@
 // <https://www.gnu.org/licenses/>.
 
 using Microsoft.AspNetCore.Http.HttpResults;
+using System.Net.ServerSentEvents;
+using System.Runtime.CompilerServices;
 
 namespace WaveDudeNext.Server.Workspaces;
 
@@ -48,14 +50,26 @@ internal static class WorkspaceEndpoints
 		return TypedResults.ServerSentEvents(Events(workspace, context.RequestAborted, lifetime.ApplicationStopping));
 	}
 
-	private static async IAsyncEnumerable<System.Net.ServerSentEvents.SseItem<WorkspaceStatus>> Events(
+	private static async IAsyncEnumerable<SseItem<WorkspaceStatus>> Events(
 		Workspace workspace, CancellationToken requestAborted,
-		[System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken stopping)
+		[EnumeratorCancellation] CancellationToken stopping)
 	{
 		using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(requestAborted, stopping);
-		await foreach (var item in workspace.Subscribe(cancellation.Token))
+		await using var events = workspace.Subscribe(cancellation.Token).GetAsyncEnumerator();
+		while (!cancellation.IsCancellationRequested)
 		{
-			yield return item;
+			try
+			{
+				if (!await events.MoveNextAsync())
+				{
+					break;
+				}
+			}
+			catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+			{
+				break;
+			}
+			yield return events.Current;
 		}
 	}
 }
