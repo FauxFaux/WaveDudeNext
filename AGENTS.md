@@ -11,13 +11,22 @@
 
 ## Build, Test, and Development Commands
 
-Use the .NET 10 SDK. The WPF application and current harnesses require Windows.
+Use the .NET 10 SDK selected by `global.json`, Node.js 24/npm and Just. [Justfile](Justfile) is the entry point for portable builds; run `just` to list commands. From a fresh checkout, run `just restore`, then `just build`. Recipes run from the repository root, including when invoked from a subdirectory.
+
+- `just restore`: restore the portable library and install locked frontend dependencies with `npm ci`.
+- `just build`: build the portable library in Release with zero warnings, then check TypeScript and build the production frontend.
+- `just build-library` / `just build-web`: build only the changed component.
+- `just restore-library` / `just restore-web`: restore only that component's dependencies.
+- `just dev-web` / `just preview-web`: run Vite for development or inspect the built frontend.
+
+The server is not implemented yet. Linux library/API test recipes will be added when the harness is portable and the server exists; `just build` currently verifies compilation and frontend bundling, not runtime behaviour. See `PLAN.md` for the remaining test work. GPU verification is optional and separate from the CPU build.
+
+The WPF application and current verification harnesses require Windows:
 
 - `dotnet build WaveDudeNext.sln`: build the desktop solution; require zero warnings.
 - `dotnet run --project WaveDudeNext.WPF`: launch the desktop application.
 - `dotnet run --project _tools/library_check -c Release`: verify library behaviour; append `-- export` for export checks.
 - `powershell -ExecutionPolicy Bypass -File _tools/ui_check/KeyboardCheck.ps1`: run a targeted UI check; choose the script matching the change.
-- In `web/`, run `npm ci`, then `npm run dev` for development, `npm run build` for TypeScript checking and production output, or `npm run preview` to inspect that output.
 
 ## Coding Style & Naming Conventions
 
