@@ -151,3 +151,7 @@
   .picture-controls button { display: none; }
   .frame-readout { margin-left: 2px; }
 }
+
+.main-menu .examples-menu { position: relative; height: auto; }
+.main-menu .examples-menu > summary { padding: 6px 10px; }
+.examples-menu > .examples-popup { left: 100%; top: 0; width: max-content; max-width: 70vw; max-height: 75vh; overflow-y: auto; }

@@ -2,14 +2,17 @@ import { useEffect, useState } from 'preact/hooks'
 import { IconView } from './Controls/IconView'
 import { PreviewPane } from './Panes/PreviewPane'
 import { ProjectTree } from './Panes/ProjectTree'
-import { actOnProjectObject, addProjectObject, createProject, editProjectProperty, selectedObject, writeProject } from './Model/Project'
+import { actOnProjectObject, addProjectObject, createProject, editProjectProperty, selectedObject, readProject, writeProject } from './Model/Project'
 import type { ObjectAction, ObjectSelection, PartKind, ProjectCollection, ProjectSelection, PropertyPath } from './Model/Project'
 import { PropertiesPane } from './Panes/PropertiesPane'
 import { applySourceDraft, createSourceDraft } from './Views/SourceDraft'
 import type { SourceDraft } from './Views/SourceDraft'
 import { ProjectJsonDialog } from './Views/ProjectJsonDialog'
 import type { Project } from './Model/Project'
+import examples from './assets/examples/index.json'
 import './MainWindow.css'
+
+const { exampleProjects } = await import('./example-projects');
 
 export function MainWindow() {
   const [project, setProject] = useState(createProject)
@@ -115,6 +118,13 @@ export function MainWindow() {
     setProjectGeneration(current => current + 1)
   }
 
+  function openExample(id: string) {
+    const path = `./assets/examples/${id.replace(/\.wdproj$/, '.json')}`
+    replaceProject(readProject(exampleProjects[path]))
+    closeMenus()
+    document.querySelector<HTMLElement>('.main-menu > details > summary')?.focus()
+  }
+
   function newProject() {
     replaceProject(createProject())
     closeMenus()
@@ -134,7 +144,11 @@ export function MainWindow() {
           <details><summary>File</summary><div class="menu-popup">
             <button onClick={newProject}>Reset project</button>
             <button onClick={() => showJsonDialog('open')}>Open project…</button>
-            <button disabled>Examples</button>
+            <details class="examples-menu"><summary>Examples</summary><div class="menu-popup examples-popup">
+              {examples.map(example => <button key={example.id} onClick={() => openExample(example.id)}>
+                {example.number}. {example.title}
+              </button>)}
+            </div></details>
             <button onClick={() => showJsonDialog('save')}>Save project…</button>
             <hr /><button disabled>Export…</button>
           </div></details>
