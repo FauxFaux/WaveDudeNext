@@ -39,8 +39,8 @@ public sealed class ManualHeading(string text, int level, string anchor, Paragra
 	/// <summary>GitHub's anchor of the heading (lower case, a hyphen for each space), what a link "#anchor" names.</summary>
 	public string Anchor { get; } = anchor;
 
-	/// <summary>The heading's paragraph in the document.</summary>
-	public Paragraph Paragraph { get; } = paragraph;
+	/// <summary>The heading's paragraph in the document; pointed at a new copy's when the window loads the document again.</summary>
+	public Paragraph Paragraph { get; internal set; } = paragraph;
 
 	/// <summary>The headings of a higher level up to the next one of this level or lower, in document order.</summary>
 	public List<ManualHeading> Children { get; } = [];

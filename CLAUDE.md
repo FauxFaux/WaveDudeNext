@@ -98,7 +98,8 @@ harnesses run.
   the log).
 - **Do not resurrect**: a probe signal lane, timeline tracks, zoom and pan of the axis, thumbnails, a run progress
   bar, the scratch budget and its "not computed" note, a GPU JPEG front end, a Direct3D display path, a bent
-  rotation lever, an unreadable settings file moved aside (2026-11-03: nobody would find it, the log quotes it). **Do not
+  rotation lever, an unreadable settings file moved aside (2026-11-03: nobody would find it, the log quotes it), Ideal
+  text formatting for the manual at 100 % (2026-11-05: less readable, see UI zoom). **Do not
   change**: the readout showing both frame and step (undecided).
 - Collect the reusable rules for other projects only when he asks.
 
@@ -452,7 +453,19 @@ FrameStore: native memory up to the budget, the rest in a temp file (%LOCALAPPDA
   grid under the full transform; at 100 % the arithmetic is the old one, pixel for pixel. The handle glyphs (1.5 px
   strokes over a halo), the dashed probe lines and the marquee are antialiased by design and stay so. The window must
   fit the screen for a capture: the Desktop Window Manager composes nothing off it, so PrintWindow returns white there. `PreviewQualityCheck` and `LanguageCheck` count
-  the View menu's entries past the new one.
+  the View menu's entries past the new one. **The manual loads its document again when the zoom changes the text
+  formatting mode** (2026-11-04, the user's report: the manual's text blurred at a live change and came back sharp
+  reopened): WPF reads `TextOptions.TextFormattingMode` once, at a flow document's first formatting, into the text
+  formatter it keeps for the document's life (`StructuralCache.EnsurePtsContext` in WPF's source), so the inherited
+  change reached the document and re-formatted its lines with the Display-mode formatter, whose glyphs are drawn scaled,
+  soft, and wrapped as at 100 %; a mode set on the document itself changes nothing either. `ManualWindow.ReloadDocument`:
+  a new copy from BAML (130–180 ms), the headings re-pointed so the tree's rows stay, the place kept as a share of the
+  height; the old text stays on screen, scaled, until the new copy is laid out, about half a second in all, which the
+  user sees as the text sharpening a moment after the change (the log line names both times). The rule for the mode at
+  a zoom is `WindowZoom.TextFormattingAt`. About is modal, so no zoom change reaches its license document. Proven by a
+  probe that captures the manual at a live change and reopened: pixel for pixel the same. Ideal formatting for the
+  manual at every zoom, which spares the reload, was built for the user to see and refused (2026-11-05, his decision: a
+  zoom change with the manual open is rare and the delay short, and Ideal costs readability at 100 %).
 - **Optical parts** (2026-10-18; **`OpticalParts.md` is the reference**: the kinds, the painting rules, the measurements
   and how to add a kind): subclasses of `OpticalPart` in `Project.Parts`, one class and one XML element per kind, the
   class being the kind (no enum, 2026-10-22): a lens or mirror, the shapes under `ShapePart` (polygon, rectangle, ellipse,

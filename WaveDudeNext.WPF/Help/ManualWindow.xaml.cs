@@ -16,6 +16,7 @@
 // <https://www.gnu.org/licenses/>.
 
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,6 +26,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Navigation;
+using System.Windows.Threading;
 using NLog;
 using WaveDudeNext.WPF.Theming;
 
@@ -36,7 +38,8 @@ namespace WaveDudeNext.WPF.Help;
 /// opens with the text at its top and the first chapter's row taken; taking a row goes to its heading, which then
 /// stands at the top of the text; a link to "#anchor" goes to that heading, a web link opens in the browser. The text
 /// scrolls by whole pixels, so a screenshot that fits the column stays drawn 1:1. Not modal, but owned by the main window
-/// (the user's choice): minimised and restored with it, kept above it, opened once and closed with it. UI thread only.
+/// (the user's choice): minimised and restored with it, kept above it, opened once and closed with it. A change of the UI
+/// zoom that changes the text formatting mode loads the document again (<see cref="ReloadDocument"/>). UI thread only.
 /// </summary>
 public partial class ManualWindow : Window
 {
@@ -47,6 +50,8 @@ public partial class ManualWindow : Window
 	private ScrollViewer? _scroller;
 	/// <summary>Set while the first row is taken on opening, so the text stays at its top instead of going to the heading.</summary>
 	private bool _opening;
+	/// <summary>The text formatting mode the shown document was formatted with: the window content's at its first layout.</summary>
+	private TextFormattingMode _formattedMode;
 
 	/// <summary>Loads the manual and its headings; the window opens with the text at its top and the first row taken, the tree focused.</summary>
 	public ManualWindow()
@@ -65,10 +70,84 @@ public partial class ManualWindow : Window
 		Loaded += OnLoaded;
 		ContentRendered += (_, _) => Logger.Debug("Manual open: {Headings} headings, the document read in {Read:0} ms, on screen after {Shown:0} ms",
 			Count(_all), read, Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+		Settings.Default.PropertyChanged += OnSettingChanged;
 	}
 
-	/// <summary>The manual.</summary>
-	public FlowDocument Document { get; }
+	/// <summary>Identifies the <see cref="Document"/> property.</summary>
+	public static readonly DependencyProperty DocumentProperty = DependencyProperty.Register(
+		nameof(Document), typeof(FlowDocument), typeof(ManualWindow));
+
+	/// <summary>The manual: a new copy after a change of the UI zoom that changes the text formatting mode (<see cref="ReloadDocument"/>).</summary>
+	public FlowDocument Document
+	{
+		get => (FlowDocument)GetValue(DocumentProperty);
+		private set => SetValue(DocumentProperty, value);
+	}
+
+	/// <summary>Lets go of the settings' event, which outlives the window.</summary>
+	protected override void OnClosed(EventArgs e)
+	{
+		Settings.Default.PropertyChanged -= OnSettingChanged;
+		base.OnClosed(e);
+	}
+
+	/// <summary>
+	/// A change of the UI zoom that changes the content's text formatting mode (the theme's Display at 1, Ideal when
+	/// scaled) loads the document again (2026-11-04, the user's report: the text had blurred at a live change and came
+	/// back sharp reopened): WPF reads the mode once, at a document's first formatting, into the text formatter it keeps
+	/// for the document's life, so the lines were formatted again with the Display-mode one and drawn scaled, soft and
+	/// wrapped as at 100 %.
+	/// </summary>
+	private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(Settings.UiZoom) && IsLoaded && WindowZoom.TextFormattingAt(this, Settings.Default.UiZoom) != _formattedMode)
+		{
+			ReloadDocument();
+		}
+	}
+
+	/// <summary>
+	/// A new copy of the document in the viewer, the headings pointed at its paragraphs, the text at the same share of
+	/// its height. The old text stays on screen, scaled, until the new copy is laid out: about 180 ms to read it and the
+	/// layout of the whole document after that, half a second in all, which the user sees as the text sharpening a
+	/// moment after the zoom changed (2026-11-04). The log line names both times.
+	/// </summary>
+	private void ReloadDocument()
+	{
+		long start = Stopwatch.GetTimestamp();
+		double zoom = Settings.Default.UiZoom;
+		double share = _scroller is { ScrollableHeight: > 0 } scroller ? scroller.VerticalOffset / scroller.ScrollableHeight : 0;
+		FlowDocument fresh = ManualDocument.Load();
+		Relink(_all, ManualDocument.Contents(fresh));
+		double read = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+		Document = fresh;
+		_formattedMode = WindowZoom.TextFormattingAt(this, zoom);
+		// after the new document's layout (at Render priority): its lines wrap differently, so the place is kept as a share
+		Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+		{
+			if (share > 0 && _scroller != null)
+			{
+				_scroller.ScrollToVerticalOffset(WholePixels(share * _scroller.ScrollableHeight));
+			}
+			Logger.Debug("Manual: the document loaded again, formatted {Mode} at UI zoom {Zoom}: read in {Read:0} ms, laid out after {Shown:0} ms",
+				_formattedMode, zoom, read, Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+		});
+	}
+
+	/// <summary>The headings pointed at the paragraphs of a new copy of the same document, so the tree's rows stay.</summary>
+	private static void Relink(IReadOnlyList<ManualHeading> headings, IReadOnlyList<ManualHeading> fresh)
+	{
+		if (headings.Count != fresh.Count)
+		{
+			Logger.Warn("Manual: {Count} headings in the document loaded again, {Known} before; the contents tree goes nowhere until the manual is opened again", fresh.Count, headings.Count);
+			return;
+		}
+		for (int i = 0; i < headings.Count; i++)
+		{
+			headings[i].Paragraph = fresh[i].Paragraph;
+			Relink(headings[i].Children, fresh[i].Children);
+		}
+	}
 
 	/// <summary>The contents tree's rows: the manual's chapters, each with its sections under it.</summary>
 	public IReadOnlyList<ManualHeading> Headings { get; }
@@ -87,6 +166,7 @@ public partial class ManualWindow : Window
 
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
+		_formattedMode = WindowZoom.TextFormattingAt(this, Settings.Default.UiZoom);
 		_scroller = documentView.Template.FindName("PART_ContentHost", documentView) as ScrollViewer;
 		if (_scroller != null)
 		{

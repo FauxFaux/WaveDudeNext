@@ -210,6 +210,15 @@ public static class WindowZoom
 		KeepOnScreen(window);
 	}
 
+	/// <summary>
+	/// The text formatting mode a window's content has at a zoom, what <see cref="ZoomContent"/> gives it: Ideal when
+	/// scaled, else the window's own (the theme's Display). A flow document must be loaded again when it changes
+	/// (<see cref="Help.ManualWindow"/>): WPF reads the mode once, at the document's first formatting, into the text
+	/// formatter it keeps for the document's life, so a change re-formats the lines with the old one.
+	/// </summary>
+	public static TextFormattingMode TextFormattingAt(Window window, double zoom) =>
+		zoom == 1 ? TextOptions.GetTextFormattingMode(window) : TextFormattingMode.Ideal;
+
 	// ---------------------------------------------------------------- popups
 
 	private static void OnPopupChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
