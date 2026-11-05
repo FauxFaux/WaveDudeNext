@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "seed": 1529591424,
+  "description": "Featuring a large (450+ composite) source that creates both spatially- as well as temporally incoherent wave emission. The probes show that even though the intensity variations are large for an incoherent source, they eventually average out over time. Probe 2 shows the 1/r relationship. where r= distance to the source.",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1400,
+    "height": 800,
+    "dampingEdge": -64,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 5000,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 10,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Default field",
+      "brightness": 50,
+      "blackLevel": -0.05,
+      "preview": false,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Hot orange",
+      "brightness": 30,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 70
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "398e4e6e-e1ff-4cb7-ac52-5cda8604ca50",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 682,
+      "y": 574,
+      "frequency": 150,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 8,
+      "offWidth": 80,
+      "detachAfter": -1,
+      "array": {
+        "sizeX": 15,
+        "sizeY": 15,
+        "spacingX": 6,
+        "spacingY": 6,
+        "angle": 0,
+        "randomFrequency": 30,
+        "randomPhase": 180,
+        "randomOffWidth": 998,
+        "randomPosition": 3
+      }
+    }
+  ],
+  "parts": [],
+  "probes": [
+    {
+      "id": "004f8846-2598-4016-8047-0862175ae14f",
+      "name": "Probe 2",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "IntegratedValue",
+      "kind": "Line",
+      "ax": 810,
+      "ay": 579,
+      "bx": 1360,
+      "by": 583,
+      "boxSize": "Custom",
+      "boxX": 746,
+      "boxY": 5,
+      "boxWidth": 649,
+      "boxHeight": 312,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 1000
+    },
+    {
+      "id": "3ccaf04c-eb1b-4aa9-93aa-6b914e335959",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "IntegratedValue",
+      "kind": "Line",
+      "ax": 124,
+      "ay": 374,
+      "bx": 123,
+      "by": 785,
+      "boxSize": "Custom",
+      "boxX": 124,
+      "boxY": 5,
+      "boxWidth": 600,
+      "boxHeight": 312,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

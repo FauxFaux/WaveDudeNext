@@ -1,0 +1,128 @@
+{
+  "version": 3,
+  "seed": 763629701,
+  "description": "Simple omnidirectional pulsed source with a smoothed square intensity profile, reflecting of simple mirror surface. A probe measures the intensity profile near the surface.",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 960,
+    "height": 540,
+    "dampingEdge": -64,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 2500,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 13,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Ice and fire",
+      "brightness": 70,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Default intensity",
+      "brightness": 50,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 70
+    },
+    "exportFrom": 10,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "e9056d29-3d77-407d-9973-14f3c9a4d35a",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 115,
+      "y": 245,
+      "frequency": 100,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "SmoothedSquare",
+      "pulseWidth": 10,
+      "offWidth": 10,
+      "detachAfter": -1,
+      "array": null
+    }
+  ],
+  "parts": [
+    {
+      "id": "43de4d5e-0c86-4007-be8f-f98e57654dab",
+      "kind": "Rectangle",
+      "length": 52,
+      "width": 238,
+      "linked": false,
+      "mirror": true,
+      "refractiveIndex": 1.5,
+      "absorption": 0,
+      "absorptionRamp": 40,
+      "coating": 0,
+      "coatingProfile": "Layer",
+      "frontCoated": true,
+      "backCoated": true,
+      "sidesCoated": true,
+      "name": "Rectangle 1",
+      "enabled": true,
+      "x": 553,
+      "y": 138,
+      "angle": 18
+    }
+  ],
+  "probes": [
+    {
+      "id": "1f58de5e-bbb0-4197-a9d9-d89387c12165",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "Value",
+      "kind": "Line",
+      "ax": 435,
+      "ay": 175,
+      "bx": 530,
+      "by": 144,
+      "boxSize": "Medium",
+      "boxX": 552,
+      "boxY": 328,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": false,
+      "yMin": 0,
+      "yMax": 0.00005,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

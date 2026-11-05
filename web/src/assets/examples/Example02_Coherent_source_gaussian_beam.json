@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "seed": 1798021273,
+  "description": "Featuring a 21 x 7 composite source that emits a continuous gaussian beam",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1920,
+    "height": 1080,
+    "dampingEdge": -64,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 2500,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 10,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Default field",
+      "brightness": 6,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Inferno",
+      "brightness": 7,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 70
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "cf10b214-0537-4729-b17f-5a94ac8d3633",
+      "name": "Source 2",
+      "enabled": true,
+      "x": 382,
+      "y": 557,
+      "frequency": 50,
+      "amplitude": 30,
+      "phase": 0,
+      "mode": "Continuous",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 10,
+      "offWidth": 10,
+      "detachAfter": -1,
+      "array": {
+        "sizeX": 21,
+        "sizeY": 7,
+        "spacingX": 32,
+        "spacingY": 16,
+        "angle": 0,
+        "randomFrequency": 0,
+        "randomPhase": 0,
+        "randomOffWidth": 0,
+        "randomPosition": 0
+      }
+    }
+  ],
+  "parts": [],
+  "probes": [
+    {
+      "id": "ed59f857-12c8-4147-8ddd-0071610f62b4",
+      "name": "Probe 1",
+      "active": false,
+      "layer": "Field",
+      "measurement": "Amplitude",
+      "kind": "Point",
+      "ax": 1171,
+      "ay": 226,
+      "bx": 0,
+      "by": 0,
+      "boxSize": "Large",
+      "boxX": 13,
+      "boxY": 11,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    },
+    {
+      "id": "d4ecbaf7-d163-4f84-ac94-9d93a17019aa",
+      "name": "Probe 2",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "IntegratedValue",
+      "kind": "Line",
+      "ax": 1555,
+      "ay": 143,
+      "bx": 1555,
+      "by": 962,
+      "boxSize": "ExtraLarge",
+      "boxX": 16,
+      "boxY": 13,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": 0,
+      "yMax": 0.005,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

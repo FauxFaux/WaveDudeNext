@@ -1,0 +1,124 @@
+{
+  "version": 3,
+  "seed": 1022494554,
+  "description": "One source and a zone plate",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1920,
+    "height": 700,
+    "dampingEdge": 32,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 2500,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 10,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Default field",
+      "brightness": 92,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3.02,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Default intensity",
+      "brightness": 78,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 85
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "d9c46963-afa6-4b55-9ea5-bedf9df55493",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 93,
+      "y": 331,
+      "frequency": 100,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Continuous",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 10,
+      "offWidth": 10,
+      "detachAfter": -1,
+      "array": null
+    }
+  ],
+  "parts": [
+    {
+      "id": "4b575129-b6e8-42f8-8db1-a193a9212dd6",
+      "kind": "ZonePlate",
+      "mount": true,
+      "mountWidth": 107,
+      "diameter": 600,
+      "thickness": 16,
+      "coating": 0,
+      "designFrequency": 160,
+      "focalLength": 500,
+      "inverse": false,
+      "name": "Zone plate 1",
+      "enabled": true,
+      "x": 934,
+      "y": 351,
+      "angle": 0
+    }
+  ],
+  "probes": [
+    {
+      "id": "513a692b-d66c-4caf-8195-da4e9f0379aa",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "IntegratedValue",
+      "kind": "Line",
+      "ax": 1457,
+      "ay": 505,
+      "bx": 1458,
+      "by": 214,
+      "boxSize": "Medium",
+      "boxX": 1261,
+      "boxY": 2,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

@@ -1,0 +1,138 @@
+{
+  "version": 3,
+  "seed": 1312957395,
+  "description": "Geometric wave pattern resulting from 3 sources with different frequencies",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1080,
+    "height": 1080,
+    "dampingEdge": -32,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 2500,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 17.1,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Default field",
+      "brightness": 30,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Default intensity",
+      "brightness": 30,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 85
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "d6af01eb-d56a-4f39-83f2-2fd2e50945a1",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 525,
+      "y": 440,
+      "frequency": 95,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Continuous",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 10,
+      "offWidth": 10,
+      "detachAfter": -1,
+      "array": null
+    },
+    {
+      "id": "eed3c6f7-ad76-4f6b-9e89-7e962ed9af75",
+      "name": "Source 2",
+      "enabled": true,
+      "x": 525,
+      "y": 500,
+      "frequency": 100,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Continuous",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 10,
+      "offWidth": 10,
+      "detachAfter": -1,
+      "array": null
+    },
+    {
+      "id": "07d8c14a-0372-4803-9cb4-d5cb8dc06367",
+      "name": "Source 3",
+      "enabled": true,
+      "x": 525,
+      "y": 560,
+      "frequency": 97,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Continuous",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 10,
+      "offWidth": 10,
+      "detachAfter": -1,
+      "array": null
+    }
+  ],
+  "parts": [],
+  "probes": [
+    {
+      "id": "1e5dabfb-0258-4159-900d-3e35d97f5861",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "Value",
+      "kind": "Line",
+      "ax": 1024,
+      "ay": 156,
+      "bx": 1024,
+      "by": 851,
+      "boxSize": "Large",
+      "boxX": 34,
+      "boxY": 774,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

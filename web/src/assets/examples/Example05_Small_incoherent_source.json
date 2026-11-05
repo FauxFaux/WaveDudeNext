@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "seed": 1575669912,
+  "description": "Simulation features a small (5x5 composite) source using randomized \"off\"-time and source frequency.",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1920,
+    "height": 1080,
+    "dampingEdge": -64,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 4000,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 0.563,
+    "timeDecay": 10,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Orange symmetry",
+      "brightness": 50,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Purple rain",
+      "brightness": 50,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 70
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "8cce844e-67b8-45ab-afbd-67451643e014",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 542,
+      "y": 532,
+      "frequency": 100,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 5,
+      "offWidth": 20,
+      "detachAfter": 2000,
+      "array": {
+        "sizeX": 5,
+        "sizeY": 5,
+        "spacingX": 3,
+        "spacingY": 3,
+        "angle": 0,
+        "randomFrequency": 50,
+        "randomPhase": 90,
+        "randomOffWidth": 19,
+        "randomPosition": 1
+      }
+    }
+  ],
+  "parts": [],
+  "probes": [
+    {
+      "id": "d6a5a947-e9aa-4124-a782-879c81ece793",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Field",
+      "measurement": "Amplitude",
+      "kind": "Point",
+      "ax": 695,
+      "ay": 530,
+      "bx": 0,
+      "by": 0,
+      "boxSize": "ExtraLarge",
+      "boxX": 14,
+      "boxY": 14,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": false,
+      "yMin": -0.02,
+      "yMax": 0.02,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    },
+    {
+      "id": "aa56b615-9d72-4093-9de6-fda9046f9ccb",
+      "name": "Probe 2",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "Value",
+      "kind": "Line",
+      "ax": 693,
+      "ay": 530,
+      "bx": 1690,
+      "by": 530,
+      "boxSize": "ExtraLarge",
+      "boxX": 16,
+      "boxY": 13,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": false,
+      "yMin": 0,
+      "yMax": 0.0001,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

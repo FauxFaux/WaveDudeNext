@@ -1,0 +1,145 @@
+{
+  "version": 3,
+  "seed": 823923544,
+  "description": "Wave pulse emitted from the center of the curvature of a mirror, reflecting and then returning to the point of emission. Featuring timed probes. Notice that this simulation runs extremely fast on the GPU, when no video export is selected.",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1920,
+    "height": 1080,
+    "dampingEdge": -64,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 3000,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 0.563,
+    "timeDecay": 8,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Yellow purple",
+      "brightness": 80,
+      "blackLevel": -0.05,
+      "preview": false,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Copper",
+      "brightness": 80,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 80
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "dd66f913-ffac-44cf-93b9-4d9db95f106f",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 570,
+      "y": 544,
+      "frequency": 200,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 70,
+      "offWidth": 100,
+      "detachAfter": 670,
+      "array": null
+    },
+    {
+      "id": "627c510a-fa44-473e-87b1-8f4e80e5f993",
+      "name": "Source 2",
+      "enabled": true,
+      "x": 570,
+      "y": 521,
+      "frequency": 200,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 70,
+      "offWidth": 100,
+      "detachAfter": 670,
+      "array": null
+    }
+  ],
+  "parts": [
+    {
+      "id": "ac66f39b-c062-4572-a8b4-2e1435bf735e",
+      "kind": "Lens",
+      "mirror": true,
+      "refractiveIndex": 1.5,
+      "absorption": 0,
+      "absorptionRamp": 40,
+      "diameter": 824,
+      "r1": -1129,
+      "r2": 0,
+      "thickness": 50,
+      "coating": 0,
+      "coatingProfile": "Layer",
+      "frontCoated": true,
+      "backCoated": true,
+      "sidesCoated": true,
+      "name": "Spherical mirror",
+      "enabled": true,
+      "x": 1713,
+      "y": 534,
+      "angle": 0
+    }
+  ],
+  "probes": [
+    {
+      "id": "423ce870-ce28-45ff-bda3-80c851647456",
+      "name": "Probe 2",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "IntegratedValue",
+      "kind": "Line",
+      "ax": 572,
+      "ay": 483,
+      "bx": 571,
+      "by": 579,
+      "boxSize": "ExtraLarge",
+      "boxX": 572,
+      "boxY": 730,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 2000
+    }
+  ],
+  "colorSchemes": []
+}

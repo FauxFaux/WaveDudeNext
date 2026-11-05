@@ -1,0 +1,122 @@
+[
+  {
+    "id": "Example01_Source_Mirror_Probe.wdproj",
+    "number": 1,
+    "title": "Source Mirror Probe"
+  },
+  {
+    "id": "Example02_Coherent_source_gaussian_beam.wdproj",
+    "number": 2,
+    "title": "Coherent source gaussian beam"
+  },
+  {
+    "id": "Example03_Directional_pulsed_source.wdproj",
+    "number": 3,
+    "title": "Directional pulsed source"
+  },
+  {
+    "id": "Example04_3_sources_3_frequencies.wdproj",
+    "number": 4,
+    "title": "3 sources 3 frequencies"
+  },
+  {
+    "id": "Example05_Small_incoherent_source.wdproj",
+    "number": 5,
+    "title": "Small incoherent source"
+  },
+  {
+    "id": "Example06_Large_incoherent_source.wdproj",
+    "number": 6,
+    "title": "Large incoherent source"
+  },
+  {
+    "id": "Example07_Random_emitter_lattice.wdproj",
+    "number": 7,
+    "title": "Random emitter lattice"
+  },
+  {
+    "id": "Example08_Resonant_wave_in_cavity.wdproj",
+    "number": 8,
+    "title": "Resonant wave in cavity"
+  },
+  {
+    "id": "Example09_Laplacian_dispersion.wdproj",
+    "number": 9,
+    "title": "Laplacian dispersion"
+  },
+  {
+    "id": "Example10_Beam_expansion.wdproj",
+    "number": 10,
+    "title": "Beam expansion"
+  },
+  {
+    "id": "Example11_Zone_plate.wdproj",
+    "number": 11,
+    "title": "Zone plate"
+  },
+  {
+    "id": "Example12_Pulse_splitter.wdproj",
+    "number": 12,
+    "title": "Pulse splitter"
+  },
+  {
+    "id": "Example13_Bragg_reflector.wdproj",
+    "number": 13,
+    "title": "Bragg reflector"
+  },
+  {
+    "id": "Example14_Resonant_roundabout.wdproj",
+    "number": 14,
+    "title": "Resonant roundabout"
+  },
+  {
+    "id": "Example15_Top_up_the_tank.wdproj",
+    "number": 15,
+    "title": "Top up the tank"
+  },
+  {
+    "id": "Example16_Wave_in_2_boxes.wdproj",
+    "number": 16,
+    "title": "Wave in 2 boxes"
+  },
+  {
+    "id": "Example17_Hanbury_Brown_Twiss.wdproj",
+    "number": 17,
+    "title": "Hanbury Brown Twiss"
+  },
+  {
+    "id": "Example18_XOR_AND_OR_logic.wdproj",
+    "number": 18,
+    "title": "XOR AND OR logic"
+  },
+  {
+    "id": "Example19_Sources_with_spherical_mirror.wdproj",
+    "number": 19,
+    "title": "Sources with spherical mirror"
+  },
+  {
+    "id": "Example20_Test_glass.wdproj",
+    "number": 20,
+    "title": "Test glass"
+  },
+  {
+    "id": "Example21_Ball_lens.wdproj",
+    "number": 21,
+    "title": "Ball lens"
+  },
+  {
+    "id": "Example22_Coherence_and_ball_lens.wdproj",
+    "number": 22,
+    "title": "Coherence and ball lens"
+  },
+  {
+    "id": "Example23_Fibres.wdproj",
+    "number": 23,
+    "title": "Fibres"
+  },
+  {
+    "id": "Example24_Fibre_cross_over.wdproj",
+    "number": 24,
+    "title": "Fibre cross over"
+  }
+]

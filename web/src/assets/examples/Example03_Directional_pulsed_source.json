@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "seed": 743064765,
+  "description": "Featuring a coherent pulsed assembly of sources that emits a directional stream of wave pulses.",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1920,
+    "height": 1080,
+    "dampingEdge": -64,
+    "edges": "Open",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 3000,
+    "visualizeEvery": 1,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 7,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Default field",
+      "brightness": 4,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Default intensity",
+      "brightness": 8,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 70
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "1bb849d8-2598-4b0d-b5fb-62084c24da36",
+      "name": "Source 1",
+      "enabled": true,
+      "x": 402,
+      "y": 542,
+      "frequency": 100,
+      "amplitude": 70,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 10,
+      "offWidth": 4,
+      "detachAfter": -1,
+      "array": {
+        "sizeX": 21,
+        "sizeY": 11,
+        "spacingX": 16,
+        "spacingY": 8,
+        "angle": 0,
+        "randomFrequency": 0,
+        "randomPhase": 0,
+        "randomOffWidth": 0,
+        "randomPosition": 0
+      }
+    }
+  ],
+  "parts": [],
+  "probes": [
+    {
+      "id": "07e134c0-2886-433c-8544-a6d1a5756c98",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Field",
+      "measurement": "Amplitude",
+      "kind": "Point",
+      "ax": 1401,
+      "ay": 540,
+      "bx": 0,
+      "by": 0,
+      "boxSize": "ExtraLarge",
+      "boxX": 21,
+      "boxY": 21,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    },
+    {
+      "id": "5967691d-1d4c-4b6a-a718-f7a2f27f4570",
+      "name": "Probe 2",
+      "active": true,
+      "layer": "Intensity",
+      "measurement": "Value",
+      "kind": "Point",
+      "ax": 1425,
+      "ay": 540,
+      "bx": 0,
+      "by": 0,
+      "boxSize": "ExtraLarge",
+      "boxX": 21,
+      "boxY": 23,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}

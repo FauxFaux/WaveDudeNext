@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "seed": 2016764161,
+  "description": "Collection of 800+ sources distributed over the full animation space and emitting short random wave pulses with a varying frequency.",
+  "scene": {
+    "mode": "Canvas",
+    "image": "",
+    "width": 1920,
+    "height": 1080,
+    "dampingEdge": 20,
+    "edges": "Reflective",
+    "refractiveIndex": 1,
+    "imageSources": false,
+    "imageSourceScale": 1,
+    "objectSources": true,
+    "imageAssetId": null
+  },
+  "simulation": {
+    "steps": 10000,
+    "visualizeEvery": 2,
+    "fourthOrderLaplacian": true,
+    "waveSpeed": 1,
+    "timeDecay": 3,
+    "sourceFrequencyScale": 2,
+    "intensityScale": 1
+  },
+  "display": {
+    "field": {
+      "colorScheme": "Ice and fire",
+      "brightness": 60,
+      "blackLevel": -0.05,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "intensity": {
+      "colorScheme": "Default intensity",
+      "brightness": 60,
+      "blackLevel": 0,
+      "preview": true,
+      "overlay": true,
+      "overlayGain": 3,
+      "overlayInExport": false
+    },
+    "video": {
+      "fps": 60,
+      "quality": 70
+    },
+    "exportFrom": 0,
+    "exportTo": 0,
+    "probeGraphsInExport": true,
+    "probeMarkersInExport": true,
+    "sourceMarkersInExport": false,
+    "handlesInPreview": true,
+    "labelsInPreview": true
+  },
+  "sources": [
+    {
+      "id": "05aed2fe-f05e-4d2e-a4dc-9e69a164e496",
+      "name": "Emitter lattice",
+      "enabled": true,
+      "x": 937,
+      "y": 537,
+      "frequency": 90,
+      "amplitude": 100,
+      "phase": 0,
+      "mode": "Pulsed",
+      "pulseShape": "Gaussian",
+      "pulseWidth": 4,
+      "offWidth": 1500,
+      "detachAfter": -1,
+      "array": {
+        "sizeX": 41,
+        "sizeY": 21,
+        "spacingX": 50,
+        "spacingY": 50,
+        "angle": 0,
+        "randomFrequency": 30,
+        "randomPhase": 180,
+        "randomOffWidth": 1500,
+        "randomPosition": 0
+      }
+    }
+  ],
+  "parts": [],
+  "probes": [
+    {
+      "id": "adf9a07e-6554-42ae-bd59-a028182171d4",
+      "name": "Probe 1",
+      "active": true,
+      "layer": "Field",
+      "measurement": "Amplitude",
+      "kind": "Point",
+      "ax": 458,
+      "ay": 973,
+      "bx": 0,
+      "by": 0,
+      "boxSize": "Medium",
+      "boxX": 4,
+      "boxY": 880,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    },
+    {
+      "id": "237081a6-076c-4aa3-a5cd-72ce05e4fd3a",
+      "name": "Probe 2",
+      "active": true,
+      "layer": "Field",
+      "measurement": "Amplitude",
+      "kind": "Point",
+      "ax": 1703,
+      "ay": 239,
+      "bx": 0,
+      "by": 0,
+      "boxSize": "Medium",
+      "boxX": 1513,
+      "boxY": 7,
+      "boxWidth": 400,
+      "boxHeight": 200,
+      "scaleMode": "Running",
+      "autoScaleX": true,
+      "autoScaleY": true,
+      "yMin": -1,
+      "yMax": 1,
+      "yScale": "Linear",
+      "decades": 6,
+      "window": 500,
+      "startAfter": 0
+    }
+  ],
+  "colorSchemes": []
+}
