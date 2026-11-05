@@ -1,0 +1,45 @@
+:root {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+  color: #d4d4d4;
+  background: #202020;
+  --panel: #282828;
+  --header: #303030;
+  --border: #191919;
+  --muted: #969696;
+  --accent: #8db8e8;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, summary { font: inherit; }
+button, input, select { color: inherit; }
+button, summary, select, input[type='checkbox'] { cursor: pointer; }
+button { border: 1px solid transparent; border-radius: 3px; background: transparent; }
+button:hover:not(:disabled), summary:hover { background: #3c3c3c; }
+button:disabled, input:disabled, select:disabled { cursor: default; opacity: .38; }
+button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+input:not([type='checkbox']):not([type='range']), select {
+  min-width: 0;
+  height: 25px;
+  border: 1px solid #1c1c1c;
+  border-radius: 3px;
+  background: #393939;
+  padding: 2px 7px;
+}
+input[type='checkbox'], input[type='range'] { accent-color: var(--accent); }
+input[type='checkbox'] { margin: 0; }
+h2, h3, p { margin: 0; }
+h2, h3 { font-size: inherit; font-weight: 500; }
+svg { flex-shrink: 0; vertical-align: middle; }
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+* { scrollbar-width: thin; scrollbar-color: #515151 #252525; }

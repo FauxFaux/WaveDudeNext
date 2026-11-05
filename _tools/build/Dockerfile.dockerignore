@@ -1,0 +1,11 @@
+# Only the browser runtime's source and shared build settings enter the root context.
+**
+!global.json
+!Directory.Build.props
+!.editorconfig
+!WaveDudeNext/
+!WaveDudeNext/**
+!WaveDudeNext.Wasm/
+!WaveDudeNext.Wasm/**
+**/bin/
+**/obj/

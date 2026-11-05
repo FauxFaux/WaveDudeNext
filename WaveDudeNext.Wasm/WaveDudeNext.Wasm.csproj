@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <RunAOTCompilation>true</RunAOTCompilation>
+    <WasmEnableSIMD>true</WasmEnableSIMD>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WasmEnableHotReload>false</WasmEnableHotReload>
+    <!-- Let the deployment web server negotiate and apply response compression. -->
+    <CompressionEnabled>false</CompressionEnabled>
+    <ViteWasmDir>$(MSBuildProjectDirectory)/../web/public/wasm/</ViteWasmDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../WaveDudeNext/WaveDudeNext.csproj" />
+  </ItemGroup>
+
+  <!-- Publish through the standard SDK, then replace only Vite's generated Wasm directory.
+       Removing old fingerprinted assets prevents stale runtimes accumulating between builds. -->
+  <Target Name="CopyWasmToVite" AfterTargets="Publish">
+    <ItemGroup>
+      <ViteWasmFiles Include="$(PublishDir)wwwroot/**/*" />
+    </ItemGroup>
+    <Error Condition="'@(ViteWasmFiles)' == ''" Text="No published Wasm assets found in $(PublishDir)wwwroot." />
+    <RemoveDir Directories="$(ViteWasmDir)" />
+    <Copy SourceFiles="@(ViteWasmFiles)" DestinationFiles="@(ViteWasmFiles->'$(ViteWasmDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+</Project>

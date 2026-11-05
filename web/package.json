@@ -1,0 +1,23 @@
+{
+  "name": "webdude",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "check-wasm": "node scripts/check-wasm.mjs",
+    "check-probe-graph": "node scripts/check-probe-graph.ts"
+  },
+  "dependencies": {
+    "preact": "^10.29.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  }
+}
