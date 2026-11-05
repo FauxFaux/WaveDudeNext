@@ -4,22 +4,27 @@
 
 - `WaveDudeNext/`: shared .NET 10 library; model, CPU/OpenCL engines, optical parts, rendering, probes, frame storage and exports.
 - `WaveDudeNext.WPF/`: Windows desktop application, including controls, docking, localisation and document generation.
+- `WaveDudeNext.Server/`: Linux-runnable ASP.NET Core host with in-memory workspace creation and SSE subscriptions; no project APIs yet.
+- `WaveDudeNext.Server.Tests/`: MSTest workspace service and HTTP integration tests, included in `WaveDudeNext.Server.slnx`.
 - `web/`: npm-managed Preact/TypeScript/Vite frontend, currently a starter. `src/` contains components; `public/` contains static assets.
 - `_tools/library_check/`: console verification harness, outside the solution. `_tools/ui_check/`: Windows PowerShell UI checks and fixtures.
 - `Examples/`, `Assets/`, `MANUAL.md`: example projects, documentation images and user documentation.
-- `PLAN.md`: planned Linux server and JSON API architecture; the server is not implemented yet.
+- `PLAN.md`: implemented workspace slice and planned Linux server and JSON API architecture.
 
 ## Build, Test, and Development Commands
 
 Use the .NET 10 SDK selected by `global.json`, Node.js 24/npm and Just. [Justfile](Justfile) is the entry point for portable builds; run `just` to list commands. From a fresh checkout, run `just restore`, then `just build`. Recipes run from the repository root, including when invoked from a subdirectory.
 
-- `just restore`: restore the portable library and install locked frontend dependencies with `npm ci`.
-- `just build`: build the portable library in Release with zero warnings, then check TypeScript and build the production frontend.
+- `just restore`: restore the portable server solution and install locked frontend dependencies with `npm ci`.
+- `just build`: build the portable server solution in Release with zero warnings, then check TypeScript and build the production frontend.
+- `just build-server` / `just restore-server`: build or restore the server, shared library and workspace tests without WPF.
+- `just test-server`: run the workspace service and HTTP API tests.
+- `just dev-server`: run the workspace API with `dotnet watch` on loopback port 5080; Vite proxies `/api` there.
 - `just build-library` / `just build-web`: build only the changed component.
 - `just restore-library` / `just restore-web`: restore only that component's dependencies.
 - `just dev-web` / `just preview-web`: run Vite for development or inspect the built frontend.
 
-The server is not implemented yet. Linux library/API test recipes will be added when the harness is portable and the server exists; `just build` currently verifies compilation and frontend bundling, not runtime behaviour. See `PLAN.md` for the remaining test work. GPU verification is optional and separate from the CPU build.
+The server currently implements empty workspaces and SSE only. Portable library checks and further API tests will be added as those features arrive; `just build` verifies compilation and frontend bundling, while `just test-server` checks workspace behaviour. See `PLAN.md` for the remaining test work. GPU verification is optional and separate from the CPU build.
 
 The WPF application and current verification harnesses require Windows:
 

@@ -7,9 +7,11 @@ import { PropertiesPane } from './Panes/PropertiesPane'
 import { addSource, createProject } from './Model/Project'
 import { applySourceDraft, createSourceDraft } from './Views/SourceDraft'
 import type { SourceDraft } from './Views/SourceDraft'
+import { useWorkspace } from './Api/useWorkspace'
 import './MainWindow.css'
 
 export function MainWindow() {
+  const { workspace, connection, error } = useWorkspace()
   const [selection, setSelection] = useState<ProjectSelection>({ kind: 'source', index: 0 })
   const [project, setProject] = useState(() => addSource(createProject()))
   const [sourceDrafts, setSourceDrafts] = useState<Record<number, SourceDraft>>({})
@@ -85,11 +87,11 @@ export function MainWindow() {
           </div></details>
           <details><summary>Simulation</summary><div class="menu-popup">
             <button disabled>Run <kbd>F5</kbd></button><button disabled>Pause</button><button disabled>Stop</button>
-            <hr /><p>Server not connected</p>
+            <hr /><p>Simulation is not available yet</p>
           </div></details>
           <details><summary>Help</summary><div class="menu-popup about-popup">
             <strong>WaveDude Next</strong><p>2D wave simulator</p>
-            <p>Browser interface preview. Project edits are local to this page; simulation requires the planned server.</p>
+            <p>Browser interface preview. Project edits are local to this page; server simulation is not available yet.</p>
           </div></details>
         </nav>
         <span class="document-title">Untitled{isModified && <span class="modified-mark"> *</span>}</span>
@@ -104,7 +106,7 @@ export function MainWindow() {
       </main>
       <footer class="status-bar" role="status">
         <span><span class="status-dot" />{isModified ? 'Local changes · not saved' : 'Ready'}</span>
-        <span class="status-connection">Server not connected</span><span class="status-preview">Interface preview</span>
+        <span class="status-connection" title={error ?? workspace?.workspaceId}>{connection}</span><span class="status-preview">Interface preview</span>
       </footer>
     </div>
   )

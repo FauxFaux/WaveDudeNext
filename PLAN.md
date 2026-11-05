@@ -1,6 +1,35 @@
 # Browser frontend and Linux server
 
-Status: planned. This document describes the intended direction; the server and API are not implemented yet.
+Status: workspace creation and event subscriptions are implemented. Project support, simulation,
+persistence and the remaining features below are planned.
+
+## Implemented workspace slice
+
+`WaveDudeNext.Server/` is a Linux-runnable ASP.NET Core 10 host referencing the shared library. It owns
+isolated, empty workspaces in memory; creation does not construct a `Project` or start any jobs.
+
+| Method and route | Behaviour |
+| --- | --- |
+| `POST /api/workspaces` | Return `201 Created` with `{ workspaceId, createdAt, statusSequence }` and the event URL in `Location` |
+| `GET /api/workspaces/{workspaceId}/events` | Subscribe to `workspace-status` SSE snapshots; unknown IDs return `404` Problem Details |
+
+Each connection immediately receives the current status, including reconnects. Status sequences start
+at one and increase within a workspace; subscribers retain only the newest pending snapshot. Idle
+connections receive a `keepalive` event every 15 seconds. `Last-Event-ID` does not request replay.
+Disconnecting removes that subscription; workspaces remain available until server shutdown, which
+ends their streams and releases the registry. Idle eviction and explicit release are future work.
+
+On each page load the browser creates a fresh workspace, stores its ID in `sessionStorage` under
+`wavedude.workspaceId`, and opens one native `EventSource` subscription. EventSource reconnects to the
+same workspace after transient connection failures. Storage restrictions do not prevent the live page
+from connecting. Reload reattachment, restart recovery and project copying between tabs are deferred;
+even a tab with copied session storage creates an independent empty workspace in this first slice.
+The existing browser project preview remains local and is not attached to the server workspace.
+There are no project creation, editing or usage APIs.
+
+Run `just dev-server` and `just dev-web` in separate terminals, then open the Vite URL. The API defaults
+to `http://localhost:5080`; Vite proxies `/api`, including SSE, to that origin. The host does not yet serve
+the built frontend. Run `just test-server` for the workspace service and HTTP integration tests.
 
 The plan is to make the existing WaveDude Next backend usable through a server that runs on Linux, and to
 build a browser frontend in the existing `web/` npm project. The frontend uses Preact, TypeScript and Vite.
@@ -19,14 +48,14 @@ WaveDudeNext.WPF/       Windows desktop application
 WaveDudeNext/           Shared model, simulation, rendering and export library
           ^
           |
-WaveDudeNext.Server/    Proposed ASP.NET Core host, runnable on Linux
+WaveDudeNext.Server/    ASP.NET Core host, runnable on Linux
           |
           | HTTP JSON API; SSE status; binary frame and file transfers
           v
 web/                   npm / Preact browser application
 ```
 
-The proposed server uses modern .NET and ASP.NET Core. It does not need Mono or a running WPF application.
+The server uses modern .NET and ASP.NET Core. It does not need Mono or a running WPF application.
 The server project must build and run on Linux independently of the Windows desktop project.
 
 ## Proposed Linux build and test procedure
@@ -45,8 +74,8 @@ incremental C# builds and publishing in MSBuild; do not reproduce them in Just o
 | Justfile (recommended) | Short, discoverable commands for those combined workflows | Contributors need Just for the shortcuts |
 | Makefile | Familiar and widely installed on Linux | File targets and `.PHONY` add machinery without helping the existing build systems |
 
-The Justfile provides the portable library and frontend commands today. The server solution, portable
-test recipes and server tests will be added with their implementations.
+The Justfile provides the portable server solution, workspace tests and frontend commands today.
+Portable library checks and the remaining API tests will be added with their implementations.
 
 ### Machine setup
 
@@ -89,18 +118,20 @@ Run `just` to list recipes. `just build-library` runs
 `dotnet build WaveDudeNext/WaveDudeNext.csproj -c Release -warnaserror`; `just build-web` runs
 `npm run build` in `web/`. Both can be used separately after restoring dependencies.
 
-The existing `WaveDudeNext.sln` includes WPF and remains the Windows build entry point. When introducing
-the host, add `WaveDudeNext.Server.slnx` containing the shared library, server, portable library harness
-and server tests. It must contain no WPF project references. Until then there is no server to build or test.
+The existing `WaveDudeNext.sln` includes WPF and remains the Windows build entry point.
+`WaveDudeNext.Server.slnx` contains the shared library, server and workspace tests, with no WPF project
+references. Add the library harness when it is portable.
 
 Available Justfile commands:
 
 | Command | Work |
 | --- | --- |
-| `just restore` | Restore the portable library; run `npm ci` in `web/` |
-| `just restore-library` / `just restore-web` | Restore dependencies for one component |
-| `just build` | Build the library in Release with warnings as errors; build the frontend |
-| `just build-library` / `just build-web` | Build one component |
+| `just restore` | Restore the portable server solution; run `npm ci` in `web/` |
+| `just restore-server` / `just restore-library` / `just restore-web` | Restore dependencies for one component |
+| `just build` | Build the server solution in Release with warnings as errors; build the frontend |
+| `just build-server` / `just build-library` / `just build-web` | Build one component |
+| `just test-server` | Run the workspace service and HTTP API tests |
+| `just dev-server` | Run the API with `dotnet watch` on loopback port 5080 |
 | `just dev-web` | Run Vite for development |
 | `just preview-web` | Inspect the built frontend with Vite |
 
@@ -109,10 +140,8 @@ tests. Add the following commands as the server and portable harness become avai
 
 | Command | Work |
 | --- | --- |
-| `just restore` / `just build` | Extend the existing commands to cover the server solution |
 | `just test` | Run the portable library checks, export checks and server API tests |
 | `just check` | Restore, build and test, failing on any unsuccessful command |
-| `just dev-server` | Run the server with `dotnet watch`, bound to loopback |
 | `just test-gpu` | Optional, separate from `just check`: require an actual OpenCL GPU; fail if unavailable |
 | `just publish` | Build the frontend, include its output in the server and publish for Linux |
 
@@ -271,10 +300,12 @@ References: [Kestrel](https://learn.microsoft.com/en-us/aspnet/core/fundamentals
 
 ## Workspaces and persistence
 
-A workspace is the server-side equivalent of a desktop application window. It always owns one open
-project, initially a new untitled project, plus its revision, undo/redo history, run, scratch runner and
-export jobs. A browser tab attaches to one workspace. The server owns authoritative project state in
-memory and keeps a recovery copy on disc; the browser holds drafts and presentation state.
+A workspace is the server-side equivalent of a desktop application window. The current implementation
+is an empty workspace with identity and status subscriptions only. With project support, it will own
+one open project, initially a new untitled project, plus its revision, undo/redo history, run, scratch
+runner and export jobs. A browser tab attaches to one workspace. The following persistence and
+attachment rules describe that later project-enabled design: the server owns authoritative project
+state in memory and keeps a recovery copy on disc; the browser holds drafts and presentation state.
 
 | State | Owner and storage | Recovery |
 | --- | --- | --- |
