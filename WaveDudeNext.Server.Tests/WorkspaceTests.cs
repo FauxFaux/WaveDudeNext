@@ -179,17 +179,4 @@ public sealed class WorkspaceTests
 		Assert.AreEqual(1L, events.Current.Data.StatusSequence);
 	}
 
-	[TestMethod]
-	public async Task WorkspaceDoesNotExposeProjectApis()
-	{
-		await using var factory = new WebApplicationFactory<Program>();
-		using var client = factory.CreateClient();
-		using var creation = await client.PostAsync("/api/workspaces", null);
-		var created = await creation.Content.ReadFromJsonAsync<WorkspaceStatus>();
-		Assert.IsNotNull(created);
-		using var get = await client.GetAsync($"/api/workspaces/{created.WorkspaceId}/project");
-		using var post = await client.PostAsync($"/api/workspaces/{created.WorkspaceId}/project/objects", null);
-		Assert.AreEqual(HttpStatusCode.NotFound, get.StatusCode);
-		Assert.AreEqual(HttpStatusCode.NotFound, post.StatusCode);
-	}
 }

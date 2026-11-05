@@ -12,10 +12,11 @@ interface ProjectTreeProps {
   selection: ProjectSelection
   onSelect: (selection: ProjectSelection) => void
   sources: Source[]
+  canAddSource: boolean
   onAddSource: () => void
 }
 
-export function ProjectTree({ selection, onSelect, sources, onAddSource }: ProjectTreeProps) {
+export function ProjectTree({ selection, onSelect, sources, canAddSource, onAddSource }: ProjectTreeProps) {
   const tree = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -37,7 +38,7 @@ export function ProjectTree({ selection, onSelect, sources, onAddSource }: Proje
     <section class="project-pane" aria-labelledby="project-heading">
       <header class="pane-header"><h2 id="project-heading">Project</h2></header>
       <div class="project-toolbar" aria-label="Add project objects">
-        <button id="ToolAddSource" aria-label="Add source" title="Add source" onClick={onAddSource}><IconView name="source" />Source<span class="toolbar-plus">+</span></button>
+        <button id="ToolAddSource" disabled={!canAddSource} aria-label="Add source" title="Add source" onClick={onAddSource}><IconView name="source" />Source<span class="toolbar-plus">+</span></button>
         {([['probe', 'Probe'], ['part', 'Part']] as const).map(([icon, label]) => (
           <button key={icon} disabled title="Requires the simulation server"><IconView name={icon} />{label}<span class="toolbar-plus">+</span></button>
         ))}

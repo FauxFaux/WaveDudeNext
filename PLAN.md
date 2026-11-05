@@ -1,35 +1,60 @@
 # Browser frontend and Linux server
 
-Status: workspace creation and event subscriptions are implemented. Project support, simulation,
-persistence and the remaining features below are planned.
+Status: in-memory workspaces, event subscriptions and editable project exchange are implemented.
+Simulation, recovery persistence and the remaining features below are planned.
 
-## Implemented workspace slice
+## Implemented workspace and project slice
 
 `WaveDudeNext.Server/` is a Linux-runnable ASP.NET Core 10 host referencing the shared library. It owns
-isolated, empty workspaces in memory; creation does not construct a `Project` or start any jobs.
+isolated workspaces in memory. Workspace creation remains empty; the first project GET creates a
+project with the library defaults and one source, without starting any jobs.
 
 | Method and route | Behaviour |
 | --- | --- |
 | `POST /api/workspaces` | Return `201 Created` with `{ workspaceId, createdAt, statusSequence }` and the event URL in `Location` |
 | `GET /api/workspaces/{workspaceId}/events` | Subscribe to `workspace-status` SSE snapshots; unknown IDs return `404` Problem Details |
+| `GET /api/workspaces/{workspaceId}/project` | Return `{ revision, project }`, including all editable settings and objects |
+| `POST /api/workspaces/{workspaceId}/project` | Accept `{ expectedRevision, project }`, validate and normalise the complete document, and return the new snapshot |
+| `PUT /api/workspaces/{workspaceId}/project` | The same edit operation, matching the planned whole-project route |
+| `POST /api/workspaces/{workspaceId}/project/objects` | Accept `{ expectedRevision, kind, partKind?, x?, y? }`; create through the library add methods and return the complete snapshot |
 
-Each connection immediately receives the current status, including reconnects. Status sequences start
-at one and increase within a workspace; subscribers retain only the newest pending snapshot. Idle
-connections receive a `keepalive` event every 15 seconds. `Last-Event-ID` does not request replay.
-Disconnecting removes that subscription; workspaces remain available until server shutdown, which
-ends their streams and releases the registry. Idle eviction and explicit release are future work.
+Object kinds are `source`, `part`, `probe` and `colorScheme`. Part kinds use the existing project element
+names (`Lens`, `Rectangle`, etc.). Omitted positions use the canvas centre. Mutations are serialised per
+workspace; a stale revision returns `409` without changing the project. Invalid documents return `400`
+Problem Details. Named objects carry stable workspace UUIDs across renames and reordering. Computed
+members and image bytes are excluded; scene images use a nullable workspace asset reference. Asset
+upload/download and project import routes are not implemented yet.
+
+The server and `_tools/contract_gen/` share the closed JSON member policy in
+`WaveDudeNext.Server/Projects/ProjectContract.cs`. It selects persisted model members, explicitly excludes
+scene image bytes and local file paths, uses camel-case names, string enums and a `kind` discriminator
+for each optical part, and reads existing range, default, description and nullability metadata.
+`web/src/Api/Project.generated.ts` exports Zod schemas and inferred types, including individual editor
+schemas. Defaults are metadata only. `just generate-contract` regenerates it; `just build` rejects stale
+output and validates all 24 examples plus fixtures covering every part kind, nullable arrays and image
+references with Zod. Generation does not need a running server.
+
+Each SSE connection immediately receives current status, including reconnects. Status sequences start
+at one and increase within a workspace, including project mutations; subscribers retain only the newest
+pending snapshot. Idle connections receive a `keepalive` event every 15 seconds. `Last-Event-ID` does
+not request replay. Disconnecting removes that subscription; workspaces remain available until server
+shutdown, which ends streams cleanly and releases the registry. Idle eviction and explicit release are
+future work.
 
 On each page load the browser creates a fresh workspace, stores its ID in `sessionStorage` under
-`wavedude.workspaceId`, and opens one native `EventSource` subscription. EventSource reconnects to the
-same workspace after transient connection failures. Storage restrictions do not prevent the live page
-from connecting. Reload reattachment, restart recovery and project copying between tabs are deferred;
-even a tab with copied session storage creates an independent empty workspace in this first slice.
-The existing browser project preview remains local and is not attached to the server workspace.
-There are no project creation, editing or usage APIs.
+`wavedude.workspaceId`, fetches the project, and opens one native `EventSource` subscription. The source
+editor and Add Source action exchange project state with that workspace. Mutations are queued against
+the last acknowledged revision; later drafts survive earlier responses. Incomplete numeric input stays
+local, and server-normalised values are applied to acknowledged fields. Requests stop after an ambiguous
+failure, keeping the draft visible. New Project opens a fresh workspace by reloading the page.
+EventSource reconnects to the same workspace after transient connection failures. Storage restrictions
+do not prevent the live page from connecting. Reload reattachment, duplicate-tab project copying,
+restart recovery, undo/redo and persistence remain deferred. All project state is lost on server shutdown;
+responses acknowledge in-memory changes, not a recovery save or a downloaded file.
 
 Run `just dev-server` and `just dev-web` in separate terminals, then open the Vite URL. The API defaults
 to `http://localhost:5080`; Vite proxies `/api`, including SSE, to that origin. The host does not yet serve
-the built frontend. Run `just test-server` for the workspace service and HTTP integration tests.
+the built frontend. Run `just test-server` for workspace, project contract and HTTP integration tests.
 
 The plan is to make the existing WaveDude Next backend usable through a server that runs on Linux, and to
 build a browser frontend in the existing `web/` npm project. The frontend uses Preact, TypeScript and Vite.

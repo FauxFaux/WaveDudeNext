@@ -9,5 +9,6 @@
   <ItemGroup>
     <ProjectReference Include="../WaveDudeNext/WaveDudeNext.csproj" />
     <InternalsVisibleTo Include="WaveDudeNext.Server.Tests" />
+    <InternalsVisibleTo Include="contract_gen" />
   </ItemGroup>
 </Project>

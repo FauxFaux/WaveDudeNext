@@ -16,6 +16,9 @@
 // <https://www.gnu.org/licenses/>.
 
 using System.Globalization;
+using System.Text.Json;
+using WaveDudeNext.Model;
+using WaveDudeNext.Server.Projects;
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -29,6 +32,69 @@ internal sealed class Workspace : IDisposable
 	private readonly HashSet<Channel<WorkspaceStatus>> subscribers = [];
 	private WorkspaceStatus status = new(Guid.NewGuid(), DateTimeOffset.UtcNow, 1);
 	private bool disposed;
+	private ProjectDocument? project;
+	private long revision;
+
+	/// <summary>Returns an isolated project snapshot, creating the initial model lazily.</summary>
+	internal ProjectSnapshot GetProject()
+	{
+		lock (gate)
+		{
+			ObjectDisposedException.ThrowIf(disposed, this);
+			if (project is null)
+			{
+				var model = new Project();
+				model.AddSource();
+				project = new ProjectDocument(model);
+				revision = 1;
+			}
+			return Snapshot();
+		}
+	}
+
+	/// <summary>Validates and commits one complete document atomically against the expected revision.</summary>
+	internal ProjectSnapshot SetProject(long expectedRevision, JsonElement document)
+	{
+		lock (gate)
+		{
+			GetProject();
+			if (expectedRevision != revision) throw new ProjectConflictException();
+			var incoming = ProjectDocument.Read(document, project!.Assets);
+			project = project.Reconcile(incoming);
+			revision = checked(revision + 1);
+			PublishStatus();
+			return Snapshot();
+		}
+	}
+
+	/// <summary>Creates a known object through the library's defaults and naming methods.</summary>
+	internal ProjectSnapshot AddObject(CreateObjectRequest request)
+	{
+		lock (gate)
+		{
+			GetProject();
+			if (request.ExpectedRevision != revision) throw new ProjectConflictException();
+			var copy = ProjectDocument.Read(JsonSerializer.SerializeToElement(project!.Write()), project.Assets);
+			var model = copy.Model;
+			int x = request.X ?? model.Scene.Width / 2, y = request.Y ?? model.Scene.Height / 2;
+			switch (request.Kind)
+			{
+				case "source": model.AddSource(x, y); break;
+				case "probe": model.AddProbe(x, y); break;
+				case "colorScheme": model.AddColorScheme(); break;
+				case "part" when request.PartKind is { } kind && ProjectContract.PartKinds.TryGetValue(kind, out var type):
+					model.AddPart(type, x, y); break;
+				default: throw new JsonException("Unknown object or part kind.");
+			}
+			model.Normalize();
+			project = copy;
+			revision = checked(revision + 1);
+			PublishStatus();
+			return Snapshot();
+		}
+	}
+
+	private ProjectSnapshot Snapshot() => new(revision, project!.Write());
 
 	/// <summary>Gets the current immutable snapshot under the workspace lock.</summary>
 	public WorkspaceStatus Status

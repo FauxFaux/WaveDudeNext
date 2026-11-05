@@ -2,4 +2,5 @@
   <Project Path="WaveDudeNext/WaveDudeNext.csproj" />
   <Project Path="WaveDudeNext.Server/WaveDudeNext.Server.csproj" />
   <Project Path="WaveDudeNext.Server.Tests/WaveDudeNext.Server.Tests.csproj" />
+  <Project Path="_tools/contract_gen/contract_gen.csproj" />
 </Solution>

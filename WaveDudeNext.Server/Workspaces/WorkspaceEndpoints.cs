@@ -21,7 +21,7 @@ using System.Runtime.CompilerServices;
 
 namespace WaveDudeNext.Server.Workspaces;
 
-/// <summary>The workspace HTTP boundary; no project operations are exposed.</summary>
+/// <summary>The workspace creation and status subscription HTTP boundary.</summary>
 internal static class WorkspaceEndpoints
 {
 	/// <summary>Maps creation and a single status stream for each workspace.</summary>

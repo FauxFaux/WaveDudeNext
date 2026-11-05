@@ -12,7 +12,7 @@ export function SourceView({ source, onChange }: SourceViewProps) {
     const { min, max, step } = sourceNumberFields[key]
     return (
       <label class="form-row"><span>{label}</span>
-        <input type="number" min={min} max={max} step={step} value={source[key]} disabled={disabled}
+        <input type="number" min={min ?? undefined} max={max ?? undefined} step={step} value={source[key]} disabled={disabled}
           aria-invalid={!isSourceNumberValid(key, source[key])}
           onInput={event => onChange({ ...source, [key]: event.currentTarget.value })} />
       </label>

@@ -1,15 +1,12 @@
 import type { Source } from '../Model/Source'
 
-export const sourceNumberFields = {
-  x: { min: 0, max: 2147483647, step: 1 },
-  y: { min: 0, max: 2147483647, step: 1 },
-  frequency: { min: 0.01, max: 255, step: 'any' },
-  amplitude: { min: 0, max: 100, step: 'any' },
-  phase: { min: -180, max: 180, step: 'any' },
-  pulseWidth: { min: 1, max: 2147483647, step: 1 },
-  offWidth: { min: 1, max: 2147483647, step: 1 },
-  detachAfter: { min: -1, max: 2147483647, step: 1 },
-} as const
+import { SourceSchema } from '../Api/Project.generated'
+
+const numberFields = ['x', 'y', 'frequency', 'amplitude', 'phase', 'pulseWidth', 'offWidth', 'detachAfter'] as const
+export const sourceNumberFields = Object.fromEntries(numberFields.map(key => {
+  const schema = SourceSchema.shape[key]
+  return [key, { min: schema.minValue, max: schema.maxValue, step: schema.isInt ? 1 : 'any' }]
+})) as Record<typeof numberFields[number], { min: number | null, max: number | null, step: number | 'any' }>
 
 type NumberField = keyof typeof sourceNumberFields
 export type SourceDraft = Omit<Source, NumberField> & Record<NumberField, string>
@@ -23,10 +20,7 @@ export function createSourceDraft(source: Source): SourceDraft {
 }
 
 export function isSourceNumberValid(key: NumberField, text: string): boolean {
-  const value = Number(text)
-  const { min, max, step } = sourceNumberFields[key]
-  return text.trim() !== '' && Number.isFinite(value) && value >= min && value <= max
-    && (step === 'any' || Number.isInteger(value))
+  return text.trim() !== '' && SourceSchema.shape[key].safeParse(Number(text)).success
 }
 
 /** Keep incomplete edits in the draft; only valid numbers enter the project model. */
@@ -36,4 +30,13 @@ export function applySourceDraft(source: Source, draft: SourceDraft): Source {
     if (isSourceNumberValid(key, draft[key])) next[key] = Number(draft[key])
   }
   return next
+}
+
+/** Apply normalised acknowledgements while keeping incomplete number strings local. */
+export function acknowledgeSourceDraft(source: Source, draft: SourceDraft): SourceDraft {
+  const acknowledged = createSourceDraft(source)
+  for (const key of numberFields) {
+    if (!isSourceNumberValid(key, draft[key])) acknowledged[key] = draft[key]
+  }
+  return acknowledged
 }

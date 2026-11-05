@@ -30,7 +30,7 @@ build-library:
     dotnet build WaveDudeNext/WaveDudeNext.csproj -c Release -warnaserror
 
 # Check TypeScript and build the production frontend.
-build-web:
+build-web: check-contract
     npm --prefix web run build
 
 # Start the Vite development server.
@@ -48,3 +48,12 @@ test-server:
 # Serve the built frontend for inspection.
 preview-web:
     npm --prefix web run preview
+
+# Regenerate the editable JSON/Zod contract from C# model metadata.
+generate-contract:
+    dotnet run --project _tools/contract_gen -c Release
+
+# Reject stale schemas and validate serialised examples with Zod, without a running server.
+check-contract:
+    dotnet run --project _tools/contract_gen -c Release -- --check
+    npm --prefix web run check-contract

@@ -1,8 +1,11 @@
-export interface WorkspaceStatus {
-  workspaceId: string
-  createdAt: string
-  statusSequence: number
-}
+import { z } from 'zod'
+
+const WorkspaceStatusSchema = z.strictObject({
+  workspaceId: z.uuid(),
+  createdAt: z.iso.datetime({ offset: true }),
+  statusSequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+})
+export type WorkspaceStatus = z.infer<typeof WorkspaceStatusSchema>
 
 export async function createWorkspace(signal: AbortSignal): Promise<WorkspaceStatus> {
   const response = await fetch('/api/workspaces', { method: 'POST', signal })
@@ -11,16 +14,7 @@ export async function createWorkspace(signal: AbortSignal): Promise<WorkspaceSta
 }
 
 export function readWorkspaceStatus(value: unknown): WorkspaceStatus {
-  if (typeof value !== 'object' || value === null
-    || !('workspaceId' in value) || typeof value.workspaceId !== 'string'
-    || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value.workspaceId)
-    || !('createdAt' in value) || typeof value.createdAt !== 'string'
-    || !Number.isFinite(Date.parse(value.createdAt))
-    || !('statusSequence' in value) || typeof value.statusSequence !== 'number'
-    || !Number.isSafeInteger(value.statusSequence) || value.statusSequence < 1) {
-    throw new Error('The server returned an invalid workspace status.')
-  }
-  return { workspaceId: value.workspaceId, createdAt: value.createdAt, statusSequence: value.statusSequence }
+  return WorkspaceStatusSchema.parse(value)
 }
 
 export function subscribeToWorkspace(

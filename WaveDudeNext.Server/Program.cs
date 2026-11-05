@@ -16,6 +16,7 @@
 // <https://www.gnu.org/licenses/>.
 
 using WaveDudeNext.Server.Workspaces;
+using WaveDudeNext.Server.Projects;
 
 var builder = WebApplication.CreateBuilder(args);
 if (builder.Configuration["urls"] is null)
@@ -29,6 +30,7 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.MapWorkspaceEndpoints();
+app.MapProjectEndpoints();
 app.Run();
 
 /// <summary>Entry point for the Linux server and its integration tests.</summary>
