@@ -174,15 +174,37 @@ and ensure the same action remains available through a visible control.
 
 ## Connecting the planned server
 
-Follow PLAN.md; routes and transport details are still open. Model validation,
-wave simulation, frame storage, and computed values belong to the shared backend.
+Follow PLAN.md: use native `fetch` for JSON commands/state and binary pictures/files,
+with one native `EventSource` SSE stream per tab for background status. Exact routes
+and DTOs are still open. Model validation, wave simulation, frame storage, and
+computed values belong to the shared backend.
 The browser owns transient selection, focus, drag feedback, and display state.
+
+The tab attaches to a server-owned workspace that always contains an open project,
+initially untitled. Keep the opaque workspace ID in `sessionStorage` for reloads
+and scope API requests and the SSE stream to it. Project names and tab titles are
+display labels. New and duplicated tabs use independent workspaces; follow the
+server attachment protocol because session storage alone cannot detect duplicates.
+
+The server persists a recovery copy before acknowledging each committed model
+edit. Keep drafts until the edit succeeds, show persistence failures, and apply
+the returned normalised state and revision. Undo/redo belongs to the server
+workspace; selection and unfinished field contents remain local. Autosave does
+not write the user's uploaded original file. Save / Save As downloads the chosen
+committed revision; keep recovery status separate from explicit-save status.
+Reload retrieves the current project and operation state. Closing the tab does
+not itself discard the recovery copy or cancel a run; do not rely on an unload
+handler to save the project. See PLAN.md for release and restart behaviour.
 
 Introduce explicit request/response types alongside the first working flow.
 Use JSON for commands and metadata, binary transfers for pictures and files.
 Keep outstanding preview requests bounded and reject stale results using
-project/run revisions. Scrubbing requests server-held frames rather than
-loading an entire run into browser memory. Enabling the Run, playback, save,
+project/run revisions and the current display request identity, including after
+image decode. Share the SSE connection between panes, resynchronise from its
+current-state snapshot on reconnect, and keep image/probe payloads out of events.
+The browser owns the playback clock; simulation proceeds independently and status
+reports the available frame extent. Scrubbing requests server-held frames rather
+than loading an entire run into browser memory. Enabling the Run, playback, save,
 or export controls should accompany implementation of their actual operation
 and availability conditions.
 

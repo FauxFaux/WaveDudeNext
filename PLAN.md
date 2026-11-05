@@ -21,7 +21,7 @@ WaveDudeNext/           Shared model, simulation, rendering and export library
           |
 WaveDudeNext.Server/    Proposed ASP.NET Core host, runnable on Linux
           |
-          | HTTP JSON API; frame and file transfers
+          | HTTP JSON API; SSE status; binary frame and file transfers
           v
 web/                   npm / Preact browser application
 ```
@@ -152,7 +152,11 @@ devices. Keep Windows-only codecs in Windows verification and assert their unava
 For the new API, use a `net10.0` test project with Microsoft's MSTest and
 `Microsoft.AspNetCore.Mvc.Testing`, run through `dotnet test`. Exercise the real application and CPU
 backend: load a small example, request state and a binary picture, edit and validate properties, reject
-stale revisions, start and cancel a run, seek stored frames, and release its cache. Add browser workflow
+stale revisions, start and cancel a run, seek stored frames, and release its cache. Verify SSE initial
+snapshots and reconnects, completion during subscription, coalescing for a slow subscriber, and that
+disconnecting a status or picture request does not cancel a run. Cover workspace isolation, reload
+reattachment, duplicate-tab isolation, recovery after a server restart, failed autosaves, and the
+separation of recovery copies from explicit project downloads. Add browser workflow
 checks when the frontend connects; `npm run build` currently checks TypeScript and production bundling
 but does not test browser behaviour.
 
@@ -207,7 +211,142 @@ Audit platform assumptions as the server is introduced:
   produces the same pixel input for the library.
 - Settings, cache locations and logging must work without Windows folders or registry access.
 
-## JSON API
+## Server and browser transport
+
+Use ASP.NET Core 10 with Kestrel and Minimal APIs. Keep endpoints in cohesive route groups and put
+project ownership, validation, run scheduling and result lifetimes in application services. Minimal APIs
+are the HTTP boundary, not a reason to put the application in `Program.cs`. Use explicit DTOs,
+`System.Text.Json`, typed results and Problem Details for request failures.
+
+The transport choices follow the UI's different kinds of work:
+
+| UI work | Transport | Reason |
+| --- | --- | --- |
+| Project tree, properties, examples and capabilities | JSON GET through `fetch` | Read authoritative state on demand |
+| Committed edits, run/pause/resume/cancel, scratch requests and export creation | JSON POST/PUT through `fetch` | Validate each operation and return its result or job identity |
+| Run state, steps done, available frame extent, preview readiness and export state | One SSE connection per application tab | Small server-to-browser updates while background work proceeds |
+| Selected field/intensity pictures and probe ranges | Binary GET for pictures; JSON GET for modest probe data | Fetch only what the current view needs |
+| Project/image imports and project/export downloads | Binary or multipart HTTP transfers | Keep file contents out of JSON and the event stream |
+| Selection, focus, drag feedback, layout and playback clock | Browser state | Immediate interaction without a server round trip |
+
+JSON is a payload format; SSE and WebSockets are communication mechanisms. JSON commands and SSE
+notifications complement each other. Use GET for reads and POST/PUT for changes rather than sending
+every operation as a JSON POST. Exact routes and edit DTO shapes will be agreed with the first flow.
+
+### Technology choices
+
+| Technology | Assessment for this application |
+| --- | --- |
+| ASP.NET Core Minimal APIs on Kestrel | Selected: Linux host, JSON and binary responses, static frontend assets and native .NET 10 SSE support in one application |
+| ASP.NET Core controllers | Viable alternative if controller conventions become useful; no different transport or inherent latency benefit |
+| SSE with native browser `EventSource` | Selected for notifications: one-way updates with browser reconnection and no frontend client package |
+| SignalR | Useful if bidirectional subscriptions, hub calls or multiple cooperating clients become requirements; adds a client package and hub protocol |
+| Raw WebSockets | Reserve for a measured need for sustained binary streaming; requires application framing, reconnection and flow control |
+| gRPC / gRPC-Web | Browser adaptation and generated clients add machinery without a current need; ordinary browser `fetch` cannot call native gRPC |
+| Blazor / Razor UI | No benefit for the chosen Preact interface; keep rendering and interaction in the browser |
+
+SSE is built into ASP.NET Core 10 through `TypedResults.ServerSentEvents` with an async event sequence;
+it does not need SignalR or a third-party SSE package. If SignalR becomes appropriate, configure and test
+its reconnection policy explicitly: automatic reconnect is not enabled by default, and does not retry
+the initial connection attempt.
+
+Serve the published frontend and API from the same loopback origin. During development, proxy `/api`
+from Vite to Kestrel, including the SSE response without buffering. Preact can use native `fetch`,
+`EventSource`, `AbortController`, canvas and `requestAnimationFrame`; no Preact-specific transport is
+needed. Open the page through the server, rather than from `file://` or an unrelated website.
+
+Support ordinary HTTP/1.1 on localhost initially. Chrome does not negotiate cleartext HTTP/2 with Kestrel
+as it would HTTPS, so do not assume multiplexing from the .NET server's HTTP/2 support alone. Keep a
+single SSE stream for the tab, shared by the panes; HTTP/1.1 browser connection limits make separate
+streams for every pane, layer or probe inappropriate. Multiple tabs share that connection budget.
+
+References: [Kestrel](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel?view=aspnetcore-10.0),
+[Minimal APIs and controllers](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/apis?view=aspnetcore-10.0),
+[.NET 10 SSE support](https://learn.microsoft.com/en-us/aspnet/core/release-notes/aspnetcore-10.0?view=aspnetcore-10.0#support-for-server-sent-events-sse),
+[browser SSE behaviour](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events),
+[Kestrel HTTP/2](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/servers/kestrel/http2?view=aspnetcore-10.0),
+[SignalR JavaScript client](https://learn.microsoft.com/en-us/aspnet/core/signalr/javascript-client?view=aspnetcore-10.0),
+[gRPC in browsers](https://learn.microsoft.com/en-us/aspnet/core/grpc/browser?view=aspnetcore-10.0).
+
+## Workspaces and persistence
+
+A workspace is the server-side equivalent of a desktop application window. It always owns one open
+project, initially a new untitled project, plus its revision, undo/redo history, run, scratch runner and
+export jobs. A browser tab attaches to one workspace. The server owns authoritative project state in
+memory and keeps a recovery copy on disc; the browser holds drafts and presentation state.
+
+| State | Owner and storage | Recovery |
+| --- | --- | --- |
+| Project model and revision | Server workspace in memory; recovery copy on disc | Restore the last committed revision after restart |
+| Undo/redo history | Server workspace in memory | Survives tab reload while the workspace remains loaded; not persisted initially |
+| Runs, scratch results, probe recordings and exports in progress | Server workspace and its frame/cache files | Transient; do not promise resumption after server restart |
+| Selection, unfinished inputs, drag feedback and playback position | Browser tab | Local interaction state; not part of project autosave |
+| Workspace attachment | Browser `sessionStorage` holds the workspace ID | Reattach on page reload |
+| Layout, theme and similar browser preferences | Browser storage | Independent of project files and server recovery copies |
+
+### Identity and tab attachment
+
+Issue an opaque `workspaceId` when creating a workspace. Scope project operations, status streams,
+frames and jobs to that ID, for example `/api/workspaces/{workspaceId}/...`. Names and browser tab titles
+are display labels, never lookup keys or storage paths. Include the expected revision in model edits,
+and never reuse a project revision within a workspace, including after New, Open or Undo. Replacing the
+project must not allow an old request to apply to the replacement.
+
+Use an application service to own workspaces; do not put live project objects in ASP.NET cookie session
+state or request-scoped services. A cookie is shared between tabs and cannot identify an editing tab.
+Store the workspace ID in `sessionStorage` for reload attachment. Newly opened tabs get independent
+workspaces. Duplicating a tab must also produce an independent workspace containing a copy of the
+project, rather than creating two concurrent editors of one mutable project. Session storage can be
+copied when a tab opens, so enforce this through an attachment protocol that distinguishes reload from
+a second live editor; storing an ID alone is insufficient. Define that protocol with the first host.
+
+### Autosave and explicit Save
+
+Persist a recovery copy after every accepted project-edit transaction, including Undo and Redo. Group
+related property changes and drag gestures into meaningful commits. Do not rewrite the project for
+selection changes, playback ticks, status notifications, picture requests or run-control commands.
+
+Serialise each edit transaction within the workspace: validate the expected revision and input, prepare
+the normalised next state, persist it with the new revision, then publish that state and acknowledge
+success. Write to a temporary file and replace the previous recovery copy so an interrupted write does
+not leave a partially written project. A persistence failure must leave the previous committed revision
+authoritative and return an error; do not report the edit as saved. Keep the browser draft available for
+correction or retry. Run invalidation and other edit side effects follow the committed change.
+
+Use the existing project serialisation for the recovery model, with workspace metadata beside it as
+needed. Retain imported assets required to reopen it; a browser upload name is not a usable server file
+path. Recovery storage belongs in the server's application-data directory, separate from disposable
+frame caches. A database is not required initially. Measure the cost of rewriting projects with embedded
+images before considering separate asset storage or debounced checkpoints; changing acknowledgement
+to precede persistence would change the recovery guarantee.
+
+Autosave protects the workspace working copy. File > Save / Save As produces a `.wdproj` download of a
+specific committed revision in the existing format. It does not overwrite an uploaded source file.
+Track recovery persistence separately from the revision last explicitly saved/downloaded; autosave must
+not silently redefine the desktop's modified-state indicator. Ordinary browser downloads do not confirm
+that the user completed a filesystem save. Direct saving through a user-granted browser file handle is
+a separate future integration.
+
+### Reload, close and server restart
+
+Reloading reattaches to the workspace and fetches current project and operation state. An SSE disconnect
+or disappearing tab detaches the view without discarding the project or cancelling its jobs. Do not
+depend on a final browser unload request for saving or cleanup. Keep recoverable workspace metadata on
+disc so a later visit can find its working copy even when the original tab's session storage is gone.
+
+An explicit workspace release can cancel and join owned jobs and release engines and frame caches;
+discarding the recovery copy is a separate deliberate action. Idle eviction may release runtime state
+while retaining the recovery copy, and must not silently terminate active work. Choose timeout and
+cache-retention values with the first server implementation. After a server restart, restore the model
+and revision on attachment; report that transient results are unavailable rather than implying a run
+or export resumed. The WPF application's existing Save and discard behaviour remains its own workflow.
+
+References: [browser session storage](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage),
+[ASP.NET Core session state](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/app-state?view=aspnetcore-10.0),
+[browser unload behaviour](https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeunload_event),
+[browser file saving](https://developer.mozilla.org/en-US/docs/Web/API/Window/showSaveFilePicker).
+
+## JSON API and operation lifetimes
 
 Expose application operations and state through an HTTP JSON API. Define explicit request and response
 types rather than exposing arbitrary .NET objects, methods or WPF concepts.
@@ -223,11 +362,48 @@ The API should cover the frontend's selected workflows:
 The backend remains authoritative for validation and computed results. Include project/run revisions in
 state and preview responses so the frontend can identify results belonging to an earlier edit or run.
 Agree the first API contracts alongside the first working frontend flow; exact routes are still open.
+Serialise edits per project and validate an expected project revision atomically with applying the edit.
+Return the authoritative normalised values and new revision. Keep incomplete number-field drafts local;
+commit related property changes together, and coalesce drag updates rather than sending every pointer event.
+
+Starting a run, a scratch computation or an export must return an operation identity promptly (normally
+`202 Accepted` with a status URL), rather than keeping a request open for the computation. The server
+application layer owns the work through completion or explicit cancellation, with host shutdown and
+resource cleanup integrated into its lifetime. A request ending, a frame fetch being aborted or an SSE
+connection closing must not itself cancel a stored run or export. Workspace release and cache retention
+follow the lifecycle above. After an ambiguous network failure, reconcile operation state
+before retrying a command that could create duplicate work.
+
+Preserve the established live-edit rules in CLAUDE.md: simulation edits invalidate and stop the old run,
+scratch work serves the newest requested position, and automatic re-runs follow the configured delay.
+Probe-only changes and display changes have different invalidation rules. Centralise those decisions in
+the server application layer rather than making each browser control reproduce them.
 
 Use JSON for commands, metadata and numerical results of suitable size. Images, large frame buffers,
 uploads and downloads should use appropriate binary transfers rather than base64 inside JSON.
-Polling is sufficient for an initial implementation; choose WebSocket or SignalR updates if the measured
-interaction requires them.
+Polling can verify the first host before the UI connects, but SSE is the intended status mechanism when
+run and playback controls are enabled.
+
+### Status events and reconnection
+
+Publish small, revisioned status snapshots or invalidations. Include the relevant project revision,
+run/operation identity, a monotonically increasing status sequence and available frame extent. Coalesce
+progress at a bounded rate; do not emit an event for every simulated step or stored frame. Keep pictures,
+full probe histories and file contents out of SSE. Probe notifications identify available ranges that
+the browser can request in batches.
+
+Subscribe before taking the initial status snapshot, with ordering controlled by the application layer,
+so a completion between subscription and snapshot cannot be lost. Send a current snapshot on every SSE
+connection, including reconnects. The browser reconciles it with command responses using identities,
+revisions and status sequences; arrival order across HTTP responses and SSE is not a state version.
+Reattaching to a retained workspace can recover current operation state through ordinary GET requests too.
+
+Treat events as recoverable notifications, not a durable log or an exactly-once delivery mechanism.
+Native EventSource reconnects automatically, but replay based on `Last-Event-ID` would require a separate
+retained history; the initial design resynchronises from current state instead. Bound subscriber queues
+and coalesce pending status to the newest snapshot, including terminal state and errors. A slow or
+disconnected browser must not block simulation, grow an unbounded event backlog or lose the ability to
+discover completion. Flush event records promptly and use periodic keepalives while otherwise idle.
 
 ## Browser UI
 
@@ -249,23 +425,57 @@ visual pointer feedback.
 Keep the complete frame store on the server, including its existing disk spill behaviour. The browser
 requests frames for display and scrubbing instead of downloading an entire run into browser memory.
 
+The browser owns playback timing, speed, loop and the selected position. Simulation runs as fast as the
+engine and store allow; it is not paced by the browser or its network connection. SSE reports how far
+the store has progressed. Playback requests frames at its own pace and holds at the newest available
+frame when it catches up. Seeking stored results is a read; asking for a scratch frame of an edited
+project is a separate compute operation.
+
 Start with a simple image response and measure encoding cost, bandwidth and display latency on
 representative scenes. Full-resolution raw colour frames can be large: two 1920 × 1080 RGBA pictures at
 30 frames per second would be about 500 MB/s before protocol overhead.
 
 If necessary, evaluate indexed or numerical frame transfers with colour mapping in the browser. The
-library's indexed-frame representation provides a possible starting point. The transport and compression
-choices remain open until measured. Bound outstanding display requests so an old preview cannot build
-up a delivery queue; this must not discard simulation frames from the server's store.
+library's indexed-frame representation provides a possible starting point. The frame representation
+and compression choices remain open until measured. Existing 8-bit indexed frames have
+brightness applied at capture, so they cannot provide arbitrary later brightness adjustment like the
+16-bit samples. Preserve the current brightness and Auto behaviour when evaluating browser colour mapping.
+
+Request pictures at the actual display size, accounting for device pixel ratio and preserving the scene's
+aspect ratio. Start with a lossless image response as the correctness baseline. Measure store read,
+rendering, encoding, transfer, browser decode and canvas presentation separately, including simultaneous
+field and intensity display, scrubbing during a run, and brightness changes. Localhost removes external
+network latency but not these costs. At 30 fps the complete display path has about 33 ms per frame;
+WebSockets cannot remove pixel bandwidth or encoding cost.
+
+Keep one active display request per layer and only the newest pending target; use a small bounded cache
+for playback rather than fetching the entire run. Use `AbortController` to cancel obsolete transfers and
+propagate cancellation to disposable rendering work where possible. Aborting a fetch alone does not
+guarantee that server computation has stopped. Also check the selected position, project revision,
+run/scratch identity and display parameters after decode, before presenting either picture or its probe
+overlay. Coordinate both layers so a late response cannot mix different positions. Superseded scratch
+requests must replace pending work on the server as well. Retain the previous picture until its
+replacement is ready. Discarding obsolete presentation work must not discard simulation frames from
+the server's store.
+
+Consider binary WebSocket delivery only if measurements show repeated HTTP delivery is a material
+bottleneck after payload and rendering choices are addressed. Such a stream still needs a bounded
+queue, request identities and explicit demand or acknowledgements; the browser WebSocket API provides
+no automatic receive backpressure.
+
+References: [fetch cancellation](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch#canceling_a_request),
+[WebSocket backpressure](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket).
 
 ## Delivery sequence
 
-1. Add a Linux-runnable server host referencing the shared library. Load an example, compute a frame and
-   return state as JSON and the picture as a binary response.
-2. Connect the existing Preact project. Show field/intensity canvases, edit a few properties and request
-   an updated preview. Measure the complete edit-to-picture latency.
-3. Add run control, progress, timeline seeking and probes. Define project ownership and disconnect
-   behaviour, and verify that stale responses cannot replace newer state.
+1. Add a Linux-runnable server host referencing the shared library and owning isolated workspaces.
+   Load an example, compute a frame and return state as JSON and the picture as a binary response.
+2. Connect the existing Preact project with workspace attachment and recovery persistence. Show
+   field/intensity canvases, edit a few properties and request an updated preview. Verify reload and
+   duplicate-tab behaviour, and measure the complete edit-to-picture latency including autosave.
+3. Add run control, one SSE status stream, timeline seeking and probes. Implement workspace release
+   and cache retention; verify reconnect resynchronisation, bounded delivery to a slow browser, and
+   that stale HTTP responses or SSE events cannot replace newer state.
 4. Expand the chosen UI subset with sources, parts, direct manipulation, project import/save and
    supported exports. Decide the order from the workflows needed first.
 5. Package the server and built frontend for Linux. Use a Vite development proxy during development
