@@ -212,14 +212,26 @@ public sealed class SceneOverlay : Panel
 	/// 59 ms frame. The sources' band is a bitmap cache, rasterised once per change and composed as a texture; the
 	/// other two draw as they always did, so the labels keep ClearType, which a cache cannot give, and the probe lines,
 	/// the parts and the handles stay pixel for pixel as they were. Not hit-testable, not focusable: the overlay takes
-	/// the mouse and the handles the keyboard, as before.
+	/// the mouse and the handles the keyboard, as before. WPF hit-tests under a resting pointer too, after every render
+	/// pass and layout pass, and a test of this drawing goes through every dot; nothing here is ever clicked, the
+	/// overlay's background takes the press (2026-11-05, the user's report: with a lattice of 8750 dots the preview
+	/// slowed down while the pointer merely lay on a picture).
 	/// </summary>
-	private sealed class DrawingLayer(SceneOverlay owner, Band band) : FrameworkElement
+	private sealed class DrawingLayer : FrameworkElement
 	{
-		public Band Band { get; } = band;
+		private readonly SceneOverlay _owner;
+
+		public DrawingLayer(SceneOverlay owner, Band band)
+		{
+			_owner = owner;
+			Band = band;
+			IsHitTestVisible = false;
+		}
+
+		public Band Band { get; }
 
 		/// <inheritdoc/>
-		protected override void OnRender(DrawingContext dc) => owner.RenderBand(dc, Band, RenderSize);
+		protected override void OnRender(DrawingContext dc) => _owner.RenderBand(dc, Band, RenderSize);
 	}
 
 	/// <summary>The project whose sources and probes are shown; null shows nothing.</summary>
