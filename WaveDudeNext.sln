@@ -45,6 +45,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{14
 		Examples\Example24_Fiber_cross_over.wdproj = Examples\Example24_Fiber_cross_over.wdproj
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ISSUE_TEMPLATE", "ISSUE_TEMPLATE", "{5281FB31-8A9B-4550-B555-88BA62C8B2AB}"
+	ProjectSection(SolutionItems) = preProject
+		.github\ISSUE_TEMPLATE\feature.yml = .github\ISSUE_TEMPLATE\feature.yml
+		.github\ISSUE_TEMPLATE\problem.yml = .github\ISSUE_TEMPLATE\problem.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -85,6 +91,7 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{147F7C4A-2F6A-4858-A0D6-D4552CFB89BF} = {02F4BC0A-5E50-4208-AAF7-253BC852DFF5}
+		{5281FB31-8A9B-4550-B555-88BA62C8B2AB} = {02F4BC0A-5E50-4208-AAF7-253BC852DFF5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {83B9D680-B0B2-441D-9B2E-8EE36FE2E69D}

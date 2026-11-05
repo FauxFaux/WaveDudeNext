@@ -15,7 +15,7 @@
 # version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
 # <https://www.gnu.org/licenses/>.
 
-# The issue form for a problem report: what happened, the system information Help > About copies, and the log file.
+# The issue form for a problem report: what happened, the version, the system information Help > About copies, and the log file.
 name: Problem report
 description: Something in WaveDude Next does not work as it should
 body:
@@ -28,6 +28,14 @@ body:
     attributes:
       label: What happened
       description: What you did, what you expected, and what happened instead. A project file or a screenshot helps; drag it into the box.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: In WaveDude Next, open Help > About. The version is the line under the name.
+      placeholder: 0.1.1 (b904fe4)
     validations:
       required: true
   - type: textarea

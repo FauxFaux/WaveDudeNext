@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Alexander Graef <alex@graef.cc>
+#
+# This file is part of WaveDude Next, a 2D wave simulator.
+#
+# Based on the work of
+#   Jeroen Vleggaar (Huygens Optics), author of Wave Dude 2D, Copyright (C) 2026
+#     <https://www.youtube.com/@HuygensOptics>, <https://www.huygensoptics.com>
+#   0x23 (Diffraction Limited), author of WaveSimulator2D
+#     <https://www.youtube.com/@DiffractionLimited>, <https://github.com/0x23/WaveSimulator2D>
+#
+# WaveDude Next is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version. It is distributed WITHOUT ANY WARRANTY. See the LICENSE.md file or
+# <https://www.gnu.org/licenses/>.
+
+# The issue form for a feature request: what the user wants to do, the feature as imagined, and how it is done today.
+name: Feature request
+description: Something WaveDude Next should be able to do
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the idea. What you want to achieve matters as much as the feature itself, so please describe both.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What you want to do
+      description: The simulation or the task you have in mind, and where WaveDude Next stands in your way today.
+    validations:
+      required: true
+  - type: textarea
+    id: feature
+    attributes:
+      label: The feature
+      description: How you imagine it, where it would sit in the app and what it would do. A sketch, a screenshot or a project file helps; drag it into the box.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you do it today
+      description: A workaround, another program that has it, or a paper or video that describes it. Leave empty if there is none.
+    validations:
+      required: false
