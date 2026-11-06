@@ -19,7 +19,6 @@ using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
 using WaveDudeNext.Engine;
 using WaveDudeNext.Model;
-using WaveDudeNext.Parts;
 using WaveDudeNext.Probes;
 
 namespace WaveDudeNext.Wasm;
@@ -50,10 +49,7 @@ public static partial class Program
 		ArgumentOutOfRangeException.ThrowIfLessThan(maxFrames, 1);
 		Project project = ReadCanvasProject(projectJson);
 		Scene scene = project.Scene;
-		var image = PartPainter.Paint(null, scene.Width, scene.Height, scene.RefractiveIndex, project.Parts);
-		SceneData data = image == null
-			? SceneData.Empty(scene.Width, scene.Height, scene.DampingEdge, scene.RefractiveIndex, scene.Edges == EdgeMode.Open)
-			: SceneData.FromBgra(image.Bgra, image.Width, image.Height, image.StrideBytes, false, scene.DampingEdge, scene.Edges == EdgeMode.Open);
+		SceneData data = ReadSimulationScene(project);
 		_engine = new WaveSimulator(data, EngineOptions.From(project.Simulation, scene, true), Emitter.FromProject(project));
 		_probeSampler = ProbeSampler.Build(project.Probes.Where(probe => probe.Active).Select(ProbeSpec.From).ToArray(), scene.Width, scene.Height, data.Rim);
 		_probeCollector = new ProbeCollector(_probeSampler);
