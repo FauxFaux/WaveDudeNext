@@ -168,7 +168,7 @@ export function MainWindow() {
           </div></details>
           <details><summary>Help</summary><div class="menu-popup about-popup">
             <strong>WaveDude Next</strong><p>2D wave simulator</p>
-            <p>Projects are edited in this page and cleared when it is reloaded. Use Open and Save to paste or copy project JSON. Run computes up to three preview frames.</p>
+            <p>Projects are edited in this page and cleared when it is reloaded. Use Open and Save to paste or copy project JSON. Run stores frames on disc, increasing the frame interval to fit estimated browser storage.</p>
           </div></details>
         </nav>
         <span class="document-title">Untitled{isModified && <span class="modified-mark"> *</span>}</span>
@@ -188,10 +188,12 @@ export function MainWindow() {
       <footer class="status-bar" role="status">
         <span><span class="status-dot" />{simulation.run?.error
           ?? (simulation.busy ? 'Computing preview…' : simulation.run?.isStale ? 'Project changed · run again to update the preview'
-            : simulation.run?.state === 'Completed' ? `Preview complete · ${simulation.run.frameCount} frames (maximum 3)`
+            : simulation.run?.state === 'Completed' ? `Preview complete · ${simulation.run.frameCount} frames on disc`
               : simulation.run?.state === 'Cancelled' ? 'Simulation stopped'
                 : isModified ? 'Project changed · copy JSON to keep your changes' : 'Ready')}</span>
-        <span class="status-local">Project held in this page</span><span class="status-preview">Up to 3 preview frames</span>
+        <span class="status-local">Project held in this page</span><span class="status-preview">{simulation.run?.storageBudget
+          ? `Every ${simulation.run.visualizeEvery} steps · ${(simulation.run.storageBudget / 2 ** 30).toFixed(2)} GiB disc budget`
+          : 'Frames stored on disc'}</span>
       </footer>
       {jsonDialog && <ProjectJsonDialog mode={jsonDialog} json={jsonDialog === 'save' ? writeProject(project) : ''}
         onOpen={replaceProject} onClose={() => setJsonDialog(null)} />}

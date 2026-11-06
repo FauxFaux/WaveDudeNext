@@ -47,7 +47,7 @@ const FrameProbesSchema = z.strictObject({
 })
 export type FrameProbes = z.infer<typeof FrameProbesSchema>
 
-/** Status of the bounded local Wasm preview. */
+/** Status of the local Wasm recording backed by browser disc storage. */
 export interface RunStatus {
   runId: string
   projectRevision: number
@@ -63,4 +63,5 @@ export interface RunStatus {
   probesStale: boolean
   error: string | null
   hasIntensity: boolean
+  storageBudget: number
 }

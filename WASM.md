@@ -87,23 +87,31 @@ The loader uses Vite's `BASE_URL`, including a deployment prefix. It dynamically
 published `wasm/main.mjs` without bundling or rewriting .NET's internal modules. The JavaScript
 host creates one runtime per JS context and obtains the `[JSExport]` methods from the assembly.
 `SmokeTest()` executes 16 steps of the real CPU solver and returns a finite, positive peak field
-amplitude. `StartSimulation(projectJson)` reads and normalises a canvas project using the shared
+amplitude. `StartSimulation(projectJson, maxFrames)` reads and normalises a canvas project using the shared
 model, paints its optical parts and creates the CPU solver. It returns width, height, bounded
-step count, frame interval and frame count. The export caps each preview at three frames,
-without changing the project’s requested run length. `NextFrame()` advances to the next capture
+step count, frame interval and frame count. The export increases the interval to fit the caller's
+frame budget without changing the input project. The run ends at its last sampled step.
+`NextFrame()` advances to the next capture
 and returns two binary half-float planes: field, then square-root intensity. `EndSimulation()`
 releases the engine and snapshot. Image scenes report an error until image delivery is connected.
 
 Run `just check-wasm` to publish and exercise this export under Node. After an existing build,
 `npm --prefix web run check-wasm` checks the generated bundle without publishing again, including
-project submission, source edits, deterministic frames and the enforced frame cap.
+project submission, source edits, deterministic frames and the storage-driven frame interval.
 `just check-probe-graph` runs the retained graph calculation checks.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.
-Run sends the current project to a dedicated worker and displays up to three retained frames
-in the existing previews and timeline. Binary buffers transfer to the UI without JSON/base64.
+Run sends the current project to a dedicated worker. It uses half the estimated unused origin
+storage, allowing 4096 bytes of file overhead per frame, and increases the capture interval if
+needed. Each field/intensity pair is written to a closed OPFS file before being announced.
+The UI reads the selected frame from disc into the existing previews and timeline; it has no
+RAM frame cache. Missing estimates, insufficient space and write/read errors fail explicitly.
 Completion, Stop, project replacement and unmount terminate the worker and release its Wasm heap.
 Edits cancel active work and mark retained results outdated. Probe recordings are not connected.
+New runs, project replacement and unmount delete the previous recording. Reloads/crashes can
+leave orphaned files; recovery and automatic orphan cleanup are deferred. See
+[FRAME-REGENERATION.md](docs/FRAME-REGENERATION.md) for the storage calculations and deferred
+checkpoint/replay design. Storage quota estimates do not guarantee physical free disc space.
 The worker uses `addEventListener`, leaving `onmessage` unset to avoid .NET 10 misidentifying it
 as a managed runtime thread ([dotnet/runtime#114918](https://github.com/dotnet/runtime/issues/114918)).
 The runtime URL is resolved in the page before passing it to the worker, preserving deployment

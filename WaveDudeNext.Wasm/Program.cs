@@ -37,13 +37,17 @@ public static partial class Program
 
 	/// <summary>
 	/// Starts a canvas project on the calling worker thread. Returns width, height, bounded step count,
-	/// frame interval and frame count. At most three frames are computed; the input project is unchanged.
+	/// frame interval and frame count. The interval increases to fit the caller's frame budget;
+	/// the input project is unchanged. The simulation ends at the last sampled step.
 	/// Image scenes require image delivery, which is not yet supported by this boundary.
 	/// </summary>
+	/// <param name="projectJson">The current project in the frontend's JSON format.</param>
+	/// <param name="maxFrames">Positive maximum number of captured frames allowed by browser storage.</param>
 	[JSExport]
-	public static int[] StartSimulation(string projectJson)
+	public static int[] StartSimulation(string projectJson, int maxFrames)
 	{
 		EndSimulation();
+		ArgumentOutOfRangeException.ThrowIfLessThan(maxFrames, 1);
 		Project project = JsonSerializer.Deserialize(projectJson, ProjectJsonContext.Default.Project)
 			?? throw new ArgumentException("The project is empty.", nameof(projectJson));
 		project.Normalize();
@@ -56,8 +60,8 @@ public static partial class Program
 			: SceneData.FromBgra(image.Bgra, image.Width, image.Height, image.StrideBytes, false, scene.DampingEdge, scene.Edges == EdgeMode.Open);
 		_engine = new WaveSimulator(data, EngineOptions.From(project.Simulation, scene, true), Emitter.FromProject(project));
 		_snapshot = _engine.CreateSnapshot(FrameShape.Full(scene.Width, scene.Height), true);
-		_visualizeEvery = project.Simulation.VisualizeEvery;
-		_frameCount = Math.Min(3, (project.Simulation.Steps - 1) / _visualizeEvery + 1);
+		_visualizeEvery = Math.Max(project.Simulation.VisualizeEvery, (project.Simulation.Steps - 1) / maxFrames + 1);
+		_frameCount = (project.Simulation.Steps - 1) / _visualizeEvery + 1;
 		return [scene.Width, scene.Height, (_frameCount - 1) * _visualizeEvery + 1, _visualizeEvery, _frameCount];
 	}
 

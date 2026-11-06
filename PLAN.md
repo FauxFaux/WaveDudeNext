@@ -19,8 +19,10 @@ The shared library and Windows desktop solution remain unchanged.
   resets the project or opens/saves validated JSON through a text area. Reload clears the project.
   Workspace creation, HTTP/SSE and server mutation queues have been removed.
 - Run submits the current canvas project to a dedicated worker. The shared model normalises it,
-  paints optical parts and runs the CPU solver. Up to three field/intensity frames transfer as
-  binary buffers to the existing renderer and timeline. Completion and Stop terminate the worker;
+  paints optical parts and runs the CPU solver. The worker stores field/intensity pairs in OPFS,
+  increasing the capture interval to fit half the estimated unused storage quota. The UI reads
+  selected frames from disc into the existing renderer and timeline, without a RAM frame cache.
+  Completion and Stop terminate the worker;
   edits cancel active work and mark retained frames outdated. Examples load from static JSON.
   Image scenes, probe recordings and shared colour-scheme loading remain unconnected.
 - The generated Zod project schema is retained as a snapshot for existing frontend types.
@@ -42,8 +44,9 @@ carried across. Existing examples and Windows harnesses already present in `orig
 3. Connect probe graphs and playback to worker results, extending the existing run control and
    timeline seeking. Keep transfer queues bounded, identify results by project revision and
    run/frame identity, and discard stale presentation results after an edit or seek.
-4. Add bounded frame retention and browser persistence. Long recordings cannot all live in the
-   Wasm heap. Evaluate OPFS for stored frames and IndexedDB for project recovery. Explicit Save
+4. Extend the first OPFS recording path with lifecycle/recovery support if needed. Long recordings
+   cannot all live in the Wasm heap. Checkpoint/replay remains a deferred design in
+   [FRAME-REGENERATION.md](docs/FRAME-REGENERATION.md). Evaluate IndexedDB for project recovery. Explicit Save
    downloads a project; recovery storage must remain separate from saving the user's file.
 5. Migrate image import, colour schemes and supported exports incrementally.
    Preserve project compatibility and compare calculations against native .NET as features arrive.

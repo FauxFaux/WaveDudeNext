@@ -1,6 +1,6 @@
 export interface WaveDudeRuntime {
   SmokeTest(): number
-  StartSimulation(projectJson: string): Int32Array<ArrayBuffer>
+  StartSimulation(projectJson: string, maxFrames: number): Int32Array<ArrayBuffer>
   NextFrame(): Uint8Array<ArrayBuffer>
   EndSimulation(): void
 }

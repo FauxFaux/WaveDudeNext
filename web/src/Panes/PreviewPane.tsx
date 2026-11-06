@@ -56,7 +56,7 @@ export function PreviewPane({ orientation, onOrientationChange, onRun, onStop, r
           <button class="icon-button" disabled={!count} onClick={() => seek(null)} title="Follow newest frame" aria-label="Go to end" aria-pressed={selected == null}><IconView name="last" /></button>
           <button class="icon-button" disabled title="Loop preview" aria-label="Loop preview"><IconView name="loop" /></button>
         </div>
-        <span class="frame-readout">Frame <b>{frame?.index ?? '—'}</b><span>Step {frame && run ? frame.index * run.visualizeEvery : '—'}</span><span>Buffered <b>{run ? `${run.frameCount} / ${run.totalFrames}` : '— / —'}</b></span></span>
+        <span class="frame-readout">Frame <b>{frame?.index ?? '—'}</b><span>Step {frame && run ? frame.index * run.visualizeEvery : '—'}</span><span>Stored <b>{run ? `${run.frameCount} / ${run.totalFrames}` : '— / —'}</b></span></span>
         <div class="transport-options">
           <label class="speed-control">Speed <select aria-label="Playback speed" disabled><option>1×</option></select></label>
           <span class="toolbar-divider" />

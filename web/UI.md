@@ -13,7 +13,9 @@ The browser implementation uses Preact, TypeScript, CSS, and browser APIs.
 MainWindow owns one Project in Preact state. The project tree and property editors
 edit it locally. File resets it or opens/saves validated JSON through a text area;
 reload clears it. There is no workspace, HTTP API or SSE connection. Canvas
-renderers and the timeline display up to three frames from the current canvas project.
+renderers and the timeline display frames read from an OPFS disc recording of the current canvas project.
+The capture interval increases when necessary to fit half the estimated unused storage quota.
+Only the selected picture is retained in memory; there is no RAM frame cache.
 Run starts a dedicated Wasm worker; Stop or project edits terminate it. Examples load
 from static JSON. Probe recordings and image scene delivery remain unconnected.
 

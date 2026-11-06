@@ -17,11 +17,12 @@ try {
   Object.assign(project.sources[0], { x: 32, y: 24 })
   project.parts = []
   project.probes = []
+  project.simulation.steps = 9
   const json = JSON.stringify(project)
   const simulate = input => {
     try {
-      const metadata = Array.from(runtime.StartSimulation(input))
-      assert.deepEqual(metadata, [64, 48, 5, 2, 3], 'The preview stops at three frames, preserving the project interval')
+      const metadata = Array.from(runtime.StartSimulation(input, 100))
+      assert.deepEqual(metadata, [64, 48, 9, 2, 5], 'The preview preserves the requested interval when storage permits')
       const frames = Array.from({ length: metadata[4] }, () => runtime.NextFrame())
       assert.throws(() => runtime.NextFrame(), /no more preview frames/, 'The export enforces the frame limit')
       for (const frame of frames) {
@@ -49,13 +50,15 @@ try {
   runtime.EndSimulation()
   assert.throws(() => runtime.NextFrame(), /no more preview frames/, 'A released simulation cannot produce frames')
 
+  assert.deepEqual(Array.from(runtime.StartSimulation(JSON.stringify(project), 3)), [64, 48, 7, 3, 3], 'A smaller budget increases the interval across the requested run')
+  runtime.EndSimulation()
   project.simulation.steps = 1
-  assert.equal(runtime.StartSimulation(JSON.stringify(project))[4], 1, 'Short projects only produce their requested frames')
+  assert.equal(runtime.StartSimulation(JSON.stringify(project), 100)[4], 1, 'Short projects only produce their requested frames')
   runtime.NextFrame()
   assert.throws(() => runtime.NextFrame(), /no more preview frames/)
   runtime.EndSimulation()
   project.scene.mode = 'Image'
-  assert.throws(() => runtime.StartSimulation(JSON.stringify(project)), /Image scenes are not supported/, 'Unsupported scenes fail explicitly')
+  assert.throws(() => runtime.StartSimulation(JSON.stringify(project), 100), /Image scenes are not supported/, 'Unsupported scenes fail explicitly')
   console.log(`Wasm solver, project input and bounded frame exports passed (peak field amplitude ${peak}).`)
 } finally {
   clearInterval(keepAlive)
