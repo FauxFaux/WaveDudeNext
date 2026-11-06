@@ -5,10 +5,11 @@ import { loadWaveDude } from '../public/wasm/main.mjs'
 import { prepareRustSimulation } from '../src/Wasm/PreparedSimulation.ts'
 import { createRustSimulation } from '../src/Wasm/RustSimulation.ts'
 import { decodeProbeFrame, ProbeSeries } from '../src/Wasm/ProbeFrames.ts'
-import { readFrame, writeFrame } from '../src/Wasm/FrameStore.ts'
+import { readFrame, writeFrames } from '../src/Wasm/FrameStore.ts'
 import { halfValue } from '../src/Rendering/FrameColours.ts'
 import { prepareKernel } from '../../rust-kernel/interface.mjs'
 import { createParallelKernel } from '../../rust-kernel/parallel.mjs'
+import './check-frame-writes.mjs'
 
 const module = await WebAssembly.compile(await readFile(new URL('../src/assets/rust-kernel.wasm', import.meta.url)))
 const sharedModule = await WebAssembly.compile(await readFile(new URL('../src/assets/rust-kernel-shared.wasm', import.meta.url)))
@@ -80,8 +81,13 @@ try {
     const series = active.map(() => new ProbeSeries())
     const frames = []
     try {
-      for (let index = 0; index < prepared.totalFrames; index++) {
+      await writeFrames(directory, prepared.totalFrames, async index => {
+        const previousTimings = simulation.timings()
         const frame = await simulation.nextFrame()
+        const timing = simulation.timings()
+        assert.equal(timing.frameTimings.frames, index + 1)
+        assert.equal(previousTimings.frameTimings.frames, index, 'Captured timing snapshots do not change during later advances')
+        for (const value of Object.values(timing.frameTimings)) assert.ok(Number.isFinite(value) && value >= 0)
         const expected = runtime.NextFrame()
         const expectedProbes = decodeProbeFrame(runtime.GetProbeFrame())
         near(Array.from(new Uint16Array(frame.bytes.buffer), halfValue), Array.from(new Uint16Array(expected.buffer, expected.byteOffset, expected.byteLength / 2), halfValue), 1e-6, .002)
@@ -94,11 +100,14 @@ try {
           assert.equal(probe.profile === null, expected.profile === null)
           near(probe.samples, expected.samples)
           if (probe.profile) near(probe.profile, expected.profile)
-          series[i].append(probe.samples.slice())
         })
-        await writeFrame(directory, index, frame.bytes, frame.probeBytes)
-        frames.push({ ...frame, probes })
-      }
+        return { ...frame, probes }
+      }, (_index, frame, timings) => {
+        assert.ok(Number.isFinite(timings.writeMilliseconds) && timings.writeMilliseconds >= 0)
+        assert.ok(Number.isFinite(timings.capacityWaitMilliseconds) && timings.capacityWaitMilliseconds >= 0)
+        frame.probes.probes.forEach((probe, i) => series[i].append(probe.samples.slice()))
+        frames.push(frame)
+      })
       await assert.rejects(() => simulation.nextFrame(), /no more preview frames/)
       assert.deepEqual(prepared.packet, packet, 'Solving preserves immutable preparation inputs')
       for (const index of [frames.length - 1, 0, Math.floor(frames.length / 2)]) {

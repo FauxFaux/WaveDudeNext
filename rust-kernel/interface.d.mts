@@ -18,6 +18,8 @@ export interface KernelExports extends WebAssembly.Exports {
     outputAddress: number, capacity: number): number
   kernel_step_band(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
     rowStart: number, rowEnd: number): number
+  kernel_step_stripes(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    worker: number, workers: number, rowsPerStripe: number): number
   kernel_phase(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
     phase: number, outputAddress: number, capacity: number): number
 }
@@ -37,6 +39,34 @@ export interface KernelLayout {
   readonly pixelCount: number
 }
 
+/** Elapsed timings per worker's complete stripe batch; timestamps share the coordinator's origin. */
+export interface WorkerScheduling {
+  /** Bounding rows, not necessarily a contiguous ownership range. */
+  rowStart: number
+  rowEnd: number
+  rowCount: number
+  stripeRows: number
+  stripeCount: number
+  calls: number
+  maxCallMilliseconds: number
+  dispatchMilliseconds: number
+  maxDispatchMilliseconds: number
+  earlyFinishMilliseconds: number
+  waitForWorkMilliseconds: number
+  lastFinishes: number
+}
+
+export interface KernelTimings {
+  coordinatorMilliseconds: number
+  workerMilliseconds: readonly number[]
+  scheduling?: {
+    barriers: number
+    barrierMilliseconds: number
+    resumeMilliseconds: number
+    workers: readonly WorkerScheduling[]
+  }
+}
+
 export interface PreparedKernel {
   readonly packageAddress: number
   readonly packageBytes: number
@@ -45,7 +75,7 @@ export interface PreparedKernel {
   /** Scratch output begins here; numerical helpers grow memory and reuse this region. */
   readonly outputAddress: number
   readonly layout: KernelLayout
-  timings(): { coordinatorMilliseconds: number, workerMilliseconds: number[] }
+  timings(): KernelTimings
   reset(): void
   /** Step-major active-probe slots, zero for lines. Samples include cumulative point totals. */
   advance(steps: number): Float32Array<ArrayBuffer>

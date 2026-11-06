@@ -1,5 +1,5 @@
 import { loadWaveDude } from './Runtime'
-import { writeFrame } from './FrameStore'
+import { writeFrames } from './FrameStore'
 import { decodeProbeFrame } from './ProbeFrames'
 import { prepareRustSimulation } from './PreparedSimulation'
 import { loadRustSimulationKernel } from './RustKernel'
@@ -49,26 +49,30 @@ worker.addEventListener('message', async ({ data }) => {
     const prepared = prepareRustSimulation(runtime, data.projectJson, maxFrames)
     const { width, height, totalSteps, visualizeEvery, totalFrames } = prepared
     const kernel = await loadRustSimulationKernel(prepared, data.cancellation)
-    simulation = createRustSimulation(kernel, prepared)
+    const activeSimulation = createRustSimulation(kernel, prepared)
+    simulation = activeSimulation
     const started = performance.now()
     worker.postMessage({ type: 'started', width, height, totalSteps, visualizeEvery, totalFrames, storageBudget })
-    for (let index = 0; index < totalFrames; index++) {
-      const { bytes, probeBytes } = await simulation.nextFrame()
+    await writeFrames(data.directory, totalFrames, async index => {
+      const { bytes, probeBytes } = await activeSimulation.nextFrame()
       const probes = decodeProbeFrame(probeBytes)
       const cells = width * height
       if (bytes.byteLength !== cells * 4) throw new Error('The solver returned an incomplete frame.')
       if (probes.probes.length !== prepared.probes.length || probes.stepsSampled !== index * visualizeEvery + 1)
         throw new Error('The solver returned incompatible probe data.')
-      await writeFrame(data.directory, index, bytes, probeBytes)
       const probeSamples = probes.probes.map(probe => probe.samples.slice())
+      // A write may finish while the next advance is running. Snapshot only this
+      // frame's work here; reading live kernel timings during an advance is invalid.
+      return { bytes, probeBytes, probeSamples, stepsSampled: probes.stepsSampled, timings: activeSimulation.timings() }
+    }, (index, frame, storageTimings) => {
+      const { probeSamples, stepsSampled, timings } = frame
       const elapsedMilliseconds = performance.now() - started
-      const timings = simulation.timings()
       const workMilliseconds = timings.coordinatorMilliseconds + timings.workerMilliseconds.reduce((sum, value) => sum + value, 0)
-      const rates: RunPerformance = { ...timings, elapsedMilliseconds,
-        stepsPerSecond: elapsedMilliseconds > 0 ? probes.stepsSampled * 1000 / elapsedMilliseconds : 0,
+      const rates: RunPerformance = { ...timings, storageTimings, elapsedMilliseconds,
+        stepsPerSecond: elapsedMilliseconds > 0 ? stepsSampled * 1000 / elapsedMilliseconds : 0,
         parallelism: elapsedMilliseconds > 0 ? workMilliseconds / elapsedMilliseconds : 0 }
       worker.postMessage({ type: 'stored', index, probeSamples, performance: rates }, probeSamples.map(samples => samples.buffer))
-    }
+    })
     worker.postMessage({ type: 'completed' })
   } catch (error) {
     worker.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) })

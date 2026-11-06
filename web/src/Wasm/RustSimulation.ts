@@ -1,23 +1,30 @@
 import type { PreparedKernel } from '../../../rust-kernel/interface.mjs'
 import type { ParallelKernel } from '../../../rust-kernel/parallel.mjs'
 import type { PreparedSimulation } from './PreparedSimulation.ts'
+import type { FrameTimings } from '../Api/Frames'
 
 /** Adapt Rust's step-major samples and pixel observations to the existing recording format. */
 export function createRustSimulation(kernel: PreparedKernel | ParallelKernel, prepared: PreparedSimulation) {
   const { probes, visualizeEvery, totalFrames } = prepared
   let index = 0, completed = 0
+  const frameTimings: FrameTimings = { frames: 0, advanceMilliseconds: 0, observeMilliseconds: 0,
+    captureMilliseconds: 0, packMilliseconds: 0 }
 
   return {
-    timings: () => kernel.timings(),
+    timings: () => ({ ...kernel.timings(), frameTimings: { ...frameTimings } }),
     close() { if ('close' in kernel) kernel.close() },
     async nextFrame() {
       if (index >= totalFrames) throw new Error('There are no more preview frames.')
       // The first frame follows step one; subsequent captures are visualizeEvery steps apart.
       const target = index * visualizeEvery + 1
       const steps = target - completed
+      const started = performance.now()
       const samples = await kernel.advance(steps)
+      const advanced = performance.now()
       const profiles = kernel.observe()
+      const observed = performance.now()
       const bytes = kernel.capture()
+      const captured = performance.now()
       const values = probes.reduce((count, probe) => count + (probe.isProfile ? probe.pixels.length : steps), 0)
       const probeBytes = new Uint8Array(8 + probes.length * 16 + values * 4)
       const view = new DataView(probeBytes.buffer)
@@ -38,6 +45,11 @@ export function createRustSimulation(kernel: PreparedKernel | ParallelKernel, pr
       })
       completed = target
       index++
+      frameTimings.frames = index
+      frameTimings.advanceMilliseconds += advanced - started
+      frameTimings.observeMilliseconds += observed - advanced
+      frameTimings.captureMilliseconds += captured - observed
+      frameTimings.packMilliseconds += performance.now() - captured
       return { bytes, probeBytes }
     },
   }

@@ -94,7 +94,7 @@ export function useSimulation(project: Project) {
         await deleteFrameStore(runId)
         return
       }
-      const next = new Worker(new URL('./Simulation.worker.ts', import.meta.url), { type: 'module' })
+      const next = new Worker(new URL('./Simulation.worker.ts', import.meta.url), { type: 'module', name: 'Simulation coordinator' })
       worker.current = next
       cancellation.current = globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined'
         ? new Int32Array(new SharedArrayBuffer(4)) : null

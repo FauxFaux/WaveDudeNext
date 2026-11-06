@@ -13,7 +13,7 @@ export async function loadRustKernel(): Promise<KernelExports> {
   return instance.exports as KernelExports
 }
 
-/** Reserve a core for the UI/coordinator and use at most four fixed compute bands.
+/** Reserve a core for the UI/coordinator and use at most four compute workers with fixed row stripes.
  * Ordinary memory remains available when cross-origin isolation is unavailable.
  */
 export async function loadRustSimulationKernel(prepared: PreparedSimulation, cancellation?: Int32Array<SharedArrayBuffer>) {
@@ -24,5 +24,5 @@ export async function loadRustSimulationKernel(prepared: PreparedSimulation, can
   if (!response.ok) throw new Error(`Rust shared kernel fetch failed: ${response.status}`)
   const module = await WebAssembly.compileStreaming(response)
   return createParallelKernel(module, prepared, { workerCount, cancellation,
-    createWorker: () => new Worker(new URL('./RustCompute.worker.ts', import.meta.url), { type: 'module' }) })
+    createWorker: index => new Worker(new URL('./RustCompute.worker.ts', import.meta.url), { type: 'module', name: `Simulation worker ${index + 1}` }) })
 }

@@ -35,6 +35,49 @@ export async function writeFrame(directory: FileSystemDirectoryHandle, index: nu
   }
 }
 
+/** Overlap production with at most two writes, publishing closed files in order.
+ * The producer transfers ownership of each frame's buffers until its notification.
+ * Attach failure handlers immediately and settle outstanding writes before returning.
+ */
+export async function writeFrames<T extends { bytes: Uint8Array<ArrayBuffer>, probeBytes: Uint8Array<ArrayBuffer> }>(
+  directory: FileSystemDirectoryHandle,
+  count: number,
+  nextFrame: (index: number) => Promise<T>,
+  onStored: (index: number, frame: T, timings: { writeMilliseconds: number, capacityWaitMilliseconds: number }) => void,
+): Promise<void> {
+  const pending: Promise<void>[] = []
+  let publication = Promise.resolve()
+  let failure: { error: unknown } | undefined
+  let writeMilliseconds = 0, capacityWaitMilliseconds = 0
+  const failed = (error: unknown) => { failure ??= { error } }
+  const check = () => { if (failure) throw failure.error }
+  try {
+    for (let index = 0; index < count; index++) {
+      // Make room before producing another owned frame, keeping memory bounded.
+      if (pending.length === 2) {
+        const started = performance.now()
+        await pending.shift()
+        capacityWaitMilliseconds += performance.now() - started
+      }
+      check()
+      const frame = await nextFrame(index)
+      check()
+      const started = performance.now()
+      const written = writeFrame(directory, index, frame.bytes, frame.probeBytes)
+        .then(() => performance.now() - started).catch(error => { failed(error); return 0 })
+      publication = publication.then(async () => {
+        writeMilliseconds += await written
+        if (!failure) onStored(index, frame, { writeMilliseconds, capacityWaitMilliseconds })
+      }).catch(failed)
+      pending.push(publication)
+    }
+    await Promise.all(pending)
+    check()
+  } finally {
+    await Promise.all(pending)
+  }
+}
+
 export async function readFrame(directory: FileSystemDirectoryHandle, runId: string, index: number, width: number, height: number,
   probes: readonly Probe[], series: readonly ProbeSeries[], visualizeEvery: number): Promise<FramePair> {
   const handle = await directory.getFileHandle(`${index}.bin`)

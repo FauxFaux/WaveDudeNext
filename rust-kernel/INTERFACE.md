@@ -75,6 +75,7 @@ The module never grows memory. JS must grow it before a call.
 | `kernel_execute_prepared(package, packageBytes, state, stateCapacity, operation, steps, output, capacity)` | Execute against a package already validated by `kernel_plan` or `kernel_initialise`. Operation 0 initialises/resets state, 1 advances `steps`, 2 observes, 3 captures. `steps` must be zero for other operations. Initialisation/reset needs zero output bytes. |
 | `kernel_phase(package, packageBytes, state, stateCapacity, phase, output, capacity)` | Coordinator only: phase 0 applies sources and starts a step; phase 1 finishes one substep after all bands complete. The final substep writes `probeCount * 4` sample bytes and completes the step. Other phases return invalid value. |
 | `kernel_step_band(package, packageBytes, state, stateCapacity, rowStart, rowEnd)` | Update `[rowStart, rowEnd)` in an active substep. Each worker owns disjoint mutable bands and a private stack. Reads the current slot/substep from the stable state header. |
+| `kernel_step_stripes(package, packageBytes, state, stateCapacity, worker, workers, rows)` | Process a worker's full round-robin stripe profile in one call. Stripe k begins at `worker*rows + k*workers*rows`, ending at `min(start+rows, height)`. Zero rows selects equal contiguous bands. Package/layout/maps are checked/borrowed once per call, with separate mutable slices per stripe. |
 
 The standalone `kernel_initialise`, `kernel_advance`, `kernel_observe` and
 `kernel_capture` exports retain full package validation on every call. Prepared
@@ -196,14 +197,29 @@ host scheduling error; the Rust ABI cannot establish whether the barrier was met
 `parallel.mjs` exports `createParallelKernel(module, prepared, options)` and
 `runComputeWorker(setup, postMessage)`. The former returns the ordinary prepared-run
 interface with asynchronous `advance(steps)`, `workerCount` and `close()`. Options
-provide `workerCount`, `createWorker`, an optional shared `cancellation` Int32Array,
-and an optional wait deadline `timeoutMs` (default 30000). It reserves all memory
+provide `workerCount`, `createWorker(index)` with a zero-based band index, an optional shared `cancellation` Int32Array,
+an optional wait deadline `timeoutMs` (default 30000), and `rowsPerStripe` (default
+16, zero for contiguous bands, clamped on tiny grids so workers have nonempty
+assignments). It reserves all memory
 before launching workers, rejects concurrent advances/reset/observe/capture during
 stepping, and terminates the pool on error. `advance` returns owned JS samples;
 capture/profile buffers are copied before the next generation. Shared memory has a
 32768-page maximum, and each compute instance gets a private 64 KiB stack above
 `kernel_heap_base`, before the package/state arena. See [README.md](README.md) for
 the worker lifecycle and fallback selection.
+
+`timings()` returns owned snapshots of coordinator/worker work. Parallel snapshots
+also include `scheduling`: barrier count, dispatch-to-resume elapsed time, delay
+after the last kernel return, and per-worker batch/launch maxima, launch totals,
+early-finish waits, between-dispatch waits and last-finisher counts. The worker
+setup includes the coordinator's `timeOrigin`; workers add the difference between
+their own and that origin to start/end timestamps. Each completion's three f64
+words (cumulative work, start, end) are read only after its atomic completion store.
+Reset clears counters and timestamp baselines. Returned objects/arrays do not change
+as later generations complete. Worker row bounds cover all owned stripes and need
+not represent contiguous ownership; `rowCount`, `stripeRows` and `stripeCount`
+describe the assignment. Each worker makes one `kernel_step_stripes` call and one
+completion notification per generation. Elapsed timings are not thread CPU time.
 
 Functional equivalence is the requirement; FMA and transcendental rounding
 changes are acceptable within stated tolerances. The C# comparison checks use

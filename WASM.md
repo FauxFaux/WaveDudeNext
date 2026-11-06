@@ -55,7 +55,8 @@ Vite emits `web/src/assets/rust-kernel.wasm` and `rust-kernel-shared.wasm` as
 fingerprinted assets and includes their base-path-aware URLs in the simulation
 worker. Both generated kernels are ignored by Git. `just build-rust-kernel`
 rebuilds them independently. Cross-origin-isolated pages use persistent compute
-workers with fixed horizontal bands over shared memory; other pages use the
+workers with static round-robin 16-row stripes over shared memory, processed in
+one Wasm call per worker/substep; other pages use the
 single-worker SIMD module. See [the kernel guide](rust-kernel/README.md).
 Vite serves `public/` directly in development and copies it unchanged in production.
 Keep the complete `wasm/` directory together: .NET's loader expects its framework modules,
@@ -158,11 +159,17 @@ adapter against the preserved C# solver, including probe packets, capture interv
 storage budgets, deterministic runs, file storage and seeking. After building,
 `npm --prefix web run check-rust-simulation` checks the existing assets. The wider
 kernel numerical comparison is `node rust-kernel/checks/check-numerics.mjs`.
+`npm --prefix web run check-frame-writes` checks the two-frame write bound, overlap,
+ordered notifications, final drain and write/producer failures without a Wasm build.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.
 Run sends the current project to a dedicated worker. It uses half the estimated unused origin
 storage, allowing 4096 bytes of file overhead per frame, and increases the capture interval if
-needed. Each field/intensity pair is written to a closed OPFS file before being announced.
+needed. Simulation overlaps with at most two outstanding OPFS frame writes, making
+room before producing the next owned frame buffer. Files are announced in capture
+order after closing, even if writes finish out of order. All writes settle before
+completion or a reported error. Work timings are snapshotted at capture so an older
+frame's notification cannot read a newer in-progress advance's mutable state.
 The UI reads the selected frame from disc into the existing previews and timeline; it has no
 RAM frame cache. Point probe histories are retained once per run as growable float32 arrays in
 the page, exposing only the prefix through the selected frame. Line profiles stay on disc with their

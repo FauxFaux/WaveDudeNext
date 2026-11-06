@@ -9,11 +9,11 @@ const check = status => {
   if (status !== 0) throw new Error(`Rust kernel: ${kernelStatuses[status] ?? status}`)
 }
 
-/** Fixed bands over one imported shared memory. createWorker supplies a persistent
+/** Fixed round-robin row stripes over one imported shared memory. createWorker supplies a persistent
  * module worker with the usual postMessage/onmessage/onerror/terminate interface.
  * All memory growth and initialisation finish before compute workers are started.
  */
-export async function createParallelKernel(module, prepared, { workerCount, createWorker, cancellation, timeoutMs = 30000 }) {
+export async function createParallelKernel(module, prepared, { workerCount, createWorker, cancellation, timeoutMs = 30000, rowsPerStripe = 16 }) {
   const packet = prepared instanceof Uint8Array ? prepared : prepared.packet
   const header = new DataView(packet.buffer, packet.byteOffset, packet.byteLength)
   const height = header.getUint32(28, true)
@@ -21,18 +21,31 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
   const probeCount = header.getUint32(72, true)
   const lastStep = header.getUint32(64, true)
   if (!Number.isInteger(workerCount) || workerCount < 1) throw new RangeError('Invalid compute worker count')
+  if (!Number.isInteger(rowsPerStripe) || rowsPerStripe < 0) throw new RangeError('Invalid row stripe size')
   const count = Math.min(workerCount, height)
+  // Tiny grids still give every worker some rows. Zero selects contiguous quarters
+  // for comparison; all other assignments are fixed for the run, without a queue.
+  const stripeRows = Math.min(rowsPerStripe, Math.max(1, Math.floor(height / count)))
   const memory = new WebAssembly.Memory({ initial: 32, maximum: 32768, shared: true })
   const exports = { ...(await WebAssembly.instantiate(module, { env: { memory } })).exports, memory }
+  if (typeof exports.kernel_step_stripes !== 'function') throw new Error('Rust kernel needs rebuilding for stripe scheduling')
   const heap = exports.kernel_heap_base()
   const run = prepareKernel(exports, packet, heap + count * stackBytes)
+  // Derive metadata only after validating the packet's dimensions and maps.
+  const bands = Array.from({ length: count }, (_, index) => {
+    if (stripeRows === 0) return [[Math.floor(index * height / count), Math.floor((index + 1) * height / count)]]
+    const ranges = []
+    for (let start = index * stripeRows; start < height; start += count * stripeRows)
+      ranges.push([start, Math.min(start + stripeRows, height)])
+    return ranges
+  })
   const outputBytes = Math.max(header.getUint32(16, true) * header.getUint32(20, true) * 4,
     run.layout.pixelCount * 4, probeCount * 4)
   const end = run.outputAddress + outputBytes
   if (end > memory.buffer.byteLength) memory.grow(Math.ceil((end - memory.buffer.byteLength) / 65536))
   const control = new Int32Array(new SharedArrayBuffer((count + 1) * 64))
-  // Each worker publishes its cumulative kernel time before its completion word.
-  const workTimes = Array.from({ length: count }, (_, index) => new Float64Array(control.buffer, (completion(index) + 2) * 4, 1))
+  // Cumulative work, last start and last end are published before completion.
+  const workTimes = Array.from({ length: count }, (_, index) => new Float64Array(control.buffer, (completion(index) + 2) * 4, 3))
   const cancel = cancellation ?? new Int32Array(new SharedArrayBuffer(4))
   const workers = []
   const startupTimers = new Set()
@@ -40,6 +53,15 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
   let failure, closed = false, advancing = false, generation = 0
   let coordinatorMilliseconds = 0
   let workBaseline = workTimes.map(() => 0)
+  let barriers = 0, barrierMilliseconds = 0, resumeMilliseconds = 0
+  const scheduling = Array.from({ length: count }, (_, index) => ({
+    rowStart: bands[index][0][0], rowEnd: bands[index].at(-1)[1],
+    rowCount: bands[index].reduce((rows, [start, end]) => rows + end - start, 0),
+    stripeRows, stripeCount: bands[index].length,
+    calls: 0, maxCallMilliseconds: 0, dispatchMilliseconds: 0, maxDispatchMilliseconds: 0,
+    earlyFinishMilliseconds: 0, waitForWorkMilliseconds: 0, lastFinishes: 0,
+  }))
+  const previousEnds = Array(count).fill(undefined)
   function phase(operation, capacity) {
     const started = performance.now()
     try { check(exports.kernel_phase(...args, operation, run.outputAddress, capacity)) }
@@ -65,7 +87,7 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
   }
   try {
     await Promise.all(Array.from({ length: count }, (_, index) => new Promise((resolve, reject) => {
-      const worker = createWorker()
+      const worker = createWorker(index)
       workers.push(worker)
       const timer = setTimeout(() => { fail(new Error('Rust compute worker startup timed out.')); reject(failure) }, timeoutMs)
       startupTimers.add(timer)
@@ -82,8 +104,9 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
         else { fail(new Error(data.error || 'Rust compute worker failed.')); reject(failure) }
       }
       worker.postMessage({ module, memory, control, cancellation: cancel, index,
+        timeOrigin: performance.timeOrigin,
         stackTop: heap + (index + 1) * stackBytes, args,
-        rowStart: Math.floor(index * height / count), rowEnd: Math.floor((index + 1) * height / count) })
+        workerCount: count, rowsPerStripe: stripeRows })
     })))
     ensureActive()
   } catch (error) {
@@ -109,11 +132,34 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
       check(Atomics.load(control, word + 1))
     }))
   }
-  return Object.freeze({ ...run, workerCount: count, close,
+  function recordBarrier(published, resumed) {
+    let lastEnd = -Infinity, lastIndex = 0
+    for (let index = 0; index < count; index++) {
+      if (workTimes[index][2] > lastEnd) { lastEnd = workTimes[index][2]; lastIndex = index }
+    }
+    barriers++
+    barrierMilliseconds += resumed - published
+    resumeMilliseconds += Math.max(0, resumed - lastEnd)
+    for (let index = 0; index < count; index++) {
+      const started = workTimes[index][1], ended = workTimes[index][2]
+      const stats = scheduling[index]
+      const dispatch = Math.max(0, started - published)
+      stats.calls++
+      stats.maxCallMilliseconds = Math.max(stats.maxCallMilliseconds, ended - started)
+      stats.dispatchMilliseconds += dispatch
+      stats.maxDispatchMilliseconds = Math.max(stats.maxDispatchMilliseconds, dispatch)
+      stats.earlyFinishMilliseconds += Math.max(0, lastEnd - ended)
+      if (previousEnds[index] != null) stats.waitForWorkMilliseconds += Math.max(0, published - previousEnds[index])
+      if (index === lastIndex) stats.lastFinishes++
+      previousEnds[index] = ended
+    }
+  }
+  return Object.freeze({ ...run, workerCount: count, rowsPerStripe: stripeRows, close,
     timings() {
       if (advancing) throw new Error('Cannot read timings during an advance.')
       return { coordinatorMilliseconds: coordinatorMilliseconds + run.timings().coordinatorMilliseconds,
-        workerMilliseconds: workTimes.map((value, index) => value[0] - workBaseline[index]) }
+        workerMilliseconds: workTimes.map((value, index) => value[0] - workBaseline[index]),
+        scheduling: { barriers, barrierMilliseconds, resumeMilliseconds, workers: scheduling.map(stats => ({ ...stats })) } }
     },
     async advance(steps) {
       ensureActive()
@@ -130,9 +176,11 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
           phase(0, 0)
           for (let sub = 0; sub < substeps; sub++) {
             generation = (generation + 1) | 0
+            const published = performance.now()
             Atomics.store(control, 0, generation)
             Atomics.notify(control, 0)
             await barrier()
+            recordBarrier(published, performance.now())
             const size = sub + 1 === substeps ? probeCount * 4 : 0
             phase(1, size)
           }
@@ -153,6 +201,13 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
       run.reset()
       coordinatorMilliseconds = 0
       workBaseline = workTimes.map(value => value[0])
+      barriers = 0
+      barrierMilliseconds = 0
+      resumeMilliseconds = 0
+      previousEnds.fill(undefined)
+      for (const stats of scheduling) Object.assign(stats, { calls: 0, maxCallMilliseconds: 0,
+        dispatchMilliseconds: 0, maxDispatchMilliseconds: 0, earlyFinishMilliseconds: 0,
+        waitForWorkMilliseconds: 0, lastFinishes: 0 })
     },
     observe() { ensureActive(); if (advancing) throw new Error('Cannot observe during an advance.'); return run.observe() },
     capture() { ensureActive(); if (advancing) throw new Error('Cannot capture during an advance.'); return run.capture() },
@@ -160,26 +215,34 @@ export async function createParallelKernel(module, prepared, { workerCount, crea
 }
 
 /** Run in a compute worker after receiving its immutable setup. No messages or
- * row claims occur per substep. Timed idle waits allow cancellation even if the
+ * row claims occur per substep. Each generation processes all owned stripes before
+ * one completion notification. Timed idle waits allow cancellation even if the
  * coordinator was terminated before it could publish a shutdown generation.
  */
 export async function runComputeWorker(setup, postMessage) {
-  const { module, memory, control, cancellation, index, stackTop, args, rowStart, rowEnd } = setup
+  const { module, memory, control, cancellation, index, stackTop, args, workerCount, rowsPerStripe, timeOrigin } = setup
   const word = completion(index)
-  const workTime = new Float64Array(control.buffer, (word + 2) * 4, 1)
+  const workTime = new Float64Array(control.buffer, (word + 2) * 4, 3)
+  // Worker and coordinator performance.now() values have different origins.
+  // Translate only the timestamps; keep local differences for cumulative work.
+  const clockOffset = performance.timeOrigin - timeOrigin
   let workMilliseconds = 0
   try {
     const { exports } = await WebAssembly.instantiate(module, { env: { memory } })
     exports.__stack_pointer.value = stackTop
+    const stripeArgs = [...args, index, workerCount, rowsPerStripe]
     let seen = 0
     postMessage({ type: 'ready' })
     while (!Atomics.load(control, 1) && !Atomics.load(cancellation, 0)) {
       const generation = Atomics.load(control, 0)
       if (generation === seen) { Atomics.wait(control, 0, seen, 100); continue }
       const started = performance.now()
-      const status = exports.kernel_step_band(...args, rowStart, rowEnd)
-      workMilliseconds += performance.now() - started
+      const status = exports.kernel_step_stripes(...stripeArgs)
+      const ended = performance.now()
+      workMilliseconds += ended - started
       workTime[0] = workMilliseconds
+      workTime[1] = started + clockOffset
+      workTime[2] = ended + clockOffset
       Atomics.store(control, word + 1, status)
       Atomics.store(control, word, generation)
       Atomics.notify(control, word)

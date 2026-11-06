@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ProbeKindSchema, ProbeMeasurementSchema } from './Project.generated'
+import type { KernelTimings } from '../../../rust-kernel/interface.mjs'
 
 export type FrameLayer = 'field' | 'intensity'
 export type SampleKind = 'field' | 'intensity' | 'intensity-root'
@@ -51,10 +52,18 @@ const FrameProbesSchema = z.strictObject({
 export type FrameProbes = Omit<z.infer<typeof FrameProbesSchema>, 'probes'> & { probes: FrameProbe[] }
 
 /** Cumulative elapsed call timings; wall time also includes capture and disc writes. */
-export interface RunPerformance {
+export interface FrameTimings {
+  frames: number
+  advanceMilliseconds: number
+  observeMilliseconds: number
+  captureMilliseconds: number
+  packMilliseconds: number
+}
+
+export interface RunPerformance extends KernelTimings {
   elapsedMilliseconds: number
-  coordinatorMilliseconds: number
-  workerMilliseconds: readonly number[]
+  frameTimings: FrameTimings
+  storageTimings: { writeMilliseconds: number, capacityWaitMilliseconds: number }
   stepsPerSecond: number
   parallelism: number
 }

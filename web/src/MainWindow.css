@@ -121,6 +121,9 @@
 .status-bar > span:first-child { display: flex; align-items: center; gap: 7px; }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #8b8b8b; }
 .status-performance { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.status-performance > summary { cursor: pointer; list-style: none; }
+.status-performance > summary::-webkit-details-marker { display: none; }
+.status-performance > pre { position: fixed; z-index: 20; bottom: 30px; left: 12px; right: 12px; max-height: 65vh; overflow: auto; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: #292929; color: #ddd; font-size: 11px; line-height: 1.5; white-space: pre-wrap; user-select: text; box-shadow: 0 3px 15px #0008; }
 .status-local { margin-left: auto; }
 .status-preview { border-left: 1px solid #494949; padding-left: 16px; color: #767676; }
 

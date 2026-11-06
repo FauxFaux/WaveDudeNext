@@ -48,6 +48,10 @@ if (!isMainThread) {
       return wrapper
     }
     const prepare = input => decodePreparedSimulation(runtime.Prepare(JSON.stringify(input), 100))
+    const invalid = prepare(project).packet.slice()
+    new DataView(invalid.buffer).setUint32(28, 0xffffffff, true)
+    await assert.rejects(createParallelKernel(shared, invalid, { workerCount: 4,
+      createWorker: () => { throw new Error('Invalid inputs must not create workers') } }), /invalid package layout/)
     let cases = 0
     for (const fourth of [false, true]) {
       for (const [rim, edge] of [[0, 'Reflective'], [0, 'Open'], [-3, 'Open']]) {
@@ -58,10 +62,10 @@ if (!isMainThread) {
         const prepared = prepare(input)
         assert.equal(prepared.fourthOrder, fourth)
         if (fourth) assert.ok(prepared.subSteps > 1)
-        for (const count of [1, 2, 4]) {
+        for (const count of [1, 2, 4]) for (const rowsPerStripe of [0, 1, 4, 16, 32]) {
           const serial = prepareKernel((await WebAssembly.instantiate(ordinary)).exports, prepared)
           const packet = prepared.packet.slice()
-          const parallel = await createParallelKernel(shared, prepared, { workerCount: count, createWorker: () => createWorker() })
+          const parallel = await createParallelKernel(shared, prepared, { workerCount: count, rowsPerStripe, createWorker: () => createWorker() })
           try {
             const compare = () => {
               for (const name of ['control', 'field0', 'field1', 'intensityStage1', 'intensityStage2', 'intensityOutput', 'probeTotals'])
@@ -70,6 +74,15 @@ if (!isMainThread) {
               assert.deepEqual(parallel.observe(), serial.observe())
             }
             compare() // Additional instances must not reinitialise the package/state.
+            // Seed the whole interior so missing/overlapping stripes cannot hide
+            // in the zero regions outside the source's initial wavefront.
+            for (const name of ['field0', 'field1', 'intensityStage1', 'intensityStage2', 'intensityOutput']) {
+              const a = parallel.views()[name], b = serial.views()[name]
+              for (let y = 1; y <= prepared.gridHeight; y++) for (let x = 1; x <= prepared.gridWidth; x++) {
+                const value = ((y * 17 + x * 7) % 31 - 15) * .001
+                a[y * prepared.stride + x] = b[y * prepared.stride + x] = name.startsWith('field') ? value : .001 + Math.abs(value)
+              }
+            }
             let previousTimings = parallel.timings()
             for (const steps of [1, 4, 4, 4]) {
               assert.deepEqual(await parallel.advance(steps), serial.advance(steps))
@@ -78,11 +91,43 @@ if (!isMainThread) {
               assert.ok(timings.coordinatorMilliseconds >= previousTimings.coordinatorMilliseconds)
               assert.equal(timings.workerMilliseconds.length, count)
               timings.workerMilliseconds.forEach((time, index) => assert.ok(Number.isFinite(time) && time > previousTimings.workerMilliseconds[index]))
+              const schedule = timings.scheduling
+              assert.equal(schedule.barriers, parallel.views().control[0] * prepared.subSteps)
+              assert.ok(schedule.barrierMilliseconds >= schedule.resumeMilliseconds)
+              assert.equal(schedule.workers.reduce((sum, worker) => sum + worker.lastFinishes, 0), schedule.barriers)
+              assert.equal(schedule.workers.reduce((sum, worker) => sum + worker.rowCount, 0), prepared.gridHeight)
+              schedule.workers.forEach((worker, index) => {
+                assert.equal(worker.calls, schedule.barriers)
+                const ranges = []
+                const stripeRows = parallel.rowsPerStripe
+                if (!stripeRows) ranges.push([Math.floor(index * prepared.gridHeight / count), Math.floor((index + 1) * prepared.gridHeight / count)])
+                else for (let start = index * stripeRows; start < prepared.gridHeight; start += count * stripeRows)
+                  ranges.push([start, Math.min(start + stripeRows, prepared.gridHeight)])
+                assert.equal(worker.rowStart, ranges[0][0])
+                assert.equal(worker.rowEnd, ranges.at(-1)[1])
+                assert.equal(worker.stripeCount, ranges.length)
+                assert.equal(worker.stripeRows, stripeRows)
+                assert.equal(worker.rowCount, ranges.reduce((sum, [start, end]) => sum + end - start, 0))
+                for (const value of Object.values(worker)) assert.ok(Number.isFinite(value) && value >= 0)
+                assert.ok(worker.dispatchMilliseconds >= worker.maxDispatchMilliseconds)
+                assert.ok(worker.maxCallMilliseconds <= timings.workerMilliseconds[index] + .001)
+              })
+              assert.ok(!previousTimings.scheduling || previousTimings.scheduling.barriers < schedule.barriers,
+                'Previously published scheduling snapshots are immutable')
               previousTimings = timings
             }
             parallel.reset()
             serial.reset()
-            assert.deepEqual(parallel.timings(), { coordinatorMilliseconds: 0, workerMilliseconds: Array(count).fill(0) })
+            const reset = parallel.timings()
+            assert.equal(reset.coordinatorMilliseconds, 0)
+            assert.deepEqual(reset.workerMilliseconds, Array(count).fill(0))
+            assert.equal(reset.scheduling.barriers, 0)
+            assert.equal(reset.scheduling.barrierMilliseconds, 0)
+            assert.equal(reset.scheduling.resumeMilliseconds, 0)
+            reset.scheduling.workers.forEach(worker => {
+              for (const [key, value] of Object.entries(worker))
+                if (!['rowStart', 'rowEnd', 'rowCount', 'stripeRows', 'stripeCount'].includes(key)) assert.equal(value, 0)
+            })
             assert.deepEqual(await parallel.advance(4), serial.advance(4))
             compare()
             assert.deepEqual(prepared.packet, packet)
@@ -141,6 +186,6 @@ if (!isMainThread) {
     await Promise.all(exits)
     await assert.rejects(pool.advance(1), /cancelled/)
     pool.close()
-    console.log(`Shared Rust kernel passed ${cases} single/band parity cases, reset, concurrent-call guards, cancellation, worker failure and timeout cleanup.`)
+    console.log(`Shared Rust kernel passed ${cases} contiguous/stripe parity cases, reset, concurrent-call guards, cancellation, worker failure and timeout cleanup.`)
   } finally { clearInterval(keepAlive) }
 }

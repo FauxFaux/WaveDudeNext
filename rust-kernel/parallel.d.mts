@@ -3,9 +3,11 @@ import type { PreparedKernel } from './interface.mjs'
 
 export interface ParallelKernel extends Omit<PreparedKernel, 'advance'> {
   readonly workerCount: number
+  /** Actual stripe height, clamped for tiny grids; zero selects contiguous bands. */
+  readonly rowsPerStripe: number
   advance(steps: number): Promise<Float32Array<ArrayBuffer>>
   close(): void
 }
 export function createParallelKernel(module: WebAssembly.Module, prepared: { readonly packet: Uint8Array } | Uint8Array,
-  options: { workerCount: number, createWorker: () => Worker, cancellation?: Int32Array<SharedArrayBuffer>, timeoutMs?: number }): Promise<ParallelKernel>
+  options: { workerCount: number, createWorker: (index: number) => Worker, cancellation?: Int32Array<SharedArrayBuffer>, timeoutMs?: number, rowsPerStripe?: number }): Promise<ParallelKernel>
 export function runComputeWorker(setup: unknown, postMessage: (message: unknown) => void): Promise<void>

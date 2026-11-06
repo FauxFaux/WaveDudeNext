@@ -15,61 +15,96 @@ unsafe extern "C" {
     static __heap_base: u8;
 }
 
-/// Update one fixed row band in an active coordinated substep. The package must
-/// have passed full preparation validation and remain immutable. Each caller owns disjoint
-/// destination/filter rows and a private stack. Current field/maps/control are
-/// read-only until all workers finish. Never borrow the complete state mutably here.
-#[unsafe(no_mangle)]
-pub extern "C" fn kernel_step_band(
+enum RowAssignment {
+    Band(u32, u32),
+    Stripes {
+        worker: u32,
+        workers: u32,
+        rows: u32,
+    },
+}
+
+// Parse/check once per worker/substep, then borrow each owned destination stripe
+// separately. No mutable reference spans another worker's rows between stripes.
+fn step_assignment(
     package: u32,
     package_bytes: u32,
     state: u32,
     state_capacity: u32,
-    row_start: u32,
-    row_end: u32,
-) -> u32 {
-    fn run(
-        package: u32,
-        package_bytes: u32,
-        state: u32,
-        state_capacity: u32,
-        row_start: u32,
-        row_end: u32,
-    ) -> Result<(), Status> {
-        let input_range = region(package, package_bytes)?;
-        let state_range = region(state, state_capacity)?;
-        if overlaps(&input_range, &state_range) {
-            return Err(Status::Overlap);
+    assignment: RowAssignment,
+) -> Result<(), Status> {
+    let input_range = region(package, package_bytes)?;
+    let state_range = region(state, state_capacity)?;
+    if overlaps(&input_range, &state_range) {
+        return Err(Status::Overlap);
+    }
+    // SAFETY: only immutable package/control/field reads and band-restricted
+    // mutable references are formed. The host enforces the barrier contract.
+    let input =
+        unsafe { core::slice::from_raw_parts(input_range.start as *const u8, input_range.len()) };
+    let parsed = Prepared::parse_layout(input)?;
+    let h = parsed.header;
+    let layout = Layout::plan(&parsed)?;
+    if state_capacity < layout.state_bytes {
+        return Err(Status::InsufficientCapacity);
+    }
+    let (first, limit, rows, period) = match assignment {
+        RowAssignment::Band(start, end) => {
+            if start > end || end > h.grid_height {
+                return Err(Status::InvalidRange);
+            }
+            (start, end, end - start, end - start)
         }
-        // SAFETY: only immutable package/control/field reads and band-restricted
-        // mutable references are formed. The host enforces the barrier contract.
-        let input = unsafe {
-            core::slice::from_raw_parts(input_range.start as *const u8, input_range.len())
-        };
-        let parsed = Prepared::parse_layout(input)?;
-        let h = parsed.header;
-        let layout = Layout::plan(&parsed)?;
-        if state_capacity < layout.state_bytes {
-            return Err(Status::InsufficientCapacity);
+        RowAssignment::Stripes {
+            worker,
+            workers,
+            rows,
+        } => {
+            if workers == 0 || workers > h.grid_height || worker >= workers || rows > h.grid_height
+            {
+                return Err(Status::InvalidValue);
+            }
+            if rows == 0 {
+                let start =
+                    (u64::from(worker) * u64::from(h.grid_height) / u64::from(workers)) as u32;
+                let end =
+                    (u64::from(worker + 1) * u64::from(h.grid_height) / u64::from(workers)) as u32;
+                (start, end, end - start, end - start)
+            } else {
+                let first = worker.checked_mul(rows).ok_or(Status::TooLarge)?;
+                let period = workers.checked_mul(rows).ok_or(Status::TooLarge)?;
+                (first, h.grid_height, rows, period)
+            }
         }
-        if row_start > row_end || row_end > h.grid_height {
-            return Err(Status::InvalidRange);
-        }
-        let control = unsafe { core::slice::from_raw_parts(state as *const u8, 16) };
-        let slot = u32_at(control, 4);
-        let sub = u32_at(control, 8);
-        if u32_at(control, 0) >= h.last_step
-            || slot > 1
-            || sub >= h.substeps
-            || u32_at(control, 12) != 1
-        {
-            return Err(Status::InvalidState);
-        }
-        let (current, previous) = if slot == 0 {
-            (layout.field0, layout.field1)
-        } else {
-            (layout.field1, layout.field0)
-        };
+    };
+    let control = unsafe { core::slice::from_raw_parts(state as *const u8, 16) };
+    let slot = u32_at(control, 4);
+    let sub = u32_at(control, 8);
+    if u32_at(control, 0) >= h.last_step
+        || slot > 1
+        || sub >= h.substeps
+        || u32_at(control, 12) != 1
+    {
+        return Err(Status::InvalidState);
+    }
+    let (current, previous) = if slot == 0 {
+        (layout.field0, layout.field1)
+    } else {
+        (layout.field1, layout.field0)
+    };
+    if first >= limit {
+        return Ok(());
+    }
+    let current =
+        unsafe { core::slice::from_raw_parts((state + current) as *const f32, h.cells as usize) };
+    let p = Parameters::from_input(&parsed);
+    let grid = Grid {
+        current,
+        c2: plane(input, h.c2_offset, h.cells)?,
+        damping: plane(input, h.damping_offset, h.cells)?,
+    };
+    for row_start in (first..limit).step_by(period as usize) {
+        let row_end = row_start + rows.min(limit - row_start);
         let start = (row_start as usize + 1) * h.stride as usize;
         let count = (row_end - row_start) as usize * h.stride as usize;
         let band = |offset: u32| unsafe {
@@ -78,16 +113,9 @@ pub extern "C" fn kernel_step_band(
                 count,
             )
         };
-        let current = unsafe {
-            core::slice::from_raw_parts((state + current) as *const f32, h.cells as usize)
-        };
         step_rows(
-            Parameters::from_input(&parsed),
-            Grid {
-                current,
-                c2: plane(input, h.c2_offset, h.cells)?,
-                damping: plane(input, h.damping_offset, h.cells)?,
-            },
+            p,
+            grid,
             Band {
                 previous: band(previous),
                 stage1: band(layout.intensity_stage1),
@@ -97,15 +125,58 @@ pub extern "C" fn kernel_step_band(
             row_start as usize..row_end as usize,
             sub + 1 == h.substeps,
         );
-        Ok(())
     }
-    run(
+    Ok(())
+}
+
+/// Update one fixed row band in an active coordinated substep. The package must
+/// have passed full preparation validation and remain immutable. Each caller owns
+/// disjoint destination/filter rows and a private stack. Shared field/maps/control
+/// stay read-only until the barrier. Never borrow the complete state mutably here.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_step_band(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    row_start: u32,
+    row_end: u32,
+) -> u32 {
+    step_assignment(
         package,
         package_bytes,
         state,
         state_capacity,
-        row_start,
-        row_end,
+        RowAssignment::Band(row_start, row_end),
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
+}
+
+/// Update a worker's complete static stripe assignment in one call. Worker i owns
+/// [i*rows + k*workers*rows, min(start+rows, height)) for each k. A zero stripe height
+/// selects contiguous equal bands. The same ownership/barrier contract as
+/// kernel_step_band applies; the host supplies one consistent profile to all workers.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_step_stripes(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    worker: u32,
+    workers: u32,
+    rows: u32,
+) -> u32 {
+    step_assignment(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        RowAssignment::Stripes {
+            worker,
+            workers,
+            rows,
+        },
     )
     .err()
     .unwrap_or(Status::Ok) as u32

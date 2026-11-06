@@ -40,12 +40,20 @@ Cargo configuration is local to this directory: run Cargo here so it discovers
 `.cargo/config.toml`, or use the build wrapper from any directory.
 
 On cross-origin-isolated pages, Run starts up to four persistent compute workers,
-leaving one reported hardware thread for the UI/coordinator. Each owns a fixed
-contiguous horizontal band of the simulated grid, including the damping rim.
+leaving one reported hardware thread for the UI/coordinator. Each owns every Nth
+16-row stripe of the simulated grid, including the damping rim, where N is the
+worker count. Tiny grids use shorter stripes so each worker owns some rows.
+Their debugger names are `Simulation worker 1` through `Simulation worker 4`; the
+coordinator is named separately so profiler tracks can be matched to the counters.
 `parallel.mjs` coordinates them with a command generation and one completion/status
 slot per worker, spaced 64 bytes apart. There is no row queue or per-row tracking.
-Workers read the same current field/maps and write disjoint destination/filter
-bands. After every substep the coordinator applies open boundaries and swaps fields;
+The static stripe profile (worker index, worker count, stripe height) is set up
+once. `kernel_step_stripes` processes the complete assignment in one Wasm call per
+worker/substep, checking the package/layout once and borrowing each mutable stripe
+separately. Neighbour reads use the shared current field across stripe boundaries;
+there is no halo copying or per-stripe notification. Workers read the same current
+field/maps and write disjoint destination/filter stripes. After every substep the
+coordinator applies open boundaries and swaps fields;
 it samples probes after every complete step. Sources retain their original order.
 
 The coordinator owns the module's original stack; each compute instance gets a
@@ -60,13 +68,27 @@ before the worker exits. The pool is recreated for each run.
 
 The status bar shows average completed steps/s and summed solver-call time divided
 by elapsed run time. Timing starts after preparation/worker startup and includes
-frame capture and disc writes in elapsed time. Its tooltip shows coordinator work
+frame capture and disc writes in elapsed time. Open the status figures to read/copy
+coordinator work, capture/observation/copy/packing totals, write-queue back-pressure,
 and each compute worker's cumulative work and estimated idle percentage. Worker
 timings exclude waits; elapsed call time can include browser/OS descheduling, so
 the multiplier estimates parallelism rather than measured serial speedup. Timings
 update per stored frame, remain visible after stopping/completion, and reset for
-each run. Each worker publishes one cumulative f64 timing beside its completion
-word, before the atomic completion store; the coordinator reads it after barriers.
+each run. Each worker publishes cumulative work and the last band's start/end f64
+timestamps beside its completion word, before the atomic completion store. Worker
+timestamps are translated to the coordinator's `performance.timeOrigin`. After
+each barrier the coordinator updates counts, mean/maximum call and launch times,
+last-finisher counts, early-finish waits and waits between dispatches. Call timings
+cover the worker's complete stripe batch per substep, not individual stripes. It also records
+dispatch-to-resume barrier time and delay after the last kernel return. Counters
+use bounded storage; there is no per-band message or retained event history.
+
+Launch delay includes worker wake-up/scheduling; kernel elapsed time includes any
+descheduling during the call. Early-finish wait is contained in the gap before the
+next dispatch, which also includes coordinator/capture/storage time. Storage write
+durations can overlap computation and one another; only queue back-pressure measures
+time the producer pauses for capacity. These totals must not be added as disjoint
+parts of run time. The details panel closes with Escape and keeps text selectable.
 
 `npm --prefix web run dev` and `npm --prefix web run build` rebuild the kernel
 automatically. Vite emits the Wasm as a separate asset, including for snapshot
@@ -94,6 +116,10 @@ After building, `npm --prefix web run check-rust-simulation` runs that check alo
 Run `just check-rust-parallel` to compare one, two and four shared-memory workers
 against the ordinary solver, including both stencils, substeps, rims, open/reflective
 edges, filters, probes, reset, cancellation and worker failure/timeout cleanup.
+The check compares contiguous assignments and 1/4/16/32-row stripes on seeded odd
+grids. `createParallelKernel` accepts `rowsPerStripe` for comparisons: default 16,
+zero for contiguous bands. Work counters include each worker's owned row/stripe
+counts. The older single-band export remains available for direct range callers.
 
 The stencils and intensity filters use one `wide::f32x4` implementation. Short
 vectors handle row tails and boundary cells; there is no separate scalar solver.
