@@ -23,6 +23,9 @@ use crate::{
     prepared::{PROBE_BYTES, Prepared, u32_at},
     solver::{plane, validate_state},
 };
+#[cfg(target_arch = "wasm32")]
+use core::arch::wasm32 as simd;
+#[cfg(not(target_arch = "wasm32"))]
 use wide::f32x4;
 
 pub(crate) fn sample(
@@ -134,26 +137,100 @@ pub fn capture(input: &Prepared<'_>, state: &[u8], output: &mut [u8]) -> Result<
     let h = input.header;
     let width = h.canvas_width as usize;
     let height = h.canvas_height as usize;
+    let (field_output, intensity_output) = output[..bytes].split_at_mut(bytes / 2);
     for y in 0..height {
         let row = (y + h.rim as usize + 1) * h.stride as usize + h.rim as usize + 1;
-        for x in (0..width).step_by(4) {
-            let count = (width - x).min(4);
-            let root = f32x4::from(&intensity[row + x..row + x + count])
-                .sqrt()
-                .to_array();
-            for (lane, root_value) in root.into_iter().enumerate().take(count) {
-                let at = (y * width + x + lane) * 2;
-                output[at..at + 2].copy_from_slice(&to_half(field[row + x + lane]).to_le_bytes());
-                let at = bytes / 2 + at;
-                output[at..at + 2].copy_from_slice(&to_half(root_value).to_le_bytes());
+        let field = &field[row..row + width];
+        let intensity = &intensity[row..row + width];
+        let field_output = &mut field_output[y * width * 2..(y + 1) * width * 2];
+        let intensity_output = &mut intensity_output[y * width * 2..(y + 1) * width * 2];
+        let mut x = 0;
+        while x + 4 <= width {
+            #[cfg(target_arch = "wasm32")]
+            // SAFETY: the checked slices cover each complete four-float load and
+            // eight-byte store. Wasm SIMD loads/stores accept unaligned pointers.
+            unsafe {
+                let values = simd::v128_load(field[x..x + 4].as_ptr().cast());
+                let roots = simd::f32x4_sqrt(simd::v128_load(intensity[x..x + 4].as_ptr().cast()));
+                simd::v128_store64_lane::<0>(
+                    pack_half(values),
+                    field_output[x * 2..x * 2 + 8].as_mut_ptr().cast(),
+                );
+                simd::v128_store64_lane::<0>(
+                    pack_half(roots),
+                    intensity_output[x * 2..x * 2 + 8].as_mut_ptr().cast(),
+                );
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let roots = f32x4::from(&intensity[x..x + 4]).sqrt().to_array();
+                for (lane, root) in roots.into_iter().enumerate() {
+                    let at = (x + lane) * 2;
+                    field_output[at..at + 2]
+                        .copy_from_slice(&to_half(field[x + lane]).to_le_bytes());
+                    intensity_output[at..at + 2].copy_from_slice(&to_half(root).to_le_bytes());
+                }
+            }
+            x += 4;
+        }
+        for x in x..width {
+            field_output[x * 2..x * 2 + 2].copy_from_slice(&to_half(field[x]).to_le_bytes());
+            intensity_output[x * 2..x * 2 + 2]
+                .copy_from_slice(&to_half(intensity[x].sqrt()).to_le_bytes());
         }
     }
     Ok(())
 }
 
+// Convert four binary32 lanes to binary16, packed into the low eight bytes.
+// Keep rounding and exceptional values equivalent to the scalar row-tail path.
+#[cfg(target_arch = "wasm32")]
+#[inline]
+fn pack_half(values: simd::v128) -> simd::v128 {
+    let sign = simd::v128_and(simd::u32x4_shr(values, 16), simd::i32x4_splat(0x8000));
+    let magnitude = simd::v128_and(values, simd::i32x4_splat(0x7fffffff));
+    let rounding = simd::v128_and(simd::u32x4_shr(magnitude, 13), simd::i32x4_splat(1));
+    let normal = simd::u32x4_shr(
+        simd::i32x4_sub(
+            simd::i32x4_add(
+                simd::i32x4_add(magnitude, simd::i32x4_splat(0xfff)),
+                rounding,
+            ),
+            simd::i32x4_splat(0x38000000),
+        ),
+        13,
+    );
+    // Below 2^-14, adding 0.5 rounds to multiples of 2^-24 with ties to even.
+    let subnormal = simd::i32x4_sub(
+        simd::f32x4_add(magnitude, simd::i32x4_splat(0x3f000000)),
+        simd::i32x4_splat(0x3f000000),
+    );
+    let finite = simd::v128_bitselect(
+        subnormal,
+        normal,
+        simd::u32x4_lt(magnitude, simd::i32x4_splat(0x38800000)),
+    );
+    let saturated = simd::v128_bitselect(
+        simd::i32x4_splat(0x7c00),
+        finite,
+        simd::u32x4_ge(magnitude, simd::i32x4_splat(0x47800000)),
+    );
+    // Preserve the sign and high payload bits while quieting every NaN.
+    let nan = simd::v128_or(
+        simd::i32x4_splat(0x7e00),
+        simd::u32x4_shr(simd::v128_and(magnitude, simd::i32x4_splat(0x7fffff)), 13),
+    );
+    let converted = simd::v128_bitselect(
+        nan,
+        saturated,
+        simd::u32x4_gt(magnitude, simd::i32x4_splat(0x7f800000)),
+    );
+    let halves = simd::v128_or(sign, converted);
+    simd::u16x8_narrow_i32x4(halves, halves)
+}
+
 /// IEEE binary32 to binary16, ties to even, preserving signed zero and overflow.
-/// SIMD128 has no f16 packing instruction; use integer rounding after vector sqrt.
+/// Used for row tails and native builds; Wasm packs full groups with SIMD128.
 pub(crate) fn to_half(value: f32) -> u16 {
     let bits = value.to_bits();
     let sign = ((bits >> 16) & 0x8000) as u16;

@@ -113,6 +113,9 @@ half-conversion tests run with
 Run `just check-rust-simulation` to build both Wasm modules and verify the frontend
 adapter's frames, probe packets, storage budgets and seeking against C#.
 After building, `npm --prefix web run check-rust-simulation` runs that check alone.
+Run `node rust-kernel/checks/check-capture.mjs` after building to check ordinary/shared
+Wasm capture against Node 24's half conversion, including all finite half values,
+rounding midpoints, special values, row tails, cropped rims and both field slots.
 Run `just check-rust-parallel` to compare one, two and four shared-memory workers
 against the ordinary solver, including both stencils, substeps, rims, open/reflective
 edges, filters, probes, reset, cancellation and worker failure/timeout cleanup.
