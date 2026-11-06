@@ -49,7 +49,7 @@ impl<'a> Prepared<'a> {
     }
 
     /// Check structure without rescanning maps. Only for an immutable package whose
-    /// values were already validated by kernel_initialise before workers started.
+    /// values were already validated by kernel_plan or kernel_initialise before use.
     pub(crate) fn parse_layout(bytes: &'a [u8]) -> Result<Self, Status> {
         if bytes.len() < HEADER_BYTES || bytes.len() > i32::MAX as usize || &bytes[..4] != b"WDPK" {
             return Err(Status::InvalidPackage);

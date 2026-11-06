@@ -8,7 +8,7 @@ const packet = new Uint8Array(await readFile(process.argv[2] ?? '/tmp/wavedude-p
 const module = await WebAssembly.compile(wasm)
 const { exports: kernel } = await WebAssembly.instantiate(module)
 assert.equal(kernel.kernel_abi_version(), 1)
-assert.equal(kernel.kernel_capabilities(), 31, 'Planning, initialisation, stepping, probes and capture are available')
+assert.equal(kernel.kernel_capabilities(), 63, 'Planning, initialisation, stepping, probes, capture and prepared execution are available')
 assert.equal(typeof kernel.kernel_advance, 'function')
 const base = kernel.kernel_heap_base() + 64
 const before = packet.slice()
@@ -98,9 +98,29 @@ unchanged(() => kernel.kernel_observe(...args, output, prepared.probes.reduce((s
 unchanged(() => kernel.kernel_capture(...args, output + 1, frameBytes - 1), 1)
 unchanged(() => kernel.kernel_capture(...args, run.stateAddress, frameBytes), 7)
 unchanged(() => kernel.kernel_advance(...args, 1, base, sampleBytes), 7)
+// Prepared execution keeps the same range/state/capacity checks without scanning
+// immutable values again. Every rejection must preserve state and output.
+const execute = (operation, steps, address = output, capacity = frameBytes, region = args) =>
+  kernel.kernel_execute_prepared(...region, operation, steps, address, capacity)
+unchanged(() => execute(4, 0), 5)
+unchanged(() => execute(0, 1), 5)
+unchanged(() => execute(2, 1), 5)
+unchanged(() => execute(3, 1), 5)
+unchanged(() => execute(1, 1, output, sampleBytes - 1), 6)
+unchanged(() => execute(1, prepared.totalSteps + 1), 9)
+unchanged(() => execute(2, 0, output, run.layout.pixelCount * 4 - 1), 6)
+unchanged(() => execute(3, 0, output, frameBytes - 1), 6)
+unchanged(() => execute(3, 0, output + 1, frameBytes - 1), 1)
+unchanged(() => execute(3, 0, run.stateAddress), 7)
+unchanged(() => execute(1, 1, base, sampleBytes), 7)
+unchanged(() => execute(0, 0, output, 0, [...args.slice(0, 3), run.layout.stateBytes - 1]), 6)
+unchanged(() => execute(3, 0, output, frameBytes, [base + 1, ...args.slice(1)]), 1)
 run.views().control[1] = 2
 unchanged(() => kernel.kernel_advance(...args, 1, output, sampleBytes), 9)
 unchanged(() => kernel.kernel_capture(...args, output, frameBytes), 9)
+unchanged(() => execute(1, 1), 9)
+unchanged(() => execute(2, 0), 9)
+unchanged(() => execute(3, 0), 9)
 run.views().control[1] = 0
 unchanged(() => kernel.kernel_advance(...args, 0, output, frameBytes), 0)
 unchanged(() => kernel.kernel_phase(...args, 2, output, 0), 5)
@@ -110,6 +130,8 @@ unchanged(() => kernel.kernel_step_band(...args, 0, prepared.gridHeight + 1), 1)
 assert.equal(kernel.kernel_phase(...args, 0, output, 0), 0)
 unchanged(() => kernel.kernel_phase(...args, 0, output, 0), 9)
 unchanged(() => kernel.kernel_advance(...args, 1, output, sampleBytes), 9)
+unchanged(() => execute(2, 0), 9)
+unchanged(() => execute(3, 0), 9)
 for (let sub = 0; sub < prepared.subSteps; sub++) {
   const middle = Math.floor(prepared.gridHeight / 2)
   assert.equal(kernel.kernel_step_band(...args, 0, middle), 0)
@@ -133,4 +155,49 @@ run.advance(2)
 assert.equal(ownedFrame.length, frameBytes, 'Owned outputs survive later scratch reuse')
 assert.throws(() => run.advance(-1), RangeError)
 assert.throws(() => run.advance(.5), RangeError)
+
+// Compare prepared execution with the fully validating ABI on independent arenas,
+// including complete working state, live/integrated observations and frame bytes.
+run.reset()
+assert.equal(other.kernel_initialise(second.packageAddress, packet.byteLength, second.stateAddress, second.layout.stateBytes), 0)
+second.capture() // Reserve scratch before raw calls.
+const strictArgs = [second.packageAddress, packet.byteLength, second.stateAddress, second.layout.stateBytes]
+for (const steps of [1, 2, 4]) {
+  const samples = run.advance(steps)
+  assert.equal(other.kernel_advance(...strictArgs, steps, second.outputAddress, samples.byteLength), 0)
+  assert.deepEqual(samples, new Float32Array(other.memory.buffer, second.outputAddress, samples.length))
+  assert.deepEqual(new Uint8Array(kernel.memory.buffer, run.stateAddress, run.layout.stateBytes),
+    new Uint8Array(other.memory.buffer, second.stateAddress, second.layout.stateBytes))
+  assert.equal(other.kernel_observe(...strictArgs, second.outputAddress, second.layout.pixelCount * 4), 0)
+  assert.deepEqual(run.observe(), new Float32Array(other.memory.buffer, second.outputAddress, second.layout.pixelCount))
+  assert.equal(other.kernel_capture(...strictArgs, second.outputAddress, frameBytes), 0)
+  assert.deepEqual(run.capture(), new Uint8Array(other.memory.buffer, second.outputAddress, frameBytes))
+}
+
+// The JS run must perform exactly one full package-validation call at upload,
+// including across resets and memory growth. Legacy numerical exports must not
+// accidentally reappear on the application path.
+const { exports: tracked } = await WebAssembly.instantiate(module)
+let plans = 0, executions = 0
+const trackedExports = { ...tracked,
+  kernel_plan(...args) { plans++; return tracked.kernel_plan(...args) },
+  kernel_execute_prepared(...args) { executions++; return tracked.kernel_execute_prepared(...args) },
+}
+for (const name of ['kernel_initialise', 'kernel_advance', 'kernel_observe', 'kernel_capture'])
+  trackedExports[name] = () => { throw new Error(`Repeated package validation through ${name}`) }
+const trackedRun = prepareKernel(trackedExports, packet)
+trackedRun.advance(1)
+trackedRun.observe()
+trackedRun.capture()
+tracked.memory.grow(1)
+trackedRun.reset()
+trackedRun.advance(2)
+trackedRun.observe()
+trackedRun.capture()
+assert.equal(plans, 1)
+assert.equal(executions, 8)
+const invalid = packet.slice()
+new DataView(invalid.buffer).setUint32(prepared.offsets.c2, 0x7fc00000, true)
+assert.throws(() => prepareKernel(trackedExports, invalid), /invalid numeric value/,
+  'New or modified packages must pass full validation before prepared execution')
 console.log(`Rust preparation interface passed against ${packet.byteLength} C# package bytes (${run.layout.cells} cells, ${run.layout.stateBytes} state bytes).`)

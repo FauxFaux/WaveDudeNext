@@ -26,7 +26,11 @@ owned package. Its packet-relative offsets allow a copy into Rust memory;
 cell indices remain unchanged. `prepareKernel(exports, prepared)` from
 `interface.mjs` now accepts that model directly and initialises separate mutable
 state. Its `advance`, `observe`, `capture` and `reset` methods expose the ported
-numerics. `web/src/Wasm/RustSimulation.ts` drives these methods for Run and packs
+numerics. Full immutable-package validation runs once, during `kernel_plan`.
+Initialisation, reset and all numerical operations then use `kernel_execute_prepared`,
+which keeps memory/layout/state checks without rescanning the maps or probe tables.
+Standalone numerical exports retain full validation for independent callers.
+`web/src/Wasm/RustSimulation.ts` drives these methods for Run and packs
 point samples and line profiles into the existing OPFS recording format. C# still
 normalises projects and prepares maps, sources and probes; the frontend does not
 call its solver exports. Those exports remain available for reference checks.

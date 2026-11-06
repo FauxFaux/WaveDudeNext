@@ -7,6 +7,9 @@ export interface KernelExports extends WebAssembly.Exports {
   kernel_heap_base(): number
   kernel_plan(packageAddress: number, packageBytes: number, descriptorAddress: number, capacity: number): number
   kernel_initialise(packageAddress: number, packageBytes: number, stateAddress: number, capacity: number): number
+  /** Operations 0 reset, 1 advance, 2 observe, 3 capture; requires a validated immutable package. */
+  kernel_execute_prepared(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    operation: number, steps: number, outputAddress: number, capacity: number): number
   kernel_advance(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
     steps: number, outputAddress: number, capacity: number): number
   kernel_observe(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,

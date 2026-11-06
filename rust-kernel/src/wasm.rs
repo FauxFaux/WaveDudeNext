@@ -16,7 +16,7 @@ unsafe extern "C" {
 }
 
 /// Update one fixed row band in an active coordinated substep. The package must
-/// have passed kernel_initialise and remain immutable. Each caller owns disjoint
+/// have passed full preparation validation and remain immutable. Each caller owns disjoint
 /// destination/filter rows and a private stack. Current field/maps/control are
 /// read-only until all workers finish. Never borrow the complete state mutably here.
 #[unsafe(no_mangle)]
@@ -286,9 +286,15 @@ pub extern "C" fn kernel_initialise(
 }
 
 enum Operation {
+    Initialise,
     Advance(u32),
     Observe,
     Capture,
+}
+
+enum PackageValidation {
+    Full,
+    AlreadyValidated,
 }
 
 // Validate every region before creating references. This coordinator entry point
@@ -302,6 +308,7 @@ fn numerical_call(
     output: u32,
     output_capacity: u32,
     operation: Operation,
+    validation: PackageValidation,
 ) -> Result<(), Status> {
     let input_range = region(package, package_bytes)?;
     let state_range = region(state, state_capacity)?;
@@ -317,8 +324,12 @@ fn numerical_call(
     // workers use the arena, nor mutate the package during a call.
     let input =
         unsafe { core::slice::from_raw_parts(input_range.start as *const u8, input_range.len()) };
-    let parsed = Prepared::parse(input)?;
+    let parsed = match validation {
+        PackageValidation::Full => Prepared::parse(input)?,
+        PackageValidation::AlreadyValidated => Prepared::parse_layout(input)?,
+    };
     let required = match operation {
+        Operation::Initialise => 0,
         Operation::Advance(steps) => u64::from(steps) * u64::from(parsed.header.probe_count) * 4,
         Operation::Observe => u64::from(parsed.header.pixel_count) * 4,
         Operation::Capture => u64::from(crate::observations::frame_bytes(&parsed)?),
@@ -335,6 +346,7 @@ fn numerical_call(
         core::slice::from_raw_parts_mut(output_range.start as *mut u8, required as usize)
     };
     match operation {
+        Operation::Initialise => Layout::plan(&parsed)?.initialise(&parsed, state),
         Operation::Advance(steps) => crate::solver::advance(
             &parsed,
             state,
@@ -348,6 +360,44 @@ fn numerical_call(
         ),
         Operation::Capture => crate::observations::capture(&parsed, state, output),
     }
+}
+
+/// Execute against a package already validated by kernel_plan or kernel_initialise.
+/// Operations: 0 initialise/reset, 1 advance steps, 2 observe, 3 capture. Steps must
+/// be zero except for advance. Package bytes must remain immutable for the run.
+/// Memory ranges, disjointness, layout, state and output capacity are still checked;
+/// immutable map/emitter/probe values are not rescanned. All state/output access is
+/// exclusive: this coordinator call must never overlap active compute bands.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_execute_prepared(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    operation: u32,
+    steps: u32,
+    output: u32,
+    capacity: u32,
+) -> u32 {
+    let operation = match (operation, steps) {
+        (0, 0) => Operation::Initialise,
+        (1, steps) => Operation::Advance(steps),
+        (2, 0) => Operation::Observe,
+        (3, 0) => Operation::Capture,
+        _ => return Status::InvalidValue as u32,
+    };
+    numerical_call(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        output,
+        capacity,
+        operation,
+        PackageValidation::AlreadyValidated,
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
 }
 
 /// Complete steps, including ordered sources, Mur boundaries and per-step probes.
@@ -371,6 +421,7 @@ pub extern "C" fn kernel_advance(
         samples,
         samples_capacity,
         Operation::Advance(steps),
+        PackageValidation::Full,
     )
     .err()
     .unwrap_or(Status::Ok) as u32
@@ -394,6 +445,7 @@ pub extern "C" fn kernel_observe(
         output,
         capacity,
         Operation::Observe,
+        PackageValidation::Full,
     )
     .err()
     .unwrap_or(Status::Ok) as u32
@@ -417,6 +469,7 @@ pub extern "C" fn kernel_capture(
         output,
         capacity,
         Operation::Capture,
+        PackageValidation::Full,
     )
     .err()
     .unwrap_or(Status::Ok) as u32

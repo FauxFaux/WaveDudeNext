@@ -35,10 +35,11 @@ pub extern "C" fn kernel_abi_version() -> u32 {
     1
 }
 
-/// Capability bits: planning, initialisation, stepping, probe observations and half frames.
+/// Capability bits: planning, initialisation, stepping, probe observations, half
+/// frames and execution against an already-validated immutable package.
 #[unsafe(no_mangle)]
 pub extern "C" fn kernel_capabilities() -> u32 {
-    1 | 2 | 4 | 8 | 16
+    1 | 2 | 4 | 8 | 16 | 32
 }
 
 #[cfg(test)]

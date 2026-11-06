@@ -6,7 +6,7 @@ Rust reads the same WDPK v1 bytes, without another serializer or JSON parser.
 See [the preparation contract](../WaveDudeNext.Wasm/PREPARE.md) for immutable inputs.
 
 The kernel validates inputs, plans/reset storage, advances complete simulation
-steps, samples probes and captures half frames. `kernel_capabilities()` returns 31.
+steps, samples probes and captures half frames. `kernel_capabilities()` returns 63.
 C# supplies preparation and the comparison solver; frontend stepping runs in Rust.
 
 ## JS entry point
@@ -28,8 +28,9 @@ const observations = run.observe() // f32 values in flattened probe-pixel order
 run.reset()
 ```
 
-The helper copies the package once, reads the Rust-produced layout, grows memory
-as needed and initialises state. It does not reinterpret the model's JS arrays as
+The helper copies the package once, validates all immutable values with `kernel_plan`,
+reads the Rust-produced layout, grows memory as needed and initialises state through
+`kernel_execute_prepared`. It does not reinterpret the model's JS arrays as
 Rust pointers. Package cell indices are unchanged by relocation. Source definitions
 and maps stay immutable; emitter cycle state and integrated totals live separately.
 
@@ -40,7 +41,11 @@ The helper uses `run.outputAddress` immediately after state for samples, observa
 and frames. It grows memory before each call and copies results into owned JS arrays;
 reserve at least the largest output used by that run before placing another arena. No Rust heap allocation, engine handle,
 retained global run state, release call or worker scheduler is involved. Reset by
-calling `kernel_initialise` again with the same package and state addresses.
+calling `kernel_execute_prepared` operation 0 with the same package and state addresses.
+Initialisation, reset, stepping, observation and capture through this helper do not
+repeat full validation. The uploaded package must remain immutable until the run
+is discarded; a replacement package must go through preparation again. Memory
+growth preserves the validated bytes and does not require another map scan.
 
 Acquire `run.views()` again after any memory growth: ordinary Wasm memory views
 detach. Never grow/reuse/reset an arena while compute workers are using it. Calls
@@ -60,15 +65,24 @@ The module never grows memory. JS must grow it before a call.
 | Export | Contract |
 | --- | --- |
 | `kernel_abi_version()` | Returns 1, preserving the existing worker startup check. |
-| `kernel_capabilities()` | Bits: 1 input/layout planning, 2 initialisation, 4 stepping, 8 observations, 16 half frames; currently 31. |
+| `kernel_capabilities()` | Bits: 1 input/layout planning, 2 initialisation, 4 stepping, 8 observations, 16 half frames, 32 prepared execution; currently 63. |
 | `kernel_heap_base()` | First aligned byte above the module's static data and stack available for the JS arena. |
 | `kernel_plan(package, packageBytes, descriptor, capacity)` | Validate package and write the 64-byte KLAY descriptor. Does not allocate or initialise state. |
 | `kernel_initialise(package, packageBytes, state, capacity)` | Validate package, recalculate its layout, clear working storage and seed emitter state. Also serves as reset. |
 | `kernel_advance(package, packageBytes, state, stateCapacity, steps, samples, capacity)` | Complete `steps` full steps and write step-major f32 probe slots. Capacity is bytes, at least `steps * probeCount * 4`. |
 | `kernel_observe(package, packageBytes, state, stateCapacity, output, capacity)` | Read f32 values in flattened probe-pixel order. Capacity is at least `pixelCount * 4` bytes. |
 | `kernel_capture(package, packageBytes, state, stateCapacity, output, capacity)` | Capture the canvas as f16 field then f16 sqrt(I), both little-endian. Capacity is at least `canvasWidth * canvasHeight * 4` bytes. |
+| `kernel_execute_prepared(package, packageBytes, state, stateCapacity, operation, steps, output, capacity)` | Execute against a package already validated by `kernel_plan` or `kernel_initialise`. Operation 0 initialises/resets state, 1 advances `steps`, 2 observes, 3 captures. `steps` must be zero for other operations. Initialisation/reset needs zero output bytes. |
 | `kernel_phase(package, packageBytes, state, stateCapacity, phase, output, capacity)` | Coordinator only: phase 0 applies sources and starts a step; phase 1 finishes one substep after all bands complete. The final substep writes `probeCount * 4` sample bytes and completes the step. Other phases return invalid value. |
 | `kernel_step_band(package, packageBytes, state, stateCapacity, rowStart, rowEnd)` | Update `[rowStart, rowEnd)` in an active substep. Each worker owns disjoint mutable bands and a private stack. Reads the current slot/substep from the stable state header. |
+
+The standalone `kernel_initialise`, `kernel_advance`, `kernel_observe` and
+`kernel_capture` exports retain full package validation on every call. Prepared
+execution, phase and band calls validate structure/ranges without rescanning
+immutable map, emitter and probe values. Their caller must establish full
+validation first and keep the uploaded package immutable. State, output capacity,
+alignment, disjointness and memory bounds remain checked on every call. No global
+validation cache, retained Rust pointer or allocation is involved.
 
 All mutating/query exports return 0 on success. Nonzero statuses:
 1 invalid memory range/alignment, 2 invalid package/magic, 3 unsupported WDPK
@@ -175,7 +189,7 @@ keeps its sign. Probe data remains unrooted and is never rounded to f16.
 one band. Its global row coordinates preserve fourth-order eligibility across band
 boundaries. Coordinator exports require exclusive access to the full state and
 must not run while bands are active. Band/phase calls check package structure but
-require values already validated by `kernel_initialise`; the host must keep that
+require values already validated by `kernel_plan` or `kernel_initialise`; the host must keep that
 package immutable. They do not rescan maps per call. Missing/duplicate bands are a
 host scheduling error; the Rust ABI cannot establish whether the barrier was met.
 
