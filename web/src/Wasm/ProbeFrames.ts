@@ -7,7 +7,7 @@ export interface ProbeFrame {
   }[]
 }
 
-/** Decode the shared engine's incremental point samples and this frame's exact line profiles. */
+/** Decode a recording's incremental point samples and this frame's exact line profiles. */
 export function decodeProbeFrame(bytes: Uint8Array<ArrayBuffer>): ProbeFrame {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   if (bytes.byteLength < 8) throw new Error('The probe frame is incomplete.')

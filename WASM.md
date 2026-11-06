@@ -6,9 +6,10 @@ retain their own build commands. Neither ASP.NET Core nor Blazor is used for the
 
 ## Prerequisites
 
-Use Docker with BuildKit, Node.js 24/npm and Just. Browser builds do not need .NET or a Wasm
-workload installed on the host. Native library and desktop builds still use the SDK selected
-by `global.json`.
+Use Docker with BuildKit, Node.js 24/npm, Just and Rust with the
+`wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`). Browser
+builds do not need .NET or a Wasm workload installed on the host. Native library
+and desktop builds still use the SDK selected by `global.json`.
 
 Just uses `cmd.exe` on Windows, so these recipes do not require Git Bash or Cygwin.
 The scripts under `_tools/scripts/` use only Node built-ins and can run before `npm ci`.
@@ -46,13 +47,18 @@ uses invariant globalisation. Docker's `wasm` stage contains only the SDK's publ
 the recipe replaces `web/public/wasm/` with that output. A failed build keeps the existing
 bundle, and replacing the directory removes stale fingerprinted files. Temporary output is
 cleaned up on exit. No writable source mount or root-owned host build output is needed.
-`just build-web` publishes Wasm first, then runs TypeScript and Vite; the deployable site is
-`web/dist/`. Vite serves `public/` directly in development and copies it unchanged in production.
+`just build-web` publishes C# Wasm first, then rebuilds the Rust SIMD solver through
+npm's `prebuild` hook and runs TypeScript and Vite; the deployable site is `web/dist/`.
+Vite emits `web/src/assets/rust-kernel.wasm` as a fingerprinted asset and includes
+its base-path-aware URL in the simulation worker. The generated kernel is ignored
+by Git. `just build-rust-kernel` rebuilds it independently.
+Vite serves `public/` directly in development and copies it unchanged in production.
 Keep the complete `wasm/` directory together: .NET's loader expects its framework modules,
 manifest, assemblies and Wasm files at their relative URLs.
 
-`just dev-web` publishes the runtime before starting Vite. After C# changes, run `just build-wasm`
-again and reload the page. Frontend changes use Vite's normal development loop. `just preview-web`
+`just dev-web` publishes C# Wasm and rebuilds the Rust kernel before starting Vite.
+After C# changes, run `just build-wasm` again and reload the page. After Rust changes,
+run `just build-rust-kernel` and reload. Frontend changes use Vite's normal development loop. `just preview-web`
 serves an existing production build. `just build-library` builds only the shared library and
 does not require the browser workload. For a frontend-only rebuild after publishing Wasm, use
 `npm --prefix web run build`.
@@ -80,12 +86,13 @@ Import `loadWaveDude` from `web/src/Wasm/Runtime.ts` to initialise the runtime l
 
 ```ts
 const runtime = await loadWaveDude()
-const peak = runtime.SmokeTest()
+const preparedBytes = runtime.Prepare(projectJson, maxFrames)
 ```
 
 The loader uses Vite's `BASE_URL`, including a deployment prefix. It dynamically imports the
 published `wasm/main.mjs` without bundling or rewriting .NET's internal modules. The JavaScript
 host creates one runtime per JS context and obtains the `[JSExport]` methods from the assembly.
+The C# solver exports remain available for independent consumers and reference checks.
 `SmokeTest()` executes 16 steps of the real CPU solver and returns a finite, positive peak field
 amplitude. `StartSimulation(projectJson, maxFrames)` reads and normalises a canvas project using the shared
 model, paints its optical parts and creates the CPU solver. It returns width, height, bounded
@@ -98,18 +105,23 @@ releases the engine and snapshot. Image scenes report an error until image deliv
 `Prepare(projectJson, maxFrames)` returns the independent binary input package documented
 in [PREPARE.md](WaveDudeNext.Wasm/PREPARE.md), without constructing an engine. Run decodes it
 through `prepareRustSimulation` into a typed model retained in the simulation worker for Rust
-kernel hand-off. It supplies run metadata while the C# comparison path continues producing
-frames; the worker checks that both paths agree on dimensions and capture timing. Maps and
-probe indices share the retained packet's buffer and are treated as read-only. Rust stepping
-and mutable run memory are not connected yet.
+kernel hand-off. `prepareKernel` copies the packet into an independent Rust Wasm instance
+and initialises its mutable state. `RustSimulation.ts` advances to completed step
+`index * visualizeEvery + 1`, captures the two half-float planes and packs Rust's
+per-step point samples and current line profiles for recording. The frontend calls
+only C# preparation and scene painting; all solver stepping, intensity filtering,
+probe integration and frame capture run in Rust. Maps and probe indices share the
+retained packet's buffer and are treated as read-only. See
+[the Rust interface](rust-kernel/INTERFACE.md) for the numerical ABI and memory ownership.
 
-Active probes are installed through the shared `ProbeSampler`, sampled after every solver step,
-and integrated using the shared `ProbeCollector` and engine. `GetProbeFrame()` returns the latest
+The preserved C# solver installs active probes through the shared `ProbeSampler`, samples after every solver step,
+and integrates using the shared `ProbeCollector` and engine. `GetProbeFrame()` returns the latest
 capture's binary probe packet: little-endian int32 probe count and steps completed; per active probe
 in project order, int32 point sample count, int32 profile count (-1 for point probes), float64 line
 length in canvas pixels, then float32 point samples and profile values. Point samples cover only
 steps since the previous capture; line profiles belong to the current capture. Reading the packet
-does not drain it. The worker stores it after the two half-float planes in the same closed frame file.
+does not drain it. The Rust adapter emits the same packet format; the worker stores
+it after the two half-float planes in the same closed frame file.
 Integrated intensity excludes values before the probe's start step.
 
 `RenderScene(projectJson)` independently normalises a canvas project and calls the shared
@@ -136,6 +148,11 @@ probe data when seeking stored frames.
 It also exercises the frontend preparation decoder, including filtered and overlapping sources,
 probe flags, relocated packets, empty sections and rejection of malformed binary inputs.
 `just check-probe-graph` runs the retained graph calculation checks.
+`just check-rust-simulation` builds both Wasm modules and checks the frontend Rust
+adapter against the preserved C# solver, including probe packets, capture intervals,
+storage budgets, deterministic runs, file storage and seeking. After building,
+`npm --prefix web run check-rust-simulation` checks the existing assets. The wider
+kernel numerical comparison is `node rust-kernel/checks/check-numerics.mjs`.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.
 Run sends the current project to a dedicated worker. It uses half the estimated unused origin
@@ -144,7 +161,7 @@ needed. Each field/intensity pair is written to a closed OPFS file before being 
 The UI reads the selected frame from disc into the existing previews and timeline; it has no
 RAM frame cache. Point probe histories are retained once per run as growable float32 arrays in
 the page, exposing only the prefix through the selected frame. Line profiles stay on disc with their
-frames. Wasm retains only the current probe batch and integration totals. The storage budget includes
+frames. Rust retains only the current probe batch and integration totals. The storage budget includes
 the point samples and a conservative maximum size for every line profile.
 Missing estimates, insufficient space and write/read errors fail explicitly.
 Completion, Stop, project replacement and unmount terminate the worker and release its Wasm heap.

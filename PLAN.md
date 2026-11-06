@@ -1,6 +1,7 @@
-# Browser frontend with the shared solver in Wasm
+# Browser frontend with the Rust solver in Wasm
 
-The web application will run the existing .NET CPU solver locally through WebAssembly.
+The web application runs the Rust SIMD solver locally through WebAssembly, using
+the shared .NET model to prepare its inputs and paint scene previews.
 Deployment is a static Vite site. This branch starts from `origin/master` and retains the
 Preact frontend from the HTTP experiment, with an additive Wasm project and build procedure.
 The shared library and Windows desktop solution remain unchanged.
@@ -13,20 +14,24 @@ The shared library and Windows desktop solution remain unchanged.
   Docker mounts the local C# sources read-only and exports the runtime bundle. Runtime modules and
   resources retain their relative URLs. The generated bundle, intermediate build output and
   `web/dist/` are ignored. Response compression belongs to the web server.
-- `web/src/Wasm/Runtime.ts` provides a lazy, base-path-aware runtime loader. The initial `SmokeTest`
-  export executes a small deterministic scene with the shared CPU solver.
+- `web/src/Wasm/Runtime.ts` provides a lazy, base-path-aware C# runtime loader for
+  preparation and scene painting. C# solver exports remain available for reference checks.
+  The Rust kernel is rebuilt by npm before development and production builds and
+  emitted as a separate Vite asset, loaded only by the simulation worker.
 - The Preact root owns one in-memory Project. Project/property panes edit it locally; File
   resets the project or opens/saves validated JSON through a text area. Reload clears the project.
   Workspace creation, HTTP/SSE and server mutation queues have been removed.
 - Run submits the current canvas project to a dedicated worker. The shared model normalises it,
-  paints optical parts and runs the CPU solver. The worker stores field/intensity pairs in OPFS,
+  paints optical parts and prepares maps, sources and probes. The Rust kernel advances
+  the simulation, integrates probes and captures frames. The worker stores field/intensity
+  pairs in OPFS,
   increasing the capture interval to fit half the estimated unused storage quota. The UI reads
   selected frames from disc into the existing renderer and timeline, without a RAM frame cache.
   Completion and Stop terminate the worker;
   edits to simulation inputs cancel active work and mark retained frames outdated. Display and
   colour-scheme edits recolour stored samples while the simulation continues. Examples load from static JSON.
   Image scenes remain unconnected.
-- Active probes use the shared sampler and collector: point histories include every solver step,
+- Active probes use the shared prepared layouts and Rust sampling: point histories include every solver step,
   line profiles belong to each captured frame, and integrated intensity honours the start step.
   Point histories are retained once per run in the page; incremental samples and line profiles are
   stored alongside each frame in OPFS. Seeking selects the history prefix and that frame's profile.
@@ -65,8 +70,8 @@ carried across. Existing examples and Windows harnesses already present in `orig
    Preserve project compatibility and compare calculations against native .NET as features arrive.
 
 The browser owns selection, focus, drag feedback, picture layout and playback timing. Shared .NET
-code owns model normalisation and numerical simulation. Reuse the existing WebGL2 colour mapper
-and Canvas 2D fallback: half-float frame planes and indexed palettes already have browser renderers.
+code owns model normalisation and preparation; Rust owns numerical simulation. Reuse the existing
+WebGL2 colour mapper and Canvas 2D fallback: half-float frame planes and indexed palettes already have browser renderers.
 A brightness or colour-scheme change should recolour the selected frame without another simulation.
 
 Keep visible keyboard focus and the desktop's established terminology and behaviour. Introduce

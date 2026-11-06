@@ -2,6 +2,8 @@ import { loadWaveDude } from './Runtime'
 import { writeFrame } from './FrameStore'
 import { decodeProbeFrame } from './ProbeFrames'
 import { prepareRustSimulation } from './PreparedSimulation'
+import { loadRustKernel } from './RustKernel'
+import { createRustSimulation } from './RustSimulation'
 import type { Project } from '../Model/Project'
 
 export interface SimulationRequest {
@@ -24,7 +26,6 @@ const worker = globalThis as unknown as {
 // .NET 10 treats a worker with onmessage set as one of its own runtime threads and hangs
 // during startup. A listener leaves onmessage unset: https://github.com/dotnet/runtime/issues/114918
 worker.addEventListener('message', async ({ data }) => {
-  let runtime
   try {
     const project = JSON.parse(data.projectJson) as Project
     const { quota, usage } = await navigator.storage.estimate()
@@ -41,18 +42,13 @@ worker.addEventListener('message', async ({ data }) => {
     const requestedFrames = Math.ceil(project.simulation.steps / project.simulation.visualizeEvery)
     const maxFrames = Math.min(requestedFrames, Math.floor(Math.max(0, storageBudget - pointBytes) / (frameBytes + 4096)))
     if (maxFrames < 1) throw new Error('There is not enough estimated disc space for one frame.')
-    runtime = await loadWaveDude(data.runtimeUrl)
+    const [runtime, kernel] = await Promise.all([loadWaveDude(data.runtimeUrl), loadRustKernel()])
     const prepared = prepareRustSimulation(runtime, data.projectJson, maxFrames)
     const { width, height, totalSteps, visualizeEvery, totalFrames } = prepared
-    // Keep the C# comparison path until the Rust kernel can consume prepared inputs and step.
-    // The prepared packet/maps stay in this coordinator; no large arrays go to the UI.
-    const reference = runtime.StartSimulation(data.projectJson, maxFrames)
-    if (reference.length !== 5 || reference.some((value, i) => value !== [width, height, totalSteps, visualizeEvery, totalFrames][i]))
-      throw new Error('The C# solver disagrees with the prepared run metadata.')
+    const simulation = createRustSimulation(kernel, prepared)
     worker.postMessage({ type: 'started', width, height, totalSteps, visualizeEvery, totalFrames, storageBudget })
     for (let index = 0; index < totalFrames; index++) {
-      const bytes = runtime.NextFrame()
-      const probeBytes = runtime.GetProbeFrame()
+      const { bytes, probeBytes } = simulation.nextFrame()
       const probes = decodeProbeFrame(probeBytes)
       const cells = width * height
       if (bytes.byteLength !== cells * 4) throw new Error('The solver returned an incomplete frame.')
@@ -65,7 +61,5 @@ worker.addEventListener('message', async ({ data }) => {
     worker.postMessage({ type: 'completed' })
   } catch (error) {
     worker.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) })
-  } finally {
-    runtime?.EndSimulation()
   }
 })

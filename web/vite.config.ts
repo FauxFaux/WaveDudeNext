@@ -14,6 +14,6 @@ export default defineConfig({
   publicDir: 'public',
   server: { headers: isolationHeaders },
   preview: { headers: isolationHeaders },
-  // Keep the kernel as a fetchable asset even while the placeholder is tiny.
+  // Keep the kernel as a fetchable asset for the simulation worker.
   build: { assetsInlineLimit: filePath => filePath.endsWith('.wasm') ? false : undefined },
 })

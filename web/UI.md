@@ -18,9 +18,9 @@ The capture interval increases when necessary to fit half the estimated unused s
 Only the selected picture is retained in memory; there is no RAM frame cache.
 Run starts a dedicated Wasm worker; Stop or edits outside display settings, colour schemes and probe graph box/axis settings
 terminate it. Display and palette edits recolour frames while the run continues. Examples load
-from static JSON. Image scene delivery remains unconnected. Active probes sample through the shared
-engine; point histories include every step and line profiles follow the selected frame. Integrated
-intensity honours the probe's start step. Graph box/axis edits preserve the run; measurement edits
+from static JSON. Image scene delivery remains unconnected. Active probes sample through the Rust
+kernel using shared prepared layouts; point histories include every step and line profiles follow
+the selected frame. Integrated intensity honours the probe's start step. Graph box/axis edits preserve the run; measurement edits
 cancel it and hide outdated recordings.
 Canvas scene images and glowing edges are painted independently in a scene worker. Both pictures
 show the scene before a run and overlay edges on frames of matching dimensions. Overlay switches
@@ -30,7 +30,7 @@ Shipped colour schemes are static frontend data in `src/assets/color-schemes.ts`
 JavaScript renderer uses these schemes directly; project schemes take precedence over shipped names.
 
 `src/Wasm/Runtime.ts` lazily loads the new .NET runtime from Vite's static assets.
-Simulation uses `src/Wasm/Simulation.worker.ts` and the shared solver exports;
+Simulation uses `src/Wasm/Simulation.worker.ts`, C# preparation and the Rust solver;
 keep numerical work off the UI thread. Use `addEventListener` in the worker and leave
 `onmessage` unset so .NET 10 initialises it as an independent runtime.
 Keep unavailable operations disabled and preserve empty preview/readout states.
@@ -192,9 +192,9 @@ and ensure the same action remains available through a visible control.
 ## Connecting the Wasm worker
 
 Follow PLAN.md for connecting the root-owned Project to a Wasm worker.
-Model validation, wave simulation and numerical results belong to the shared
-.NET code. The browser owns transient selection, focus, drag feedback and display
-state. Keep the main thread responsive while the worker computes bounded batches.
+Model validation and preparation belong to the shared .NET code; wave simulation
+and numerical results belong to the Rust kernel. The browser owns transient selection, focus,
+drag feedback and display state. Keep the main thread responsive while the worker computes bounded batches.
 
 Serialise model mutations and retain later unsent drafts when applying an
 acknowledgement. Identify results by project revision, run and frame; an obsolete

@@ -10,6 +10,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check-wasm": "node scripts/check-wasm.mjs",
+    "check-rust-simulation": "node scripts/check-rust-simulation.mjs",
     "check-probe-graph": "node scripts/check-probe-graph.ts"
   },
   "dependencies": {

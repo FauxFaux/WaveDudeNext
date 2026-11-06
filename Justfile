@@ -24,11 +24,11 @@ restore-web:
 # Publish AOT Wasm assets, then check TypeScript and build the static website.
 build: build-web
 
-# Publish the shared CPU solver into web/public/wasm for Vite to serve and copy.
+# Publish the C# preparation, scene and reference solver exports for Vite to serve and copy.
 build-wasm:
     node _tools/scripts/just-wasm-build.mjs
 
-# Build the SIMD Rust kernel scaffold into the frontend assets directory.
+# Build the SIMD Rust solver into the frontend assets directory.
 build-rust-kernel:
     node rust-kernel/build.mjs
 
@@ -59,3 +59,7 @@ check-probe-graph:
 # Verify the published AOT runtime executes the shared solver through JavaScript.
 check-wasm: build-wasm
     npm --prefix web run check-wasm
+
+# Verify the frontend Rust solver and recordings against the preserved C# reference.
+check-rust-simulation: build-wasm build-rust-kernel
+    npm --prefix web run check-rust-simulation
