@@ -95,6 +95,14 @@ frame budget without changing the input project. The run ends at its last sample
 and returns two binary half-float planes: field, then square-root intensity. `EndSimulation()`
 releases the engine and snapshot. Image scenes report an error until image delivery is connected.
 
+`Prepare(projectJson, maxFrames)` returns the independent binary input package documented
+in [PREPARE.md](WaveDudeNext.Wasm/PREPARE.md), without constructing an engine. Run decodes it
+through `prepareRustSimulation` into a typed model retained in the simulation worker for Rust
+kernel hand-off. It supplies run metadata while the C# comparison path continues producing
+frames; the worker checks that both paths agree on dimensions and capture timing. Maps and
+probe indices share the retained packet's buffer and are treated as read-only. Rust stepping
+and mutable run memory are not connected yet.
+
 Active probes are installed through the shared `ProbeSampler`, sampled after every solver step,
 and integrated using the shared `ProbeCollector` and engine. `GetProbeFrame()` returns the latest
 capture's binary probe packet: little-endian int32 probe count and steps completed; per active probe
@@ -125,6 +133,8 @@ The same check compares scene and edge pixels against native .NET output for the
 scene fixture and checks geometry edits, empty canvases and independent simulation lifetimes.
 It also checks point/line measurements, integrated start gates, sampling between captures and exact
 probe data when seeking stored frames.
+It also exercises the frontend preparation decoder, including filtered and overlapping sources,
+probe flags, relocated packets, empty sections and rejection of malformed binary inputs.
 `just check-probe-graph` runs the retained graph calculation checks.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.

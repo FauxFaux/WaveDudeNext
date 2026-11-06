@@ -1,6 +1,7 @@
 import { loadWaveDude } from './Runtime'
 import { writeFrame } from './FrameStore'
 import { decodeProbeFrame } from './ProbeFrames'
+import { prepareRustSimulation } from './PreparedSimulation'
 import type { Project } from '../Model/Project'
 
 export interface SimulationRequest {
@@ -41,7 +42,13 @@ worker.addEventListener('message', async ({ data }) => {
     const maxFrames = Math.min(requestedFrames, Math.floor(Math.max(0, storageBudget - pointBytes) / (frameBytes + 4096)))
     if (maxFrames < 1) throw new Error('There is not enough estimated disc space for one frame.')
     runtime = await loadWaveDude(data.runtimeUrl)
-    const [width, height, totalSteps, visualizeEvery, totalFrames] = runtime.StartSimulation(data.projectJson, maxFrames)
+    const prepared = prepareRustSimulation(runtime, data.projectJson, maxFrames)
+    const { width, height, totalSteps, visualizeEvery, totalFrames } = prepared
+    // Keep the C# comparison path until the Rust kernel can consume prepared inputs and step.
+    // The prepared packet/maps stay in this coordinator; no large arrays go to the UI.
+    const reference = runtime.StartSimulation(data.projectJson, maxFrames)
+    if (reference.length !== 5 || reference.some((value, i) => value !== [width, height, totalSteps, visualizeEvery, totalFrames][i]))
+      throw new Error('The C# solver disagrees with the prepared run metadata.')
     worker.postMessage({ type: 'started', width, height, totalSteps, visualizeEvery, totalFrames, storageBudget })
     for (let index = 0; index < totalFrames; index++) {
       const bytes = runtime.NextFrame()
@@ -49,7 +56,7 @@ worker.addEventListener('message', async ({ data }) => {
       const probes = decodeProbeFrame(probeBytes)
       const cells = width * height
       if (bytes.byteLength !== cells * 4) throw new Error('The solver returned an incomplete frame.')
-      if (probes.probes.length !== activeProbes.length || probes.stepsSampled !== index * visualizeEvery + 1)
+      if (probes.probes.length !== prepared.probes.length || probes.stepsSampled !== index * visualizeEvery + 1)
         throw new Error('The solver returned incompatible probe data.')
       await writeFrame(data.directory, index, bytes, probeBytes)
       const probeSamples = probes.probes.map(probe => probe.samples.slice())

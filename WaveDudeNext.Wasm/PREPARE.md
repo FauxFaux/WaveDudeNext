@@ -102,9 +102,20 @@ gate. The original project retains names/IDs and display settings on the JS side
 
 ## JS to Rust
 
-The existing runtime interface in `web/` is deliberately unchanged in this work.
-Access the new export using `loadWaveDude()` from the published `main.mjs` directly,
-or extend the frontend's TypeScript interface when integrating later.
+The frontend runtime interface exposes `Prepare`. `prepareRustSimulation` in
+`web/src/Wasm/PreparedSimulation.ts` submits the project and frame budget, validates
+the result and returns a typed `PreparedSimulation`: numerical metadata, ordered
+emitter definitions, active probe layouts and typed map/index views into the packet.
+Treat those views as read-only. Aligned packets are retained without copying;
+unaligned input views are copied once before creating typed views.
+
+Run keeps this model in `Simulation.worker.ts`, using its dimensions and capture
+timing. The worker still starts the C# comparison solver and checks its metadata
+against the model before recording frames. This currently prepares the scene twice;
+replacing that comparison path with Rust stepping remains separate work. No Rust
+mutable buffers, memory allocation ABI or scheduler are imposed by the model.
+
+For direct access to the binary sections:
 
 ```js
 const runtime = await loadWaveDude()

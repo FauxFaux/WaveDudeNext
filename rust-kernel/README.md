@@ -15,6 +15,14 @@ reported there too, and both workers are terminated after the check. Its only
 function export is
 `kernel_abi_version()`, which returns 1; no simulation code has been ported.
 
+Run calls C# `Prepare` through `web/src/Wasm/PreparedSimulation.ts` and retains a
+validated `PreparedSimulation` in the simulation worker. The model holds run/grid
+metadata, resolved emitters, probe layouts and read-only map/index views over the
+owned package. Its packet-relative offsets allow a later copy into Rust memory;
+cell indices remain unchanged. Mutable kernel state is still separate. Frames
+continue through the C# comparison solver, whose metadata must match preparation.
+See `../WaveDudeNext.Wasm/PREPARE.md` for the wire format and ownership.
+
 Cargo configuration is local to this directory: run Cargo here so it discovers
 `.cargo/config.toml`, or use the build wrapper from any directory. Shared memory,
 private worker stacks and the worker protocol described in `../RUST.md` remain

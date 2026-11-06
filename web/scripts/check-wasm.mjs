@@ -6,6 +6,7 @@ import { decodeScene, sceneKey } from '../src/Wasm/Scene.ts'
 import { decodeProbeFrame, ProbeSeries } from '../src/Wasm/ProbeFrames.ts'
 import { readFrame, writeFrame } from '../src/Wasm/FrameStore.ts'
 import { halfValue } from '../src/Rendering/FrameColours.ts'
+import { checkPreparedSimulation } from './check-prepared-simulation.ts'
 
 // The .NET Node host may unref its startup work; keep Node alive until the check finishes.
 const keepAlive = setInterval(() => {}, 1000)
@@ -17,6 +18,7 @@ try {
   assert.equal(runtime.SmokeTest(), peak, 'The scene is deterministic across independent runs')
 
   const project = JSON.parse(await readFile(new URL('../src/assets/examples/Example01_Source_Mirror_Probe.json', import.meta.url), 'utf8'))
+  checkPreparedSimulation(runtime, project)
   // The scene from 9656c7d's server check, including absorption (blue) and refraction (red).
   const sceneProject = structuredClone(project)
   Object.assign(sceneProject.scene, { width: 41, height: 23, refractiveIndex: 1.2 })
@@ -189,7 +191,7 @@ try {
     assert.deepEqual(frame.probes.probes[0].values, Float32Array.from(histories[0].slice(0, index * 3 + 1)))
     assert.deepEqual(frame.probes.probes[5].profile, sparse[index].probes.probes[5].profile, 'Seeking returns that frame\'s integrated line profile')
   }
-  console.log(`Wasm scene, solver, probe sampling, integration, frame storage and seeking checks passed (peak field amplitude ${peak}).`)
+  console.log(`Wasm preparation, scene, solver, probe sampling, integration, frame storage and seeking checks passed (peak field amplitude ${peak}).`)
 } finally {
   clearInterval(keepAlive)
 }
