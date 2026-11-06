@@ -27,6 +27,15 @@ export function MainWindow() {
   })
   const [project, setProject] = useState(() => linkedExample ? readExample(linkedExample.id) : createProject())
   const simulation = useSimulation(project)
+  const performance = simulation.run?.performance
+  const performanceTitle = performance && [
+    `Averages over ${(performance.elapsedMilliseconds / 1000).toFixed(2)} s since stepping started, including frame capture and disc writes.`,
+    'Parallelism = summed elapsed solver-call time across all threads ÷ elapsed run time.',
+    `Coordinator: ${(performance.coordinatorMilliseconds / 1000).toFixed(3)} s work`,
+    ...performance.workerMilliseconds.map((work, index) => `Worker ${index + 1}: ${(work / 1000).toFixed(3)} s work · ${
+      (100 * Math.max(0, 1 - work / performance.elapsedMilliseconds)).toFixed(0)}% idle (est.)`),
+    'Idle includes waits, coordination, capture and storage. Browser scheduling can affect elapsed call times.',
+  ].join('\n')
   const [copyLinkError, setCopyLinkError] = useState<string | null>(null)
   const [selection, setSelection] = useState<ProjectSelection>('project')
   const [sourceDrafts, setSourceDrafts] = useState<Record<string, SourceDraft>>({})
@@ -218,6 +227,10 @@ export function MainWindow() {
             : simulation.run?.state === 'Completed' ? `Preview complete · ${simulation.run.frameCount} frames on disc`
               : simulation.run?.state === 'Cancelled' ? 'Simulation stopped'
                 : isModified ? 'Project changed · copy JSON to keep your changes' : 'Ready')}</span>
+        {performance && <span class="status-performance" title={performanceTitle || undefined}>
+          {performance.stepsPerSecond.toLocaleString(undefined, { maximumFractionDigits: 1 })} steps/s
+          {' · '}{performance.parallelism.toFixed(2)}× parallel
+        </span>}
         <span class="status-local">Project held in this page</span><span class="status-preview">{simulation.run?.storageBudget
           ? `Every ${simulation.run.visualizeEvery} steps · ${(simulation.run.storageBudget / 2 ** 30).toFixed(2)} GiB disc budget`
           : 'Frames stored on disc'}</span>

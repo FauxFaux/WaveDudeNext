@@ -50,6 +50,15 @@ const FrameProbesSchema = z.strictObject({
 })
 export type FrameProbes = Omit<z.infer<typeof FrameProbesSchema>, 'probes'> & { probes: FrameProbe[] }
 
+/** Cumulative elapsed call timings; wall time also includes capture and disc writes. */
+export interface RunPerformance {
+  elapsedMilliseconds: number
+  coordinatorMilliseconds: number
+  workerMilliseconds: readonly number[]
+  stepsPerSecond: number
+  parallelism: number
+}
+
 /** Status of the local Wasm recording backed by browser disc storage. */
 export interface RunStatus {
   runId: string
@@ -67,4 +76,5 @@ export interface RunStatus {
   error: string | null
   hasIntensity: boolean
   storageBudget: number
+  performance: RunPerformance | null
 }

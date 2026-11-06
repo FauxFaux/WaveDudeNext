@@ -2,19 +2,21 @@ import { loadWaveDude } from './Runtime'
 import { writeFrame } from './FrameStore'
 import { decodeProbeFrame } from './ProbeFrames'
 import { prepareRustSimulation } from './PreparedSimulation'
-import { loadRustKernel } from './RustKernel'
+import { loadRustSimulationKernel } from './RustKernel'
 import { createRustSimulation } from './RustSimulation'
 import type { Project } from '../Model/Project'
+import type { RunPerformance } from '../Api/Frames'
 
 export interface SimulationRequest {
   projectJson: string
   runtimeUrl: string
   directory: FileSystemDirectoryHandle
+  cancellation?: Int32Array<SharedArrayBuffer>
 }
 
 export type SimulationMessage =
   | { type: 'started', width: number, height: number, totalSteps: number, visualizeEvery: number, totalFrames: number, storageBudget: number }
-  | { type: 'stored', index: number, probeSamples: Float32Array<ArrayBuffer>[] }
+  | { type: 'stored', index: number, probeSamples: Float32Array<ArrayBuffer>[], performance: RunPerformance }
   | { type: 'completed' }
   | { type: 'error', error: string }
 
@@ -26,6 +28,7 @@ const worker = globalThis as unknown as {
 // .NET 10 treats a worker with onmessage set as one of its own runtime threads and hangs
 // during startup. A listener leaves onmessage unset: https://github.com/dotnet/runtime/issues/114918
 worker.addEventListener('message', async ({ data }) => {
+  let simulation: ReturnType<typeof createRustSimulation> | undefined
   try {
     const project = JSON.parse(data.projectJson) as Project
     const { quota, usage } = await navigator.storage.estimate()
@@ -42,13 +45,15 @@ worker.addEventListener('message', async ({ data }) => {
     const requestedFrames = Math.ceil(project.simulation.steps / project.simulation.visualizeEvery)
     const maxFrames = Math.min(requestedFrames, Math.floor(Math.max(0, storageBudget - pointBytes) / (frameBytes + 4096)))
     if (maxFrames < 1) throw new Error('There is not enough estimated disc space for one frame.')
-    const [runtime, kernel] = await Promise.all([loadWaveDude(data.runtimeUrl), loadRustKernel()])
+    const runtime = await loadWaveDude(data.runtimeUrl)
     const prepared = prepareRustSimulation(runtime, data.projectJson, maxFrames)
     const { width, height, totalSteps, visualizeEvery, totalFrames } = prepared
-    const simulation = createRustSimulation(kernel, prepared)
+    const kernel = await loadRustSimulationKernel(prepared, data.cancellation)
+    simulation = createRustSimulation(kernel, prepared)
+    const started = performance.now()
     worker.postMessage({ type: 'started', width, height, totalSteps, visualizeEvery, totalFrames, storageBudget })
     for (let index = 0; index < totalFrames; index++) {
-      const { bytes, probeBytes } = simulation.nextFrame()
+      const { bytes, probeBytes } = await simulation.nextFrame()
       const probes = decodeProbeFrame(probeBytes)
       const cells = width * height
       if (bytes.byteLength !== cells * 4) throw new Error('The solver returned an incomplete frame.')
@@ -56,10 +61,18 @@ worker.addEventListener('message', async ({ data }) => {
         throw new Error('The solver returned incompatible probe data.')
       await writeFrame(data.directory, index, bytes, probeBytes)
       const probeSamples = probes.probes.map(probe => probe.samples.slice())
-      worker.postMessage({ type: 'stored', index, probeSamples }, probeSamples.map(samples => samples.buffer))
+      const elapsedMilliseconds = performance.now() - started
+      const timings = simulation.timings()
+      const workMilliseconds = timings.coordinatorMilliseconds + timings.workerMilliseconds.reduce((sum, value) => sum + value, 0)
+      const rates: RunPerformance = { ...timings, elapsedMilliseconds,
+        stepsPerSecond: elapsedMilliseconds > 0 ? probes.stepsSampled * 1000 / elapsedMilliseconds : 0,
+        parallelism: elapsedMilliseconds > 0 ? workMilliseconds / elapsedMilliseconds : 0 }
+      worker.postMessage({ type: 'stored', index, probeSamples, performance: rates }, probeSamples.map(samples => samples.buffer))
     }
     worker.postMessage({ type: 'completed' })
   } catch (error) {
     worker.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) })
+  } finally {
+    simulation?.close()
   }
 })

@@ -13,6 +13,10 @@ export interface KernelExports extends WebAssembly.Exports {
     outputAddress: number, capacity: number): number
   kernel_capture(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
     outputAddress: number, capacity: number): number
+  kernel_step_band(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    rowStart: number, rowEnd: number): number
+  kernel_phase(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    phase: number, outputAddress: number, capacity: number): number
 }
 
 /** Offsets in bytes relative to stateAddress, except counts and stateBytes. */
@@ -38,6 +42,7 @@ export interface PreparedKernel {
   /** Scratch output begins here; numerical helpers grow memory and reuse this region. */
   readonly outputAddress: number
   readonly layout: KernelLayout
+  timings(): { coordinatorMilliseconds: number, workerMilliseconds: number[] }
   reset(): void
   /** Step-major active-probe slots, zero for lines. Samples include cumulative point totals. */
   advance(steps: number): Float32Array<ArrayBuffer>

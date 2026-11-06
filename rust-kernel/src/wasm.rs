@@ -5,13 +5,179 @@
 use crate::{
     Status,
     layout::{DESCRIPTOR_BYTES, Layout},
-    prepared::Prepared,
+    prepared::{Prepared, u32_at},
+    solver::{Band, Grid, Parameters, plane, step_rows},
 };
 use core::ops::Range;
 use wide::bytemuck::try_cast_slice_mut;
 
 unsafe extern "C" {
     static __heap_base: u8;
+}
+
+/// Update one fixed row band in an active coordinated substep. The package must
+/// have passed kernel_initialise and remain immutable. Each caller owns disjoint
+/// destination/filter rows and a private stack. Current field/maps/control are
+/// read-only until all workers finish. Never borrow the complete state mutably here.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_step_band(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    row_start: u32,
+    row_end: u32,
+) -> u32 {
+    fn run(
+        package: u32,
+        package_bytes: u32,
+        state: u32,
+        state_capacity: u32,
+        row_start: u32,
+        row_end: u32,
+    ) -> Result<(), Status> {
+        let input_range = region(package, package_bytes)?;
+        let state_range = region(state, state_capacity)?;
+        if overlaps(&input_range, &state_range) {
+            return Err(Status::Overlap);
+        }
+        // SAFETY: only immutable package/control/field reads and band-restricted
+        // mutable references are formed. The host enforces the barrier contract.
+        let input = unsafe {
+            core::slice::from_raw_parts(input_range.start as *const u8, input_range.len())
+        };
+        let parsed = Prepared::parse_layout(input)?;
+        let h = parsed.header;
+        let layout = Layout::plan(&parsed)?;
+        if state_capacity < layout.state_bytes {
+            return Err(Status::InsufficientCapacity);
+        }
+        if row_start > row_end || row_end > h.grid_height {
+            return Err(Status::InvalidRange);
+        }
+        let control = unsafe { core::slice::from_raw_parts(state as *const u8, 16) };
+        let slot = u32_at(control, 4);
+        let sub = u32_at(control, 8);
+        if u32_at(control, 0) >= h.last_step
+            || slot > 1
+            || sub >= h.substeps
+            || u32_at(control, 12) != 1
+        {
+            return Err(Status::InvalidState);
+        }
+        let (current, previous) = if slot == 0 {
+            (layout.field0, layout.field1)
+        } else {
+            (layout.field1, layout.field0)
+        };
+        let start = (row_start as usize + 1) * h.stride as usize;
+        let count = (row_end - row_start) as usize * h.stride as usize;
+        let band = |offset: u32| unsafe {
+            core::slice::from_raw_parts_mut(
+                (state as usize + offset as usize + start * 4) as *mut f32,
+                count,
+            )
+        };
+        let current = unsafe {
+            core::slice::from_raw_parts((state + current) as *const f32, h.cells as usize)
+        };
+        step_rows(
+            Parameters::from_input(&parsed),
+            Grid {
+                current,
+                c2: plane(input, h.c2_offset, h.cells)?,
+                damping: plane(input, h.damping_offset, h.cells)?,
+            },
+            Band {
+                previous: band(previous),
+                stage1: band(layout.intensity_stage1),
+                stage2: band(layout.intensity_stage2),
+                intensity: band(layout.intensity_output),
+            },
+            row_start as usize..row_end as usize,
+            sub + 1 == h.substeps,
+        );
+        Ok(())
+    }
+    run(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        row_start,
+        row_end,
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
+}
+
+/// Coordinator-only phase: 0 applies sources and starts a step; 1 finishes a
+/// substep after its barrier. Only the final substep writes probe_count samples.
+/// The package must already be validated/immutable; state/output are exclusive.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_phase(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    phase: u32,
+    output: u32,
+    capacity: u32,
+) -> u32 {
+    fn run(
+        package: u32,
+        package_bytes: u32,
+        state: u32,
+        state_capacity: u32,
+        phase: u32,
+        output: u32,
+        capacity: u32,
+    ) -> Result<(), Status> {
+        if phase > 1 {
+            return Err(Status::InvalidValue);
+        }
+        let input_range = region(package, package_bytes)?;
+        let state_range = region(state, state_capacity)?;
+        let output_range = region(output, capacity)?;
+        if overlaps(&input_range, &state_range)
+            || overlaps(&input_range, &output_range)
+            || overlaps(&state_range, &output_range)
+        {
+            return Err(Status::Overlap);
+        }
+        // SAFETY: the coordinator holds exclusive state/output access between
+        // generations. The validated package stays immutable for the entire run.
+        let input = unsafe {
+            core::slice::from_raw_parts(input_range.start as *const u8, input_range.len())
+        };
+        let parsed = Prepared::parse_layout(input)?;
+        let state = unsafe {
+            core::slice::from_raw_parts_mut(state_range.start as *mut u8, state_range.len())
+        };
+        if phase == 0 {
+            return crate::solver::begin_step(&parsed, state);
+        }
+        let output = unsafe {
+            core::slice::from_raw_parts_mut(output_range.start as *mut u8, output_range.len())
+        };
+        let float_bytes = output.len() & !3;
+        crate::solver::finish_substep(
+            &parsed,
+            state,
+            try_cast_slice_mut(&mut output[..float_bytes]).map_err(|_| Status::InvalidRange)?,
+        )
+    }
+    run(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        phase,
+        output,
+        capacity,
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
 }
 
 /// First byte available to the JS-owned arena, above this instance's static data/stack.

@@ -7,7 +7,9 @@ retain their own build commands. Neither ASP.NET Core nor Blazor is used for the
 ## Prerequisites
 
 Use Docker with BuildKit, Node.js 24/npm, Just and Rust with the
-`wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`). Browser
+`wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`) and
+nightly sources (`rustup toolchain install nightly --component rust-src`) for the
+shared-memory kernel's standard library. Browser
 builds do not need .NET or a Wasm workload installed on the host. Native library
 and desktop builds still use the SDK selected by `global.json`.
 
@@ -49,9 +51,12 @@ bundle, and replacing the directory removes stale fingerprinted files. Temporary
 cleaned up on exit. No writable source mount or root-owned host build output is needed.
 `just build-web` publishes C# Wasm first, then rebuilds the Rust SIMD solver through
 npm's `prebuild` hook and runs TypeScript and Vite; the deployable site is `web/dist/`.
-Vite emits `web/src/assets/rust-kernel.wasm` as a fingerprinted asset and includes
-its base-path-aware URL in the simulation worker. The generated kernel is ignored
-by Git. `just build-rust-kernel` rebuilds it independently.
+Vite emits `web/src/assets/rust-kernel.wasm` and `rust-kernel-shared.wasm` as
+fingerprinted assets and includes their base-path-aware URLs in the simulation
+worker. Both generated kernels are ignored by Git. `just build-rust-kernel`
+rebuilds them independently. Cross-origin-isolated pages use persistent compute
+workers with fixed horizontal bands over shared memory; other pages use the
+single-worker SIMD module. See [the kernel guide](rust-kernel/README.md).
 Vite serves `public/` directly in development and copies it unchanged in production.
 Keep the complete `wasm/` directory together: .NET's loader expects its framework modules,
 manifest, assemblies and Wasm files at their relative URLs.

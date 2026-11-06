@@ -24,6 +24,7 @@ export function useSimulation(project: Project) {
       ({ id, name, active, layer, measurement, kind, ax, ay, bx, by, startAfter })) })
   }, [project])
   const worker = useRef<Worker | null>(null)
+  const cancellation = useRef<Int32Array<SharedArrayBuffer> | null>(null)
   const operation = useRef(0)
   const store = useRef<Recording | null>(null)
   const snapshot = useRef<string | null>(null)
@@ -39,6 +40,8 @@ export function useSimulation(project: Project) {
 
   function release() {
     operation.current++
+    if (cancellation.current) Atomics.store(cancellation.current, 0, 1)
+    cancellation.current = null
     worker.current?.terminate()
     worker.current = null
   }
@@ -81,7 +84,7 @@ export function useSimulation(project: Project) {
       runId, projectRevision: 1, state: 'Starting', stepsDone: 0, totalSteps: 0,
       frameCount: 0, totalFrames: 0, width: project.scene.width, height: project.scene.height,
       visualizeEvery: project.simulation.visualizeEvery, isStale: false, probesStale: false,
-      error: null, hasIntensity: true, storageBudget: 0,
+      error: null, hasIntensity: true, storageBudget: 0, performance: null,
     })
     try {
       await previous
@@ -93,6 +96,8 @@ export function useSimulation(project: Project) {
       }
       const next = new Worker(new URL('./Simulation.worker.ts', import.meta.url), { type: 'module' })
       worker.current = next
+      cancellation.current = globalThis.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined'
+        ? new Int32Array(new SharedArrayBuffer(4)) : null
       const fail = (error: string) => {
         if (worker.current !== next) return
         release()
@@ -109,13 +114,14 @@ export function useSimulation(project: Project) {
           if (data.probeSamples.length !== recording.probes.length) { fail('The solver returned incompatible probe samples.'); return }
           data.probeSamples.forEach((samples, i) => recording.series[i].append(samples))
           setRun(current => current && { ...current, frameCount: data.index + 1,
-            stepsDone: data.index * current.visualizeEvery + 1 })
+            stepsDone: data.index * current.visualizeEvery + 1, performance: data.performance })
         } else if (data.type === 'completed') {
           release()
           setRun(current => current && { ...current, state: 'Completed' })
         }
       }
-      const request: SimulationRequest = { projectJson: JSON.stringify(project), runtimeUrl: waveDudeUrl(), directory: recording.directory }
+      const request: SimulationRequest = { projectJson: JSON.stringify(project), runtimeUrl: waveDudeUrl(), directory: recording.directory,
+        cancellation: cancellation.current ?? undefined }
       next.postMessage(request)
     } catch (error) {
       if (operation.current !== version) return

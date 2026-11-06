@@ -55,14 +55,19 @@ export function prepareKernel(exports, prepared, base = exports.kernel_heap_base
   const frameBytes = header.getUint32(16, true) * header.getUint32(20, true) * 4
   const outputAddress = align(stateAddress + layout.stateBytes)
   const args = [packageAddress, packet.byteLength, stateAddress, layout.stateBytes]
+  let workMilliseconds = 0
   const numerical = (name, size, extra = []) => {
     if ((exports.kernel_capabilities() & 28) !== 28) throw new Error('Rust kernel does not support numerical operations')
     if (!Number.isSafeInteger(size) || size > 0x7fffffff) throw new RangeError('Kernel output exceeds signed 32-bit capacity')
     ensure(outputAddress + size)
-    check(exports[name](...args, ...extra, outputAddress, size))
+    const started = performance.now()
+    try { check(exports[name](...args, ...extra, outputAddress, size)) }
+    finally { workMilliseconds += performance.now() - started }
   }
   return Object.freeze({ packageAddress, packageBytes: packet.byteLength, descriptorAddress, stateAddress, outputAddress, layout,
-    reset() { check(exports.kernel_initialise(...args)) },
+    reset() { check(exports.kernel_initialise(...args)); workMilliseconds = 0 },
+    /** Elapsed time inside numerical calls; excludes initialisation and worker waits. */
+    timings() { return { coordinatorMilliseconds: workMilliseconds, workerMilliseconds: [] } },
     /** Complete steps; step-major active-probe slots, zero for lines. Returned data is owned by JS. */
     advance(steps) {
       if (!Number.isInteger(steps) || steps < 0 || steps > 0xffffffff) throw new RangeError('Expected an unsigned step count')

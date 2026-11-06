@@ -63,3 +63,7 @@ check-wasm: build-wasm
 # Verify the frontend Rust solver and recordings against the preserved C# reference.
 check-rust-simulation: build-wasm build-rust-kernel
     npm --prefix web run check-rust-simulation
+
+# Verify shared-memory fixed bands and compute worker lifecycle against the serial solver.
+check-rust-parallel: build-wasm build-rust-kernel
+    npm --prefix web run check-rust-parallel

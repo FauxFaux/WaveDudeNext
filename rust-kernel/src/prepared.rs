@@ -43,6 +43,14 @@ pub struct Prepared<'a> {
 
 impl<'a> Prepared<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Self, Status> {
+        let result = Self::parse_layout(bytes)?;
+        result.validate_values()?;
+        Ok(result)
+    }
+
+    /// Check structure without rescanning maps. Only for an immutable package whose
+    /// values were already validated by kernel_initialise before workers started.
+    pub(crate) fn parse_layout(bytes: &'a [u8]) -> Result<Self, Status> {
         if bytes.len() < HEADER_BYTES || bytes.len() > i32::MAX as usize || &bytes[..4] != b"WDPK" {
             return Err(Status::InvalidPackage);
         }
@@ -130,9 +138,7 @@ impl<'a> Prepared<'a> {
         if bytes[end..].iter().any(|&v| v != 0) {
             return Err(Status::InvalidLayout);
         }
-        let result = Self { header: h, bytes };
-        result.validate_values()?;
-        Ok(result)
+        Ok(Self { header: h, bytes })
     }
 
     pub fn bytes(&self) -> &'a [u8] {

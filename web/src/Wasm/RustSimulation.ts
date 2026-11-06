@@ -1,20 +1,21 @@
-import { prepareKernel } from '../../../rust-kernel/interface.mjs'
-import type { KernelExports } from '../../../rust-kernel/interface.mjs'
+import type { PreparedKernel } from '../../../rust-kernel/interface.mjs'
+import type { ParallelKernel } from '../../../rust-kernel/parallel.mjs'
 import type { PreparedSimulation } from './PreparedSimulation.ts'
 
 /** Adapt Rust's step-major samples and pixel observations to the existing recording format. */
-export function createRustSimulation(exports: KernelExports, prepared: PreparedSimulation) {
-  const kernel = prepareKernel(exports, prepared)
+export function createRustSimulation(kernel: PreparedKernel | ParallelKernel, prepared: PreparedSimulation) {
   const { probes, visualizeEvery, totalFrames } = prepared
   let index = 0, completed = 0
 
   return {
-    nextFrame() {
+    timings: () => kernel.timings(),
+    close() { if ('close' in kernel) kernel.close() },
+    async nextFrame() {
       if (index >= totalFrames) throw new Error('There are no more preview frames.')
       // The first frame follows step one; subsequent captures are visualizeEvery steps apart.
       const target = index * visualizeEvery + 1
       const steps = target - completed
-      const samples = kernel.advance(steps)
+      const samples = await kernel.advance(steps)
       const profiles = kernel.observe()
       const bytes = kernel.capture()
       const values = probes.reduce((count, probe) => count + (probe.isProfile ? probe.pixels.length : steps), 0)

@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "check-wasm": "node scripts/check-wasm.mjs",
     "check-rust-simulation": "node scripts/check-rust-simulation.mjs",
+    "check-rust-parallel": "node ../rust-kernel/checks/check-parallel.mjs",
     "check-probe-graph": "node scripts/check-probe-graph.ts"
   },
   "dependencies": {

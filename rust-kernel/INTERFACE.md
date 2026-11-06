@@ -7,8 +7,7 @@ See [the preparation contract](../WaveDudeNext.Wasm/PREPARE.md) for immutable in
 
 The kernel validates inputs, plans/reset storage, advances complete simulation
 steps, samples probes and captures half frames. `kernel_capabilities()` returns 31.
-C# remains the running comparison solver in the frontend; the numerical exports
-are ready for coordinator integration.
+C# supplies preparation and the comparison solver; frontend stepping runs in Rust.
 
 ## JS entry point
 
@@ -45,13 +44,15 @@ calling `kernel_initialise` again with the same package and state addresses.
 
 Acquire `run.views()` again after any memory growth: ordinary Wasm memory views
 detach. Never grow/reuse/reset an arena while compute workers are using it. Calls
-must have exclusive access to their package/output regions. This build still uses
-instance-owned memory; imported shared memory and private worker stacks remain a
-separate prerequisite for parallel execution. The relative layouts work for either.
+must have exclusive access to their state/output regions, except for the band
+export described below. Packages remain immutable throughout a run. The ordinary
+build owns its memory; the shared build imports `env.memory` and exports a mutable
+`__stack_pointer`. The coordinator supplies the imported memory as `exports.memory`
+to `prepareKernel`. The relative layouts are identical in both builds.
 
 ## Numeric exports (kernel ABI 1)
 
-The linker exports `memory`. All addresses, lengths, capacities, versions and status
+The ordinary linker exports `memory`; the shared build imports it. All addresses, lengths, capacities, versions and status
 codes below are u32. Addresses are absolute bytes in this instance's memory; inputs
 and outputs must start at 16-byte-aligned addresses at or above `kernel_heap_base`.
 The module never grows memory. JS must grow it before a call.
@@ -66,6 +67,8 @@ The module never grows memory. JS must grow it before a call.
 | `kernel_advance(package, packageBytes, state, stateCapacity, steps, samples, capacity)` | Complete `steps` full steps and write step-major f32 probe slots. Capacity is bytes, at least `steps * probeCount * 4`. |
 | `kernel_observe(package, packageBytes, state, stateCapacity, output, capacity)` | Read f32 values in flattened probe-pixel order. Capacity is at least `pixelCount * 4` bytes. |
 | `kernel_capture(package, packageBytes, state, stateCapacity, output, capacity)` | Capture the canvas as f16 field then f16 sqrt(I), both little-endian. Capacity is at least `canvasWidth * canvasHeight * 4` bytes. |
+| `kernel_phase(package, packageBytes, state, stateCapacity, phase, output, capacity)` | Coordinator only: phase 0 applies sources and starts a step; phase 1 finishes one substep after all bands complete. The final substep writes `probeCount * 4` sample bytes and completes the step. Other phases return invalid value. |
+| `kernel_step_band(package, packageBytes, state, stateCapacity, rowStart, rowEnd)` | Update `[rowStart, rowEnd)` in an active substep. Each worker owns disjoint mutable bands and a private stack. Reads the current slot/substep from the stable state header. |
 
 All mutating/query exports return 0 on success. Nonzero statuses:
 1 invalid memory range/alignment, 2 invalid package/magic, 3 unsupported WDPK
@@ -100,8 +103,11 @@ boundary; section padding is zeroed during initialisation.
 | 60 | Reserved zero |
 
 The state starts with 16 control bytes: u32 completed steps at byte 0, u32 current
-field slot at byte 4 (0 selects field0, 1 selects field1), then eight reserved zero
-bytes. Initialisation selects field0 and zero steps. Both fields, all intensity
+field slot at byte 4 (0 selects field0, 1 selects field1), substep index at byte 8
+and active flag at byte 12. The latter two words are zero between complete steps,
+including throughout ordinary `kernel_advance` calls. During a coordinated step,
+the active flag is 1 and the substep index advances after each barrier.
+Initialisation selects field0 and zero steps. Both fields, all intensity
 buffers and all probe totals start at zero.
 
 Mutable emitter record: f64 cycle anchor at byte 0 (initially zero), i32 current
@@ -167,9 +173,23 @@ keeps its sign. Probe data remains unrooted and is never rounded to f16.
 
 `solver::step_rows` accepts shared full-grid reads and mutable slices limited to
 one band. Its global row coordinates preserve fourth-order eligibility across band
-boundaries. These coordinator exports still require exclusive access to the full
-state; they must not be entered concurrently. A shared-memory worker export and
-barrier protocol are separate integration work.
+boundaries. Coordinator exports require exclusive access to the full state and
+must not run while bands are active. Band/phase calls check package structure but
+require values already validated by `kernel_initialise`; the host must keep that
+package immutable. They do not rescan maps per call. Missing/duplicate bands are a
+host scheduling error; the Rust ABI cannot establish whether the barrier was met.
+
+`parallel.mjs` exports `createParallelKernel(module, prepared, options)` and
+`runComputeWorker(setup, postMessage)`. The former returns the ordinary prepared-run
+interface with asynchronous `advance(steps)`, `workerCount` and `close()`. Options
+provide `workerCount`, `createWorker`, an optional shared `cancellation` Int32Array,
+and an optional wait deadline `timeoutMs` (default 30000). It reserves all memory
+before launching workers, rejects concurrent advances/reset/observe/capture during
+stepping, and terminates the pool on error. `advance` returns owned JS samples;
+capture/profile buffers are copied before the next generation. Shared memory has a
+32768-page maximum, and each compute instance gets a private 64 KiB stack above
+`kernel_heap_base`, before the package/state arena. See [README.md](README.md) for
+the worker lifecycle and fallback selection.
 
 Functional equivalence is the requirement; FMA and transcendental rounding
 changes are acceptable within stated tolerances. The C# comparison checks use

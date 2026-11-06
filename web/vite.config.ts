@@ -1,7 +1,7 @@
 import preact from '@preact/preset-vite'
 import { defineConfig } from 'vite'
 
-// Required for future shared WebAssembly.Memory/Atomics workers.
+// Required for shared WebAssembly.Memory/Atomics compute workers.
 const isolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',

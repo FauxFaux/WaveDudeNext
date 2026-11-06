@@ -348,3 +348,91 @@ pub fn advance(
     control[4..8].copy_from_slice(&slot.to_le_bytes());
     Ok(())
 }
+
+/// Begin a coordinated step with exclusive access to state. Sources are applied
+/// once, in order, before any band reads the current field. Words 2/3 in the state
+/// header hold the substep index and active flag until finish_substep completes.
+pub fn begin_step(input: &Prepared<'_>, state: &mut [u8]) -> Result<(), Status> {
+    let h = input.header;
+    let layout = Layout::plan(input)?;
+    validate_state(input, layout, state)?;
+    let completed = u32_at(state, 0);
+    if completed >= h.last_step {
+        return Err(Status::InvalidState);
+    }
+    let slot = u32_at(state, 4);
+    let (control, mut rest) = state[..layout.state_bytes as usize].split_at_mut(16);
+    let field0 = take::<f32>(&mut rest, h.cells)?;
+    let field1 = take::<f32>(&mut rest, h.cells)?;
+    let _ = take::<f32>(&mut rest, h.cells)?;
+    let _ = take::<f32>(&mut rest, h.cells)?;
+    let _ = take::<f32>(&mut rest, h.cells)?;
+    let emitters = take::<u8>(&mut rest, h.emitter_count * 16)?;
+    crate::sources::apply(
+        input,
+        if slot == 0 { field0 } else { field1 },
+        emitters,
+        completed,
+    );
+    control[12..16].copy_from_slice(&1u32.to_le_bytes());
+    Ok(())
+}
+
+/// Finish a substep after every band has completed. Exclusive access is required:
+/// apply open edges and swap fields, then sample probes after the final substep.
+/// Intermediate substeps accept an empty sample slice. No worker may start again
+/// until this function returns and the coordinator publishes the next generation.
+pub fn finish_substep(
+    input: &Prepared<'_>,
+    state: &mut [u8],
+    samples: &mut [f32],
+) -> Result<(), Status> {
+    let h = input.header;
+    let layout = Layout::plan(input)?;
+    if state.len() < layout.state_bytes as usize {
+        return Err(Status::InsufficientCapacity);
+    }
+    let completed = u32_at(state, 0);
+    let slot = u32_at(state, 4);
+    let sub = u32_at(state, 8);
+    if completed >= h.last_step || slot > 1 || sub >= h.substeps || u32_at(state, 12) != 1 {
+        return Err(Status::InvalidState);
+    }
+    let final_substep = sub + 1 == h.substeps;
+    if final_substep && samples.len() < h.probe_count as usize {
+        return Err(Status::InsufficientCapacity);
+    }
+    let c2 = plane::<f32>(input.bytes(), h.c2_offset, h.cells)?;
+    let (control, mut rest) = state[..layout.state_bytes as usize].split_at_mut(16);
+    let field0 = take::<f32>(&mut rest, h.cells)?;
+    let field1 = take::<f32>(&mut rest, h.cells)?;
+    let _ = take::<f32>(&mut rest, h.cells)?;
+    let _ = take::<f32>(&mut rest, h.cells)?;
+    let intensity = take::<f32>(&mut rest, h.cells)?;
+    let _ = take::<u8>(&mut rest, h.emitter_count * 16)?;
+    let totals = take::<f64>(&mut rest, h.pixel_count)?;
+    let (current, next) = if slot == 0 {
+        (field0, field1)
+    } else {
+        (field1, field0)
+    };
+    if h.flags & 1 != 0 {
+        open_edges(Parameters::from_input(input), current, next, c2);
+    }
+    control[4..8].copy_from_slice(&(slot ^ 1).to_le_bytes());
+    if final_substep {
+        crate::observations::sample(
+            input,
+            next,
+            intensity,
+            totals,
+            completed + 1,
+            &mut samples[..h.probe_count as usize],
+        );
+        control[..4].copy_from_slice(&(completed + 1).to_le_bytes());
+        control[8..16].fill(0);
+    } else {
+        control[8..12].copy_from_slice(&(sub + 1).to_le_bytes());
+    }
+    Ok(())
+}
