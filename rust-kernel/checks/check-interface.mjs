@@ -8,8 +8,8 @@ const packet = new Uint8Array(await readFile(process.argv[2] ?? '/tmp/wavedude-p
 const module = await WebAssembly.compile(wasm)
 const { exports: kernel } = await WebAssembly.instantiate(module)
 assert.equal(kernel.kernel_abi_version(), 1)
-assert.equal(kernel.kernel_capabilities(), 3, 'Initialisation is available; stepping is explicitly unavailable')
-assert.equal(kernel.kernel_step_rows, undefined, 'There is no placeholder numerical implementation')
+assert.equal(kernel.kernel_capabilities(), 31, 'Planning, initialisation, stepping, probes and capture are available')
+assert.equal(typeof kernel.kernel_advance, 'function')
 const base = kernel.kernel_heap_base() + 64
 const before = packet.slice()
 const prepared = decodePreparedSimulation(packet)
@@ -74,4 +74,47 @@ const second = prepareKernel(other, packet)
 second.views().field0[0] = 123
 assert.equal(run.views().field0[0], 456, 'Separate instances have independent working state')
 assert.deepEqual(new Uint8Array(kernel.memory.buffer, base, packet.byteLength), packet)
+// Numerical exports apply the same checked arena contract, including byte
+// capacities, disjoint output regions and no partial writes on rejected batches.
+run.reset()
+run.capture() // Reserve the largest output before acquiring these views.
+const args = [run.packageAddress, packet.byteLength, run.stateAddress, run.layout.stateBytes]
+const output = run.outputAddress
+const sampleBytes = prepared.probes.length * 4
+const frameBytes = prepared.width * prepared.height * 4
+const unchanged = (call, status) => {
+  const state = new Uint8Array(kernel.memory.buffer, run.stateAddress, run.layout.stateBytes)
+  const scratch = new Uint8Array(kernel.memory.buffer, output, frameBytes)
+  const before = state.slice()
+  scratch.fill(0xab)
+  assert.equal(call(), status)
+  assert.deepEqual(state, before, 'Rejected numerical calls preserve the complete state')
+  assert.ok(scratch.every(v => v === 0xab), 'Rejected numerical calls preserve output')
+}
+unchanged(() => kernel.kernel_advance(...args, 1, output, sampleBytes - 1), 6)
+unchanged(() => kernel.kernel_advance(...args, prepared.totalSteps + 1, output, frameBytes), 9)
+unchanged(() => kernel.kernel_capture(...args, output, frameBytes - 1), 6)
+unchanged(() => kernel.kernel_observe(...args, output, prepared.probes.reduce((sum, p) => sum + p.pixels.length, 0) * 4 - 1), 6)
+unchanged(() => kernel.kernel_capture(...args, output + 1, frameBytes - 1), 1)
+unchanged(() => kernel.kernel_capture(...args, run.stateAddress, frameBytes), 7)
+unchanged(() => kernel.kernel_advance(...args, 1, base, sampleBytes), 7)
+run.views().control[1] = 2
+unchanged(() => kernel.kernel_advance(...args, 1, output, sampleBytes), 9)
+unchanged(() => kernel.kernel_capture(...args, output, frameBytes), 9)
+run.views().control[1] = 0
+unchanged(() => kernel.kernel_advance(...args, 0, output, frameBytes), 0)
+const scratch = new Uint8Array(kernel.memory.buffer, output, frameBytes)
+scratch.fill(0xab)
+assert.equal(kernel.kernel_advance(...args, 1, output, frameBytes), 0)
+assert.ok(scratch.subarray(sampleBytes).every(v => v === 0xab), 'Unused output capacity is untouched')
+assert.equal(run.views().control[0], 1)
+const stateBefore = new Uint8Array(kernel.memory.buffer, run.stateAddress, run.layout.stateBytes).slice()
+const ownedFrame = run.capture()
+run.observe()
+assert.deepEqual(new Uint8Array(kernel.memory.buffer, run.stateAddress, run.layout.stateBytes), stateBefore,
+  'Capture and observations never change the filters or integrated totals')
+run.advance(2)
+assert.equal(ownedFrame.length, frameBytes, 'Owned outputs survive later scratch reuse')
+assert.throws(() => run.advance(-1), RangeError)
+assert.throws(() => run.advance(.5), RangeError)
 console.log(`Rust preparation interface passed against ${packet.byteLength} C# package bytes (${run.layout.cells} cells, ${run.layout.stateBytes} state bytes).`)

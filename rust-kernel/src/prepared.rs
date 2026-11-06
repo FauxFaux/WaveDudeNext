@@ -143,7 +143,10 @@ impl<'a> Prepared<'a> {
     pub fn emitters(&self) -> impl Iterator<Item = &'a [u8]> {
         let start = self.header.emitters_offset as usize;
         self.bytes[start..start + self.header.emitter_count as usize * EMITTER_BYTES]
-            .chunks_exact(EMITTER_BYTES)
+            .as_chunks::<EMITTER_BYTES>()
+            .0
+            .iter()
+            .map(|record| record.as_slice())
     }
 
     fn canvas_index(&self, index: u32) -> bool {
@@ -253,9 +256,9 @@ pub(crate) fn u32_at(b: &[u8], at: usize) -> u32 {
 pub(crate) fn i32_at(b: &[u8], at: usize) -> i32 {
     i32::from_le_bytes(b[at..at + 4].try_into().unwrap())
 }
-fn f32_at(b: &[u8], at: usize) -> f32 {
+pub(crate) fn f32_at(b: &[u8], at: usize) -> f32 {
     f32::from_bits(u32_at(b, at))
 }
-fn f64_at(b: &[u8], at: usize) -> f64 {
+pub(crate) fn f64_at(b: &[u8], at: usize) -> f64 {
     f64::from_le_bytes(b[at..at + 8].try_into().unwrap())
 }

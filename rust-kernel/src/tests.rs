@@ -53,7 +53,7 @@ fn packet() -> Vec<u8> {
         (112, 1.0),
         (116, 0.9),
         (120, 0.5),
-        (124, 0.56213877),
+        (124, 0.562_138_8),
     ] {
         float(&mut b, at, value);
     }
@@ -193,4 +193,185 @@ fn insufficient_output_is_unchanged() {
         Err(Status::InsufficientCapacity)
     );
     assert_eq!(descriptor, [0xab; 63]);
+}
+
+fn half_value(bits: u16) -> f32 {
+    let sign = if bits & 0x8000 == 0 { 1.0 } else { -1.0 };
+    let exponent = (bits >> 10) & 31;
+    let fraction = bits & 1023;
+    if exponent == 0 {
+        sign * f32::from(fraction) * 2.0_f32.powi(-24)
+    } else {
+        sign * (1.0 + f32::from(fraction) / 1024.0) * 2.0_f32.powi(i32::from(exponent) - 15)
+    }
+}
+
+#[test]
+fn half_conversion_covers_every_finite_half_and_rounding_midpoint() {
+    use crate::observations::to_half;
+    for bits in 0..=u16::MAX {
+        if bits & 0x7c00 != 0x7c00 {
+            assert_eq!(to_half(half_value(bits)), bits, "half {bits:x}");
+        }
+    }
+    for bits in 0..0x7bff_u16 {
+        let midpoint = (half_value(bits) + half_value(bits + 1)) * 0.5;
+        let even = bits + (bits & 1);
+        assert_eq!(to_half(midpoint), even);
+        assert_eq!(to_half(-midpoint), even | 0x8000);
+        assert_eq!(to_half(midpoint.next_down()), bits);
+        assert_eq!(to_half(midpoint.next_up()), bits + 1);
+    }
+    assert_eq!(to_half(65519.0), 0x7bff);
+    assert_eq!(to_half(65520.0), 0x7c00);
+    assert_eq!(to_half(f32::INFINITY), 0x7c00);
+    assert_eq!(to_half(f32::NEG_INFINITY), 0xfc00);
+    assert_eq!(to_half(f32::NAN) & 0x7e00, 0x7e00);
+}
+
+#[test]
+fn row_bands_match_whole_grid_with_tails_tiny_grids_and_both_stencils() {
+    use crate::solver::{Band, Grid, Parameters, step_rows};
+    for width in 1..=13 {
+        for height in 1..=7 {
+            for fourth_order in [false, true] {
+                for track in [false, true] {
+                    let stride = width + 2;
+                    let cells = stride * (height + 2);
+                    let p = Parameters {
+                        width,
+                        height,
+                        stride,
+                        fourth_order,
+                        multiplier: 1.0 / 9.0,
+                        alpha: 0.93,
+                        scale: 1.7,
+                        blend: 0.5,
+                        edge_speed: 0.562_138_8,
+                    };
+                    let current: Vec<f32> =
+                        (0..cells).map(|i| (i as f32 * 0.21).sin() * 0.1).collect();
+                    let c2: Vec<f32> = (0..cells).map(|i| 0.1 + (i % 9) as f32 * 0.09).collect();
+                    let damping = vec![0.97; cells];
+                    let initial = [
+                        vec![0.003; cells],
+                        vec![0.02; cells],
+                        vec![0.01; cells],
+                        vec![0.025; cells],
+                    ];
+                    let mut whole = initial.clone();
+                    let [prev, s1, s2, output] = &mut whole;
+                    let rows = stride..(height + 1) * stride;
+                    step_rows(
+                        p,
+                        Grid {
+                            current: &current,
+                            c2: &c2,
+                            damping: &damping,
+                        },
+                        Band {
+                            previous: &mut prev[rows.clone()],
+                            stage1: &mut s1[rows.clone()],
+                            stage2: &mut s2[rows.clone()],
+                            intensity: &mut output[rows.clone()],
+                        },
+                        0..height,
+                        track,
+                    );
+                    for band_height in [1, 2, 3] {
+                        let mut split = initial.clone();
+                        let [prev, s1, s2, output] = &mut split;
+                        for start in (0..height).step_by(band_height) {
+                            let end = (start + band_height).min(height);
+                            let rows = (start + 1) * stride..(end + 1) * stride;
+                            step_rows(
+                                p,
+                                Grid {
+                                    current: &current,
+                                    c2: &c2,
+                                    damping: &damping,
+                                },
+                                Band {
+                                    previous: &mut prev[rows.clone()],
+                                    stage1: &mut s1[rows.clone()],
+                                    stage2: &mut s2[rows.clone()],
+                                    intensity: &mut output[rows.clone()],
+                                },
+                                start..end,
+                                track,
+                            );
+                        }
+                        assert_eq!(
+                            whole, split,
+                            "{width}x{height} fourth={fourth_order} track={track} band={band_height}"
+                        );
+                    }
+                    for plane in 0..4 {
+                        assert_eq!(&whole[plane][..stride], &initial[plane][..stride]);
+                        assert_eq!(
+                            &whole[plane][(height + 1) * stride..],
+                            &initial[plane][(height + 1) * stride..]
+                        );
+                        for y in 1..=height {
+                            assert_eq!(whole[plane][y * stride], initial[plane][y * stride]);
+                            assert_eq!(
+                                whole[plane][y * stride + width + 1],
+                                initial[plane][y * stride + width + 1]
+                            );
+                        }
+                    }
+                    if !track {
+                        assert_eq!(&whole[1..], &initial[1..]);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn complete_steps_preserve_batching_and_reject_invalid_calls_without_writes() {
+    use crate::{observations, solver};
+    let b = packet();
+    let input = Prepared::parse(&b).unwrap();
+    let layout = Layout::plan(&input).unwrap();
+    let mut whole = vec![0; layout.state_bytes as usize];
+    layout.initialise(&input, &mut whole).unwrap();
+    let mut split = whole.clone();
+    let mut expected_samples = vec![0.0; 9];
+    solver::advance(&input, &mut whole, 9, &mut expected_samples).unwrap();
+    let mut samples = Vec::new();
+    for steps in [1, 3, 5] {
+        let mut batch = vec![0.0; steps as usize];
+        solver::advance(&input, &mut split, steps, &mut batch).unwrap();
+        samples.extend(batch);
+    }
+    assert_eq!(samples, expected_samples);
+    assert_eq!(split, whole);
+    let before = whole.clone();
+    assert_eq!(
+        solver::advance(&input, &mut whole, 1, &mut [99.0]),
+        Err(Status::InvalidState)
+    );
+    assert_eq!(whole, before);
+    layout.initialise(&input, &mut whole).unwrap();
+    let before = whole.clone();
+    assert_eq!(
+        solver::advance(&input, &mut whole, 2, &mut [99.0]),
+        Err(Status::InsufficientCapacity)
+    );
+    assert_eq!(whole, before);
+    let mut frame = [0xab; 3];
+    assert_eq!(
+        observations::capture(&input, &whole, &mut frame),
+        Err(Status::InsufficientCapacity)
+    );
+    assert_eq!(frame, [0xab; 3]);
+    whole[4] = 2;
+    let before = whole.clone();
+    assert_eq!(
+        solver::advance(&input, &mut whole, 1, &mut [99.0]),
+        Err(Status::InvalidState)
+    );
+    assert_eq!(whole, before);
 }

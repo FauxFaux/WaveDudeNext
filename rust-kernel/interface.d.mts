@@ -7,6 +7,12 @@ export interface KernelExports extends WebAssembly.Exports {
   kernel_heap_base(): number
   kernel_plan(packageAddress: number, packageBytes: number, descriptorAddress: number, capacity: number): number
   kernel_initialise(packageAddress: number, packageBytes: number, stateAddress: number, capacity: number): number
+  kernel_advance(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    steps: number, outputAddress: number, capacity: number): number
+  kernel_observe(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    outputAddress: number, capacity: number): number
+  kernel_capture(packageAddress: number, packageBytes: number, stateAddress: number, stateCapacity: number,
+    outputAddress: number, capacity: number): number
 }
 
 /** Offsets in bytes relative to stateAddress, except counts and stateBytes. */
@@ -29,7 +35,16 @@ export interface PreparedKernel {
   readonly packageBytes: number
   readonly descriptorAddress: number
   readonly stateAddress: number
+  /** Scratch output begins here; numerical helpers grow memory and reuse this region. */
+  readonly outputAddress: number
   readonly layout: KernelLayout
+  reset(): void
+  /** Step-major active-probe slots, zero for lines. Samples include cumulative point totals. */
+  advance(steps: number): Float32Array<ArrayBuffer>
+  /** Flattened probe-pixel order; integrated totals or live field/unrooted intensity. */
+  observe(): Float32Array<ArrayBuffer>
+  /** f16 field plane followed by f16 sqrt-intensity plane, little-endian. */
+  capture(): Uint8Array<ArrayBuffer>
   /** Acquire fresh views after any memory growth; prior arenas may have been reused. */
   views(): {
     control: Uint32Array

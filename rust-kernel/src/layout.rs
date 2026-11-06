@@ -89,7 +89,10 @@ impl Layout {
             self.pixel_count,
             0,
         ];
-        for (word, target) in words.into_iter().zip(output.chunks_exact_mut(4)) {
+        for (word, target) in words
+            .into_iter()
+            .zip(output.as_chunks_mut::<4>().0.iter_mut())
+        {
             target.copy_from_slice(&word.to_le_bytes());
         }
         Ok(())

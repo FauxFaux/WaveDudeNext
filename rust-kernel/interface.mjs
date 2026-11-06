@@ -4,6 +4,7 @@
 export const kernelStatuses = Object.freeze([
   'ok', 'invalid memory range/alignment', 'invalid package', 'unsupported package version',
   'invalid package layout', 'invalid numeric value', 'insufficient capacity', 'overlapping regions', 'size overflow',
+  'invalid state or step range',
 ])
 
 function check(status) {
@@ -14,7 +15,8 @@ const align = value => Math.ceil(value / 16) * 16
 
 /**
  * Copy immutable WDPK bytes and initialise caller-owned state in one Wasm instance.
- * No simulation is executed. base defaults to the beginning of the JS-owned arena.
+ * base defaults to the beginning of the JS-owned arena. Numerical calls use scratch
+ * immediately after state; reserve that output space too when sharing an instance.
  * Reusing an arena invalidates its previous package/state views. Reserve disjoint
  * arenas if multiple prepared runs must coexist; do not call while workers use it.
  */
@@ -48,7 +50,36 @@ export function prepareKernel(exports, prepared, base = exports.kernel_heap_base
   const stateAddress = align(descriptorAddress + 64)
   ensure(stateAddress + layout.stateBytes)
   check(exports.kernel_initialise(packageAddress, packet.byteLength, stateAddress, layout.stateBytes))
-  return Object.freeze({ packageAddress, packageBytes: packet.byteLength, descriptorAddress, stateAddress, layout,
+  const header = new DataView(packet.buffer, packet.byteOffset, packet.byteLength)
+  const probeCount = header.getUint32(72, true)
+  const frameBytes = header.getUint32(16, true) * header.getUint32(20, true) * 4
+  const outputAddress = align(stateAddress + layout.stateBytes)
+  const args = [packageAddress, packet.byteLength, stateAddress, layout.stateBytes]
+  const numerical = (name, size, extra = []) => {
+    if ((exports.kernel_capabilities() & 28) !== 28) throw new Error('Rust kernel does not support numerical operations')
+    if (!Number.isSafeInteger(size) || size > 0x7fffffff) throw new RangeError('Kernel output exceeds signed 32-bit capacity')
+    ensure(outputAddress + size)
+    check(exports[name](...args, ...extra, outputAddress, size))
+  }
+  return Object.freeze({ packageAddress, packageBytes: packet.byteLength, descriptorAddress, stateAddress, outputAddress, layout,
+    reset() { check(exports.kernel_initialise(...args)) },
+    /** Complete steps; step-major active-probe slots, zero for lines. Returned data is owned by JS. */
+    advance(steps) {
+      if (!Number.isInteger(steps) || steps < 0 || steps > 0xffffffff) throw new RangeError('Expected an unsigned step count')
+      const size = steps * probeCount * 4
+      numerical('kernel_advance', size, [steps])
+      return new Float32Array(memory.buffer, outputAddress, steps * probeCount).slice()
+    },
+    /** Current per-pixel live values or integrated totals in prepared pixel-table order. */
+    observe() {
+      numerical('kernel_observe', layout.pixelCount * 4)
+      return new Float32Array(memory.buffer, outputAddress, layout.pixelCount).slice()
+    },
+    /** Tightly packed f16 field followed by f16 sqrt-intensity; the rim/ring are excluded. */
+    capture() {
+      numerical('kernel_capture', frameBytes)
+      return new Uint8Array(memory.buffer, outputAddress, frameBytes).slice()
+    },
     // Call again after memory growth; never retain these views across a grow.
     views() {
       const buffer = memory.buffer

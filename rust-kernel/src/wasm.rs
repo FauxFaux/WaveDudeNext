@@ -8,6 +8,7 @@ use crate::{
     prepared::Prepared,
 };
 use core::ops::Range;
+use wide::bytemuck::try_cast_slice_mut;
 
 unsafe extern "C" {
     static __heap_base: u8;
@@ -116,4 +117,141 @@ pub extern "C" fn kernel_initialise(
     initialise(package, package_bytes, state, capacity)
         .err()
         .unwrap_or(Status::Ok) as u32
+}
+
+enum Operation {
+    Advance(u32),
+    Observe,
+    Capture,
+}
+
+// Validate every region before creating references. This coordinator entry point
+// requires exclusive state/output ownership; row workers use solver::step_rows
+// with slices restricted to their own bands instead of borrowing this whole state.
+fn numerical_call(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    output: u32,
+    output_capacity: u32,
+    operation: Operation,
+) -> Result<(), Status> {
+    let input_range = region(package, package_bytes)?;
+    let state_range = region(state, state_capacity)?;
+    let output_range = region(output, output_capacity)?;
+    if overlaps(&input_range, &state_range)
+        || overlaps(&input_range, &output_range)
+        || overlaps(&state_range, &output_range)
+    {
+        return Err(Status::Overlap);
+    }
+    // SAFETY: all regions are in memory, length-bounded, aligned, above the
+    // module's stack/static data and disjoint. JS cannot enter these calls while
+    // workers use the arena, nor mutate the package during a call.
+    let input =
+        unsafe { core::slice::from_raw_parts(input_range.start as *const u8, input_range.len()) };
+    let parsed = Prepared::parse(input)?;
+    let required = match operation {
+        Operation::Advance(steps) => u64::from(steps) * u64::from(parsed.header.probe_count) * 4,
+        Operation::Observe => u64::from(parsed.header.pixel_count) * 4,
+        Operation::Capture => u64::from(crate::observations::frame_bytes(&parsed)?),
+    };
+    if required > i32::MAX as u64 {
+        return Err(Status::TooLarge);
+    }
+    if required > u64::from(output_capacity) {
+        return Err(Status::InsufficientCapacity);
+    }
+    let state =
+        unsafe { core::slice::from_raw_parts_mut(state_range.start as *mut u8, state_range.len()) };
+    let output = unsafe {
+        core::slice::from_raw_parts_mut(output_range.start as *mut u8, required as usize)
+    };
+    match operation {
+        Operation::Advance(steps) => crate::solver::advance(
+            &parsed,
+            state,
+            steps,
+            try_cast_slice_mut(output).map_err(|_| Status::InvalidRange)?,
+        ),
+        Operation::Observe => crate::observations::observe(
+            &parsed,
+            state,
+            try_cast_slice_mut(output).map_err(|_| Status::InvalidRange)?,
+        ),
+        Operation::Capture => crate::observations::capture(&parsed, state, output),
+    }
+}
+
+/// Complete steps, including ordered sources, Mur boundaries and per-step probes.
+/// Output is step-major f32[steps * probe_count], with zero slots for line probes.
+/// The caller owns all storage; this function neither allocates nor grows memory.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_advance(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    steps: u32,
+    samples: u32,
+    samples_capacity: u32,
+) -> u32 {
+    numerical_call(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        samples,
+        samples_capacity,
+        Operation::Advance(steps),
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
+}
+
+/// Current f32 observations in flattened probe-pixel order, without accumulating.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_observe(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    output: u32,
+    capacity: u32,
+) -> u32 {
+    numerical_call(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        output,
+        capacity,
+        Operation::Observe,
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
+}
+
+/// Full canvas f16 field plane followed by f16 sqrt-intensity plane, little-endian.
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_capture(
+    package: u32,
+    package_bytes: u32,
+    state: u32,
+    state_capacity: u32,
+    output: u32,
+    capacity: u32,
+) -> u32 {
+    numerical_call(
+        package,
+        package_bytes,
+        state,
+        state_capacity,
+        output,
+        capacity,
+        Operation::Capture,
+    )
+    .err()
+    .unwrap_or(Status::Ok) as u32
 }
