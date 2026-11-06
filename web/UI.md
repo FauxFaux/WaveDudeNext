@@ -16,11 +16,15 @@ reload clears it. There is no workspace, HTTP API or SSE connection. Canvas
 renderers and the timeline display frames read from an OPFS disc recording of the current canvas project.
 The capture interval increases when necessary to fit half the estimated unused storage quota.
 Only the selected picture is retained in memory; there is no RAM frame cache.
-Run starts a dedicated Wasm worker; Stop or project edits terminate it. Examples load
+Run starts a dedicated Wasm worker; Stop or edits outside display settings and colour schemes
+terminate it. Display and palette edits recolour frames while the run continues. Examples load
 from static JSON. Probe recordings and image scene delivery remain unconnected.
 Canvas scene images and glowing edges are painted independently in a scene worker. Both pictures
 show the scene before a run and overlay edges on frames of matching dimensions. Overlay switches
 and gains apply per picture; source and display edits reuse the cached geometry.
+Shipped colour schemes are static frontend data in `src/assets/color-schemes.ts`, copied from
+`WaveDudeNext/ColorSchemes/`. Keep that copy in sync when the desktop palettes change. The existing
+JavaScript renderer uses these schemes directly; project schemes take precedence over shipped names.
 
 `src/Wasm/Runtime.ts` lazily loads the new .NET runtime from Vite's static assets.
 Simulation uses `src/Wasm/Simulation.worker.ts` and the shared solver exports;

@@ -1,4 +1,5 @@
 import { useScene } from '../Wasm/useScene'
+import { builtInColorSchemes } from '../assets/color-schemes'
 import type { FramePair, RunStatus } from '../Api/Frames'
 import type { Project, ProjectSelection } from '../Model/Project'
 import { IconView } from '../Controls/IconView'
@@ -35,11 +36,11 @@ export function PreviewPane({ orientation, onOrientationChange, onRun, onStop, r
         <div class={`pictures ${orientation}`}>
           <PictureFrame layer="Field" frame={frame?.field} index={frame?.index} stale={run?.isStale} error={sceneError}
             scene={scene} canvasWidth={project?.scene.width} canvasHeight={project?.scene.height}
-            settings={project?.display.field} projectSchemes={project?.colorSchemes ?? []} sharedSchemes={[]} canEdit={canEdit}
+            settings={project?.display.field} projectSchemes={project?.colorSchemes ?? []} sharedSchemes={builtInColorSchemes} canEdit={canEdit}
             onSchemeChange={name => onSchemeChange('field', name)} />
           <PictureFrame layer="Intensity" frame={frame?.intensity} index={frame?.index} stale={run?.isStale} error={sceneError}
             scene={scene} canvasWidth={project?.scene.width} canvasHeight={project?.scene.height}
-            settings={project?.display.intensity} projectSchemes={project?.colorSchemes ?? []} sharedSchemes={[]} canEdit={canEdit}
+            settings={project?.display.intensity} projectSchemes={project?.colorSchemes ?? []} sharedSchemes={builtInColorSchemes} canEdit={canEdit}
             onSchemeChange={name => onSchemeChange('intensity', name)} />
         </div>
         <ProbeGraphs probes={project?.probes ?? []} recordings={recordings}

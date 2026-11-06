@@ -123,7 +123,9 @@ needed. Each field/intensity pair is written to a closed OPFS file before being 
 The UI reads the selected frame from disc into the existing previews and timeline; it has no
 RAM frame cache. Missing estimates, insufficient space and write/read errors fail explicitly.
 Completion, Stop, project replacement and unmount terminate the worker and release its Wasm heap.
-Edits cancel active work and mark retained results outdated. Probe recordings are not connected.
+Edits outside display settings and colour schemes cancel active work and mark retained results
+outdated. Display and palette edits recolour stored samples without cancelling the worker or
+invalidating its frames, including during startup. Probe recordings are not connected.
 New runs, project replacement and unmount delete the previous recording. Reloads/crashes can
 leave orphaned files; recovery and automatic orphan cleanup are deferred. See
 [FRAME-REGENERATION.md](docs/FRAME-REGENERATION.md) for the storage calculations and deferred

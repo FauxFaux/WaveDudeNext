@@ -23,8 +23,12 @@ The shared library and Windows desktop solution remain unchanged.
   increasing the capture interval to fit half the estimated unused storage quota. The UI reads
   selected frames from disc into the existing renderer and timeline, without a RAM frame cache.
   Completion and Stop terminate the worker;
-  edits cancel active work and mark retained frames outdated. Examples load from static JSON.
-  Image scenes, probe recordings and shared colour-scheme loading remain unconnected.
+  edits to simulation inputs cancel active work and mark retained frames outdated. Display and
+  colour-scheme edits recolour stored samples while the simulation continues. Examples load from static JSON.
+  Image scenes and probe recordings remain unconnected.
+- Shipped colour schemes are copied into static frontend data in `web/src/assets/color-schemes.ts`.
+  The JavaScript renderer uses them directly, with project schemes taking precedence and legacy
+  names still resolving. Colour selection does not require Wasm or a server.
 - Canvas scene previews run independently in a dedicated Wasm worker using the shared part painter
   and glowing-edge detector. Geometry edits replace the preview; source, display and timeline edits
   reuse it. Both pictures show the scene before a run and apply their configured edge overlays
@@ -52,7 +56,7 @@ carried across. Existing examples and Windows harnesses already present in `orig
    cannot all live in the Wasm heap. Checkpoint/replay remains a deferred design in
    [FRAME-REGENERATION.md](docs/FRAME-REGENERATION.md). Evaluate IndexedDB for project recovery. Explicit Save
    downloads a project; recovery storage must remain separate from saving the user's file.
-5. Migrate image import, colour schemes and supported exports incrementally.
+5. Migrate image import, colour-scheme import/export and supported exports incrementally.
    Preserve project compatibility and compare calculations against native .NET as features arrive.
 
 The browser owns selection, focus, drag feedback, picture layout and playback timing. Shared .NET

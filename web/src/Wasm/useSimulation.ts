@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { FramePair, RunStatus } from '../Api/Frames'
 import type { Project } from '../Model/Project'
 import { waveDudeUrl } from './Runtime'
@@ -12,12 +12,18 @@ interface Recording {
 
 /** Keep the selected picture in memory; all recorded frames are read from OPFS. */
 export function useSimulation(project: Project) {
+  // Presentation edits recolour stored samples without invalidating the worker's input.
+  // Keep all other project changes conservative until their runtime boundaries are connected.
+  const key = useMemo(() => {
+    const { display: _display, colorSchemes: _schemes, ...inputs } = project
+    return JSON.stringify(inputs)
+  }, [project])
   const worker = useRef<Worker | null>(null)
   const operation = useRef(0)
   const store = useRef<Recording | null>(null)
-  const snapshot = useRef<Project | null>(null)
-  const currentProject = useRef(project)
-  currentProject.current = project
+  const snapshot = useRef<string | null>(null)
+  const currentKey = useRef(key)
+  currentKey.current = key
   const [run, setRun] = useState<RunStatus | null>(null)
   const [frame, setFrame] = useState<FramePair>()
   const [position, seek] = useState<number | null>(null)
@@ -59,7 +65,7 @@ export function useSimulation(project: Project) {
     release()
     const previous = discard()
     const version = operation.current
-    snapshot.current = project
+    snapshot.current = key
     setFrame(undefined)
     seek(null)
     const runId = crypto.randomUUID()
@@ -75,7 +81,7 @@ export function useSimulation(project: Project) {
       await previous
       if (operation.current !== version) return
       recording.directory = await createFrameStore(runId)
-      if (operation.current !== version || currentProject.current !== project) {
+      if (operation.current !== version || currentKey.current !== key) {
         await deleteFrameStore(runId)
         return
       }
@@ -89,7 +95,7 @@ export function useSimulation(project: Project) {
       next.onerror = event => { event.preventDefault(); fail(event.message || 'Could not start the simulation worker.') }
       next.onmessageerror = () => fail('Could not read the simulation frame.')
       next.onmessage = ({ data }: MessageEvent<SimulationMessage>) => {
-        if (worker.current !== next || currentProject.current !== project) return
+        if (worker.current !== next || currentKey.current !== key) return
         if (data.type === 'error') { fail(data.error); return }
         if (data.type === 'started') {
           setRun(current => current && { ...current, ...data, state: 'Running' })
@@ -111,8 +117,8 @@ export function useSimulation(project: Project) {
   }
 
   useEffect(() => {
-    if (snapshot.current && snapshot.current !== project) stop()
-  }, [project])
+    if (snapshot.current && snapshot.current !== key) stop()
+  }, [key])
   useEffect(() => {
     const version = ++readVersion.current
     pendingRead.current = null
@@ -153,7 +159,7 @@ export function useSimulation(project: Project) {
   }, [])
 
   return {
-    run: run && { ...run, isStale: snapshot.current !== project }, busy,
+    run: run && { ...run, isStale: snapshot.current !== key }, busy,
     frame,
     position, seek, start, stop, clear,
   }
