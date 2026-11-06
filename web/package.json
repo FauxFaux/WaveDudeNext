@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node ../rust-kernel/build.mjs",
     "dev": "vite",
+    "prebuild": "node ../rust-kernel/build.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check-wasm": "node scripts/check-wasm.mjs",

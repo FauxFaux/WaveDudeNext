@@ -28,6 +28,10 @@ build: build-web
 build-wasm:
     node _tools/scripts/just-wasm-build.mjs
 
+# Build the SIMD Rust kernel scaffold into the frontend assets directory.
+build-rust-kernel:
+    node rust-kernel/build.mjs
+
 # Build the existing shared library without the Wasm toolchain or WPF.
 build-library:
     dotnet build WaveDudeNext/WaveDudeNext.csproj -c Release -warnaserror
