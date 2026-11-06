@@ -8,6 +8,7 @@ import { PropertiesPane } from './Panes/PropertiesPane'
 import { applySourceDraft, createSourceDraft } from './Views/SourceDraft'
 import type { SourceDraft } from './Views/SourceDraft'
 import { ProjectJsonDialog } from './Views/ProjectJsonDialog'
+import { useSimulation } from './Wasm/useSimulation'
 import type { Project } from './Model/Project'
 import examples from './assets/examples/index.json'
 import './MainWindow.css'
@@ -16,6 +17,7 @@ const { exampleProjects } = await import('./example-projects');
 
 export function MainWindow() {
   const [project, setProject] = useState(createProject)
+  const simulation = useSimulation(project)
   const [selection, setSelection] = useState<ProjectSelection>('project')
   const [sourceDrafts, setSourceDrafts] = useState<Record<string, SourceDraft>>({})
   const [isModified, setIsModified] = useState(false)
@@ -111,6 +113,7 @@ export function MainWindow() {
   }
 
   function replaceProject(next: Project) {
+    simulation.clear()
     setProject(next)
     setSourceDrafts({})
     setSelection('project')
@@ -160,11 +163,12 @@ export function MainWindow() {
             <button aria-pressed={orientation === 'side-by-side'} onClick={() => setOrientation('side-by-side')}>Side-by-side previews</button>
           </div></details>
           <details><summary>Simulation</summary><div class="menu-popup">
-            <button disabled>Run <kbd>F5</kbd></button><button disabled>Pause</button><button disabled>Stop</button>
+            <button disabled={simulation.busy} onClick={() => { simulation.start(); closeMenus() }}>Run</button><button disabled>Pause</button>
+            <button disabled={!simulation.busy} onClick={() => { simulation.stop(); closeMenus() }}>Stop</button>
           </div></details>
           <details><summary>Help</summary><div class="menu-popup about-popup">
             <strong>WaveDude Next</strong><p>2D wave simulator</p>
-            <p>Projects are edited in this page and cleared when it is reloaded. Use Open and Save to paste or copy project JSON. Simulation is not connected yet.</p>
+            <p>Projects are edited in this page and cleared when it is reloaded. Use Open and Save to paste or copy project JSON. Run computes up to three preview frames.</p>
           </div></details>
         </nav>
         <span class="document-title">Untitled{isModified && <span class="modified-mark"> *</span>}</span>
@@ -176,12 +180,18 @@ export function MainWindow() {
           <PropertiesPane key={projectGeneration} selection={selection} project={project} source={sourceDraft} onSourceChange={changeSource} onPropertyChange={changeProperty} disabled={false} />
         </aside>
         <PreviewPane key={projectGeneration} project={project} canEdit onSchemeChange={changeScheme}
+          run={simulation.run} frame={simulation.frame} position={simulation.position} onSeek={simulation.seek}
+          onRun={simulation.busy ? undefined : simulation.start} onStop={simulation.busy ? simulation.stop : undefined}
           selection={selection} onSelectProbe={id => setSelection({ collection: 'probes', id })}
           orientation={orientation} onOrientationChange={setOrientation} />
       </main>
       <footer class="status-bar" role="status">
-        <span><span class="status-dot" />{isModified ? 'Project changed · copy JSON to keep your changes' : 'Ready'}</span>
-        <span class="status-local">Project held in this page</span><span class="status-preview">Interface preview</span>
+        <span><span class="status-dot" />{simulation.run?.error
+          ?? (simulation.busy ? 'Computing preview…' : simulation.run?.isStale ? 'Project changed · run again to update the preview'
+            : simulation.run?.state === 'Completed' ? `Preview complete · ${simulation.run.frameCount} frames (maximum 3)`
+              : simulation.run?.state === 'Cancelled' ? 'Simulation stopped'
+                : isModified ? 'Project changed · copy JSON to keep your changes' : 'Ready')}</span>
+        <span class="status-local">Project held in this page</span><span class="status-preview">Up to 3 preview frames</span>
       </footer>
       {jsonDialog && <ProjectJsonDialog mode={jsonDialog} json={jsonDialog === 'save' ? writeProject(project) : ''}
         onOpen={replaceProject} onClose={() => setJsonDialog(null)} />}

@@ -13,12 +13,14 @@ The browser implementation uses Preact, TypeScript, CSS, and browser APIs.
 MainWindow owns one Project in Preact state. The project tree and property editors
 edit it locally. File resets it or opens/saves validated JSON through a text area;
 reload clears it. There is no workspace, HTTP API or SSE connection. Canvas
-renderers, the timeline and probe graphs are retained, while simulation and
-examples stay disabled until their integration in PLAN.md is implemented.
+renderers and the timeline display up to three frames from the current canvas project.
+Run starts a dedicated Wasm worker; Stop or project edits terminate it. Examples load
+from static JSON. Probe recordings and image scene delivery remain unconnected.
 
 `src/Wasm/Runtime.ts` lazily loads the new .NET runtime from Vite's static assets.
-Its solver smoke export verifies build and interop only. Do not start simulations
-on the UI thread as part of retargeting the interface; introduce the planned worker.
+Simulation uses `src/Wasm/Simulation.worker.ts` and the shared solver exports;
+keep numerical work off the UI thread. Use `addEventListener` in the worker and leave
+`onmessage` unset so .NET 10 initialises it as an independent runtime.
 Keep unavailable operations disabled and preserve empty preview/readout states.
 
 ## Layout and visual conventions

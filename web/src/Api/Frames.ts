@@ -47,7 +47,7 @@ const FrameProbesSchema = z.strictObject({
 })
 export type FrameProbes = z.infer<typeof FrameProbesSchema>
 
-/** Status of a local simulation once the Wasm runner is connected. */
+/** Status of the bounded local Wasm preview. */
 export interface RunStatus {
   runId: string
   projectRevision: number

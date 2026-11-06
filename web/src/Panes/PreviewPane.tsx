@@ -1,4 +1,3 @@
-import { useState } from 'preact/hooks'
 import type { FramePair, RunStatus } from '../Api/Frames'
 import type { Project, ProjectSelection } from '../Model/Project'
 import { IconView } from '../Controls/IconView'
@@ -16,17 +15,17 @@ interface PreviewPaneProps {
   onRun?: () => void
   onStop?: () => void
   run?: RunStatus | null
+  position: number | null
+  onSeek: (index: number | null) => void
   orientation: 'stacked' | 'side-by-side'
   onOrientationChange: (orientation: PreviewPaneProps['orientation']) => void
 }
 
-export function PreviewPane({ orientation, onOrientationChange, onRun, onStop, run, frame, project, canEdit, onSchemeChange, selection, onSelectProbe }: PreviewPaneProps) {
-  const [position, setPosition] = useState<{ runId: string, index: number | null } | null>(null)
+export function PreviewPane({ orientation, onOrientationChange, onRun, onStop, run, frame, project, canEdit, onSchemeChange, selection, onSelectProbe, position, onSeek: seek }: PreviewPaneProps) {
   const count = run?.frameCount ?? 0
   const last = Math.max(0, count - 1)
-  const selected = position?.runId === run?.runId ? position?.index : null
+  const selected = position
   const index = selected == null ? last : Math.min(selected, last)
-  const seek = (index: number | null) => { if (run) setPosition({ runId: run.runId, index }) }
   const recordings = !run?.probesStale && !run?.isStale && !frame?.probes?.probesStale ? frame?.probes?.probes : undefined
   return (
     <section class="preview-pane" aria-label="Preview">

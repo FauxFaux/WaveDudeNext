@@ -18,8 +18,11 @@ The shared library and Windows desktop solution remain unchanged.
 - The Preact root owns one in-memory Project. Project/property panes edit it locally; File
   resets the project or opens/saves validated JSON through a text area. Reload clears the project.
   Workspace creation, HTTP/SSE and server mutation queues have been removed.
-- Canvas frame rendering, the timeline and probe graphs are retained. Simulation, examples and
-  shared colour-scheme loading remain unconnected and do not issue server requests.
+- Run submits the current canvas project to a dedicated worker. The shared model normalises it,
+  paints optical parts and runs the CPU solver. Up to three field/intensity frames transfer as
+  binary buffers to the existing renderer and timeline. Completion and Stop terminate the worker;
+  edits cancel active work and mark retained frames outdated. Examples load from static JSON.
+  Image scenes, probe recordings and shared colour-scheme loading remain unconnected.
 - The generated Zod project schema is retained as a snapshot for existing frontend types.
   Its old server-dependent generator and contract verification are not part of this branch.
 
@@ -28,21 +31,21 @@ carried across. Existing examples and Windows harnesses already present in `orig
 
 ## Next iterations
 
-1. Introduce a long-lived worker hosting the .NET runtime, taking the root-owned Project as input.
-   Define a project contract using the shared model's defaults,
-   ranges and normalisation; restore schema generation independently of any server if needed.
+1. Replace the current per-preview worker with a long-lived worker when longer runs are needed.
+   Re-establish schema generation independently of any server using the shared model's defaults,
+   ranges and normalisation.
    Replace the schema-snapshot defaults used by local editing with the shared model contract,
-   and start with computing one preview after a source edit.
+   and consider computing a preview after a source edit.
 2. Add bounded batches of simulation steps. Process stop and edit messages between batches so
    cancellation remains responsive. Do not assume desktop task/thread scheduling works unchanged
    in a single-threaded Wasm runtime. Measure edit-to-picture latency and worker responsiveness.
-3. Connect run control, timeline seeking and probe graphs to worker results. Transfer binary frame
-   buffers rather than JSON/base64. Keep queues bounded, identify results by project revision and
+3. Connect probe graphs and playback to worker results, extending the existing run control and
+   timeline seeking. Keep transfer queues bounded, identify results by project revision and
    run/frame identity, and discard stale presentation results after an edit or seek.
 4. Add bounded frame retention and browser persistence. Long recordings cannot all live in the
    Wasm heap. Evaluate OPFS for stored frames and IndexedDB for project recovery. Explicit Save
    downloads a project; recovery storage must remain separate from saving the user's file.
-5. Migrate example loading, parts, image import, colour schemes and supported exports incrementally.
+5. Migrate image import, colour schemes and supported exports incrementally.
    Preserve project compatibility and compare calculations against native .NET as features arrive.
 
 The browser owns selection, focus, drag feedback, picture layout and playback timing. Shared .NET

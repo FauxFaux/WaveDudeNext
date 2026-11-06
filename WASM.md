@@ -87,15 +87,27 @@ The loader uses Vite's `BASE_URL`, including a deployment prefix. It dynamically
 published `wasm/main.mjs` without bundling or rewriting .NET's internal modules. The JavaScript
 host creates one runtime per JS context and obtains the `[JSExport]` methods from the assembly.
 `SmokeTest()` executes 16 steps of the real CPU solver and returns a finite, positive peak field
-amplitude. It is a build/interop check, not the planned frontend simulation API.
+amplitude. `StartSimulation(projectJson)` reads and normalises a canvas project using the shared
+model, paints its optical parts and creates the CPU solver. It returns width, height, bounded
+step count, frame interval and frame count. The export caps each preview at three frames,
+without changing the project’s requested run length. `NextFrame()` advances to the next capture
+and returns two binary half-float planes: field, then square-root intensity. `EndSimulation()`
+releases the engine and snapshot. Image scenes report an error until image delivery is connected.
 
 Run `just check-wasm` to publish and exercise this export under Node. After an existing build,
-`npm --prefix web run check-wasm` checks the generated bundle without publishing again.
+`npm --prefix web run check-wasm` checks the generated bundle without publishing again, including
+project submission, source edits, deterministic frames and the enforced frame cap.
 `just check-probe-graph` runs the retained graph calculation checks.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.
-Simulation is not connected to these exports yet; its controls and examples remain disabled.
-See [PLAN.md](PLAN.md) for the worker and frontend migration steps.
+Run sends the current project to a dedicated worker and displays up to three retained frames
+in the existing previews and timeline. Binary buffers transfer to the UI without JSON/base64.
+Completion, Stop, project replacement and unmount terminate the worker and release its Wasm heap.
+Edits cancel active work and mark retained results outdated. Probe recordings are not connected.
+The worker uses `addEventListener`, leaving `onmessage` unset to avoid .NET 10 misidentifying it
+as a managed runtime thread ([dotnet/runtime#114918](https://github.com/dotnet/runtime/issues/114918)).
+The runtime URL is resolved in the page before passing it to the worker, preserving deployment
+prefixes. See [PLAN.md](PLAN.md) for the remaining migration steps.
 
 References: [Microsoft's browser interop guidance](https://learn.microsoft.com/en-us/aspnet/core/client-side/dotnet-interop/wasm-browser-app?view=aspnetcore-10.0)
 and [Vite public assets](https://vite.dev/guide/assets.html#the-public-directory).
