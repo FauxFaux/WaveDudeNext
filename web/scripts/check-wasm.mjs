@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { loadWaveDude } from '../public/wasm/main.mjs'
 import { decodeScene, sceneKey } from '../src/Wasm/Scene.ts'
+import { decodeProbeFrame, ProbeSeries } from '../src/Wasm/ProbeFrames.ts'
+import { readFrame, writeFrame } from '../src/Wasm/FrameStore.ts'
+import { halfValue } from '../src/Rendering/FrameColours.ts'
 
 // The .NET Node host may unref its startup work; keep Node alive until the check finishes.
 const keepAlive = setInterval(() => {}, 1000)
@@ -105,7 +108,88 @@ try {
   runtime.EndSimulation()
   project.scene.mode = 'Image'
   assert.throws(() => runtime.StartSimulation(JSON.stringify(project), 100), /Image scenes are not supported/, 'Unsupported scenes fail explicitly')
-  console.log(`Wasm scene painting, glowing edges, solver, project input and bounded frame exports passed (peak field amplitude ${peak}).`)
+  project.scene.mode = 'Canvas'
+  project.sources[0].amplitude = 100
+  project.simulation.steps = 13
+  const point = { id: '00000000-0000-4000-8000-000000000001', name: 'Field', active: true, layer: 'Field', kind: 'Point', measurement: 'Amplitude', ax: 32, ay: 24, bx: 34, by: 24, startAfter: 0 }
+  project.probes = [
+    point,
+    { ...point, id: '00000000-0000-4000-8000-000000000002', name: 'Intensity', layer: 'Intensity', measurement: 'Value' },
+    { ...point, id: '00000000-0000-4000-8000-000000000003', name: 'Integrated', layer: 'Intensity', measurement: 'IntegratedValue', startAfter: 5 },
+    { ...point, id: '00000000-0000-4000-8000-000000000004', name: 'Field line', kind: 'Line' },
+    { ...point, id: '00000000-0000-4000-8000-000000000005', name: 'Intensity line', kind: 'Line', layer: 'Intensity', measurement: 'Value' },
+    { ...point, id: '00000000-0000-4000-8000-000000000006', name: 'Integrated line', kind: 'Line', layer: 'Intensity', measurement: 'IntegratedValue', startAfter: 5 },
+    { ...point, id: '00000000-0000-4000-8000-000000000007', name: 'Disabled', active: false },
+  ]
+  const recordProbes = interval => {
+    project.simulation.visualizeEvery = interval
+    const metadata = runtime.StartSimulation(JSON.stringify(project), 100)
+    assert.throws(() => runtime.GetProbeFrame(), /no captured probe frame/)
+    const frames = Array.from({ length: metadata[4] }, (_, index) => {
+      const planes = runtime.NextFrame()
+      const packet = runtime.GetProbeFrame()
+      assert.deepEqual(runtime.GetProbeFrame(), packet, 'Reading a captured probe frame twice does not drain its samples')
+      const probes = decodeProbeFrame(packet)
+      assert.equal(probes.probes.length, 6, 'Only active probes are sampled, in project order')
+      assert.equal(probes.stepsSampled, index * interval + 1)
+      probes.probes.forEach((probe, i) => {
+        assert.equal(probe.samples.length, i < 3 ? index ? interval : 1 : 0, 'Point probes sample every solver step, including between frames')
+        assert.equal(probe.profile?.length ?? 0, i < 3 ? 0 : 3)
+        assert.equal(probe.profileLength, i < 3 ? 0 : 2)
+      })
+      return { planes, packet, probes }
+    })
+    runtime.EndSimulation()
+    assert.throws(() => runtime.GetProbeFrame(), /no captured probe frame/)
+    return frames
+  }
+  const everyStep = recordProbes(1)
+  const sparse = recordProbes(3)
+  const histories = [0, 1, 2].map(i => sparse.flatMap(frame => Array.from(frame.probes.probes[i].samples)))
+  histories.forEach((values, i) => assert.deepEqual(values, everyStep.map(frame => frame.probes.probes[i].samples[0]), 'Capture intervals do not change point histories or integrated totals'))
+  sparse.forEach((frame, index) => {
+    for (let i = 3; i < 6; i++) assert.deepEqual(frame.probes.probes[i].profile, everyStep[index * 3].probes.probes[i].profile, 'Line profiles belong to the captured frame, including integration across unrecorded steps')
+  })
+  let integrated = 0
+  everyStep.forEach((frame, step) => {
+    const values = frame.probes.probes
+    integrated = step + 1 < 5 ? 0 : integrated + values[1].samples[0]
+    assert.equal(values[2].samples[0], Math.fround(integrated), 'Integrated point probes discard intensity before StartAfter')
+    assert.equal(values[3].profile[0], values[0].samples[0], 'Field point and line probes read the same full-precision sample')
+    assert.equal(values[4].profile[0], values[1].samples[0], 'Intensity point and line probes read the same full-precision sample')
+    assert.equal(values[5].profile[0], values[2].samples[0], 'Integrated point and line probes apply the same start gate')
+    const field = new Uint16Array(frame.planes.buffer, frame.planes.byteOffset, 64 * 48)
+    const fieldValue = values[0].samples[0]
+    assert.ok(Math.abs(halfValue(field[24 * 64 + 32]) - fieldValue) <= Math.abs(fieldValue) * .001 + 1e-7, 'Probe samples match the displayed field, before half-float quantisation')
+  })
+  assert.ok(histories[0].some(value => value !== 0))
+  assert.ok(histories[2].at(-1) > 0)
+
+  // Exercise closed OPFS-style files without a browser: histories are held once per run;
+  // the file contains only this capture's point delta and exact line profiles.
+  const files = new Map()
+  const directory = { async getFileHandle(name) { return {
+    async createWritable() {
+      let data
+      return { async write(bytes) { data = await bytes.arrayBuffer() }, async close() { files.set(name, new File([data], name)) }, async abort() {} }
+    },
+    async getFile() { return files.get(name) },
+  } } }
+  const active = project.probes.filter(probe => probe.active)
+  const series = active.map(() => new ProbeSeries())
+  for (const [index, frame] of sparse.entries()) {
+    frame.probes.probes.forEach((probe, i) => series[i].append(probe.samples))
+    await writeFrame(directory, index, frame.planes, frame.packet)
+  }
+  for (const index of [4, 0, 2]) {
+    const frame = await readFrame(directory, 'probe-run', index, 64, 48, active, series, 3)
+    assert.equal(frame.probes.step, index * 3)
+    assert.equal(frame.probes.probesStale, false)
+    assert.equal(frame.probes.probes[0].values.length, index * 3 + 1, 'Seeking never exposes later point samples')
+    assert.deepEqual(frame.probes.probes[0].values, Float32Array.from(histories[0].slice(0, index * 3 + 1)))
+    assert.deepEqual(frame.probes.probes[5].profile, sparse[index].probes.probes[5].profile, 'Seeking returns that frame\'s integrated line profile')
+  }
+  console.log(`Wasm scene, solver, probe sampling, integration, frame storage and seeking checks passed (peak field amplitude ${peak}).`)
 } finally {
   clearInterval(keepAlive)
 }

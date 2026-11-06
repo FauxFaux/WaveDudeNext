@@ -95,6 +95,15 @@ frame budget without changing the input project. The run ends at its last sample
 and returns two binary half-float planes: field, then square-root intensity. `EndSimulation()`
 releases the engine and snapshot. Image scenes report an error until image delivery is connected.
 
+Active probes are installed through the shared `ProbeSampler`, sampled after every solver step,
+and integrated using the shared `ProbeCollector` and engine. `GetProbeFrame()` returns the latest
+capture's binary probe packet: little-endian int32 probe count and steps completed; per active probe
+in project order, int32 point sample count, int32 profile count (-1 for point probes), float64 line
+length in canvas pixels, then float32 point samples and profile values. Point samples cover only
+steps since the previous capture; line profiles belong to the current capture. Reading the packet
+does not drain it. The worker stores it after the two half-float planes in the same closed frame file.
+Integrated intensity excludes values before the probe's start step.
+
 `RenderScene(projectJson)` independently normalises a canvas project and calls the shared
 `PartPainter.Paint` and `GlowingEdges.Compute`. It accepts either a complete project or just
 `scene` and `parts`. The result starts with two little-endian 32-bit integers (width, height),
@@ -114,6 +123,8 @@ Run `just check-wasm` to publish and exercise this export under Node. After an e
 project submission, source edits, deterministic frames and the storage-driven frame interval.
 The same check compares scene and edge pixels against native .NET output for the server commit's
 scene fixture and checks geometry edits, empty canvases and independent simulation lifetimes.
+It also checks point/line measurements, integrated start gates, sampling between captures and exact
+probe data when seeking stored frames.
 `just check-probe-graph` runs the retained graph calculation checks.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.
@@ -121,11 +132,15 @@ Run sends the current project to a dedicated worker. It uses half the estimated 
 storage, allowing 4096 bytes of file overhead per frame, and increases the capture interval if
 needed. Each field/intensity pair is written to a closed OPFS file before being announced.
 The UI reads the selected frame from disc into the existing previews and timeline; it has no
-RAM frame cache. Missing estimates, insufficient space and write/read errors fail explicitly.
+RAM frame cache. Point probe histories are retained once per run as growable float32 arrays in
+the page, exposing only the prefix through the selected frame. Line profiles stay on disc with their
+frames. Wasm retains only the current probe batch and integration totals. The storage budget includes
+the point samples and a conservative maximum size for every line profile.
+Missing estimates, insufficient space and write/read errors fail explicitly.
 Completion, Stop, project replacement and unmount terminate the worker and release its Wasm heap.
-Edits outside display settings and colour schemes cancel active work and mark retained results
+Edits outside display settings, colour schemes and probe graph box/axis settings cancel active work and mark retained results
 outdated. Display and palette edits recolour stored samples without cancelling the worker or
-invalidating its frames, including during startup. Probe recordings are not connected.
+invalidating its frames, including during startup. Probe measurement edits cancel the run and hide outdated recordings.
 New runs, project replacement and unmount delete the previous recording. Reloads/crashes can
 leave orphaned files; recovery and automatic orphan cleanup are deferred. See
 [FRAME-REGENERATION.md](docs/FRAME-REGENERATION.md) for the storage calculations and deferred

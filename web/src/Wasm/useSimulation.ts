@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { FramePair, RunStatus } from '../Api/Frames'
 import type { Project } from '../Model/Project'
+import type { Probe } from '../Api/Project.generated'
+import { ProbeSeries } from './ProbeFrames'
 import { waveDudeUrl } from './Runtime'
 import { createFrameStore, deleteFrameStore, readFrame } from './FrameStore'
 import type { SimulationMessage, SimulationRequest } from './Simulation.worker'
@@ -8,15 +10,18 @@ import type { SimulationMessage, SimulationRequest } from './Simulation.worker'
 interface Recording {
   runId: string
   directory?: FileSystemDirectoryHandle
+  probes: readonly Probe[]
+  series: ProbeSeries[]
 }
 
 /** Keep the selected picture in memory; all recorded frames are read from OPFS. */
 export function useSimulation(project: Project) {
   // Presentation edits recolour stored samples without invalidating the worker's input.
-  // Keep all other project changes conservative until their runtime boundaries are connected.
+  // Probe box/axis settings also belong to presentation (Probe.AffectsMeasurement in the shared model).
   const key = useMemo(() => {
     const { display: _display, colorSchemes: _schemes, ...inputs } = project
-    return JSON.stringify(inputs)
+    return JSON.stringify({ ...inputs, probes: project.probes.map(({ id, name, active, layer, measurement, kind, ax, ay, bx, by, startAfter }) =>
+      ({ id, name, active, layer, measurement, kind, ax, ay, bx, by, startAfter })) })
   }, [project])
   const worker = useRef<Worker | null>(null)
   const operation = useRef(0)
@@ -69,12 +74,13 @@ export function useSimulation(project: Project) {
     setFrame(undefined)
     seek(null)
     const runId = crypto.randomUUID()
-    const recording: Recording = { runId }
+    const probes = project.probes.filter(probe => probe.active)
+    const recording: Recording = { runId, probes, series: probes.map(() => new ProbeSeries()) }
     store.current = recording
     setRun({
       runId, projectRevision: 1, state: 'Starting', stepsDone: 0, totalSteps: 0,
       frameCount: 0, totalFrames: 0, width: project.scene.width, height: project.scene.height,
-      visualizeEvery: project.simulation.visualizeEvery, isStale: false, probesStale: true,
+      visualizeEvery: project.simulation.visualizeEvery, isStale: false, probesStale: false,
       error: null, hasIntensity: true, storageBudget: 0,
     })
     try {
@@ -100,6 +106,8 @@ export function useSimulation(project: Project) {
         if (data.type === 'started') {
           setRun(current => current && { ...current, ...data, state: 'Running' })
         } else if (data.type === 'stored') {
+          if (data.probeSamples.length !== recording.probes.length) { fail('The solver returned incompatible probe samples.'); return }
+          data.probeSamples.forEach((samples, i) => recording.series[i].append(samples))
           setRun(current => current && { ...current, frameCount: data.index + 1,
             stepsDone: data.index * current.visualizeEvery + 1 })
         } else if (data.type === 'completed') {
@@ -129,7 +137,7 @@ export function useSimulation(project: Project) {
     const { width, height } = run
     pendingRead.current = async () => {
       try {
-        const selected = await readFrame(directory, runId, index, width, height)
+        const selected = await readFrame(directory, runId, index, width, height, recording.probes, recording.series, run.visualizeEvery)
         if (readVersion.current === version && store.current === recording) setFrame(selected)
       } catch (error) {
         if (readVersion.current !== version || store.current !== recording) return
@@ -159,7 +167,7 @@ export function useSimulation(project: Project) {
   }, [])
 
   return {
-    run: run && { ...run, isStale: snapshot.current !== key }, busy,
+    run: run && { ...run, isStale: snapshot.current !== key, probesStale: snapshot.current !== key }, busy,
     frame,
     position, seek, start, stop, clear,
   }

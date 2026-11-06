@@ -3,6 +3,7 @@ export interface WaveDudeRuntime {
   RenderScene(projectJson: string): Uint8Array<ArrayBuffer>
   StartSimulation(projectJson: string, maxFrames: number): Int32Array<ArrayBuffer>
   NextFrame(): Uint8Array<ArrayBuffer>
+  GetProbeFrame(): Uint8Array<ArrayBuffer>
   EndSimulation(): void
 }
 

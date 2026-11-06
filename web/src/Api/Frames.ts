@@ -35,7 +35,10 @@ const FrameProbeSchema = z.strictObject({
   profileLength: z.number().min(0),
   stepsSampled: z.number().int().min(1),
 })
-export type FrameProbe = z.infer<typeof FrameProbeSchema>
+export type FrameProbe = Omit<z.infer<typeof FrameProbeSchema>, 'values' | 'profile'> & {
+  values: ArrayLike<number | null>
+  profile: ArrayLike<number | null> | null
+}
 
 const FrameProbesSchema = z.strictObject({
   runId: z.uuid(),
@@ -45,7 +48,7 @@ const FrameProbesSchema = z.strictObject({
   probesStale: z.boolean(),
   probes: z.array(FrameProbeSchema),
 })
-export type FrameProbes = z.infer<typeof FrameProbesSchema>
+export type FrameProbes = Omit<z.infer<typeof FrameProbesSchema>, 'probes'> & { probes: FrameProbe[] }
 
 /** Status of the local Wasm recording backed by browser disc storage. */
 export interface RunStatus {

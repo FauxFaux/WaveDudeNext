@@ -20,6 +20,7 @@ using System.Runtime.Versioning;
 using WaveDudeNext.Engine;
 using WaveDudeNext.Model;
 using WaveDudeNext.Parts;
+using WaveDudeNext.Probes;
 
 namespace WaveDudeNext.Wasm;
 
@@ -54,6 +55,9 @@ public static partial class Program
 			? SceneData.Empty(scene.Width, scene.Height, scene.DampingEdge, scene.RefractiveIndex, scene.Edges == EdgeMode.Open)
 			: SceneData.FromBgra(image.Bgra, image.Width, image.Height, image.StrideBytes, false, scene.DampingEdge, scene.Edges == EdgeMode.Open);
 		_engine = new WaveSimulator(data, EngineOptions.From(project.Simulation, scene, true), Emitter.FromProject(project));
+		_probeSampler = ProbeSampler.Build(project.Probes.Where(probe => probe.Active).Select(ProbeSpec.From).ToArray(), scene.Width, scene.Height, data.Rim);
+		_probeCollector = new ProbeCollector(_probeSampler);
+		_engine.SetProbes(_probeSampler);
 		_snapshot = _engine.CreateSnapshot(FrameShape.Full(scene.Width, scene.Height), true);
 		_visualizeEvery = Math.Max(project.Simulation.VisualizeEvery, (project.Simulation.Steps - 1) / maxFrames + 1);
 		_frameCount = (project.Simulation.Steps - 1) / _visualizeEvery + 1;
@@ -74,10 +78,12 @@ public static partial class Program
 		while (_stepsDone < target)
 		{
 			_engine.AdvanceOneStep();
+			_engine.SampleProbes();
 			_stepsDone++;
 		}
 		_engine.CaptureFrame(_snapshot, true);
 		_engine.AwaitFrame(_snapshot);
+		_probeFrame = CaptureProbeFrame();
 		byte[] planes = new byte[_snapshot.FieldBytes.Length * 2];
 		_snapshot.FieldBytes.CopyTo(planes);
 		_snapshot.IntensityBytes.CopyTo(planes.AsSpan(_snapshot.FieldBytes.Length));
@@ -92,6 +98,9 @@ public static partial class Program
 		_engine?.Dispose();
 		_engine = null;
 		_snapshot = null;
+		_probeSampler = null;
+		_probeCollector = null;
+		_probeFrame = [];
 		_nextFrame = 0;
 		_stepsDone = 0;
 	}

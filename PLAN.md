@@ -25,7 +25,12 @@ The shared library and Windows desktop solution remain unchanged.
   Completion and Stop terminate the worker;
   edits to simulation inputs cancel active work and mark retained frames outdated. Display and
   colour-scheme edits recolour stored samples while the simulation continues. Examples load from static JSON.
-  Image scenes and probe recordings remain unconnected.
+  Image scenes remain unconnected.
+- Active probes use the shared sampler and collector: point histories include every solver step,
+  line profiles belong to each captured frame, and integrated intensity honours the start step.
+  Point histories are retained once per run in the page; incremental samples and line profiles are
+  stored alongside each frame in OPFS. Seeking selects the history prefix and that frame's profile.
+  Probe measurement edits invalidate results; graph box/axis edits preserve the running simulation.
 - Shipped colour schemes are copied into static frontend data in `web/src/assets/color-schemes.ts`.
   The JavaScript renderer uses them directly, with project schemes taking precedence and legacy
   names still resolving. Colour selection does not require Wasm or a server.
@@ -49,7 +54,7 @@ carried across. Existing examples and Windows harnesses already present in `orig
 2. Add bounded batches of simulation steps. Process stop and edit messages between batches so
    cancellation remains responsive. Do not assume desktop task/thread scheduling works unchanged
    in a single-threaded Wasm runtime. Measure edit-to-picture latency and worker responsiveness.
-3. Connect probe graphs and playback to worker results, extending the existing run control and
+3. Connect playback to worker results, extending the existing run control and
    timeline seeking. Keep transfer queues bounded, identify results by project revision and
    run/frame identity, and discard stale presentation results after an edit or seek.
 4. Extend the first OPFS recording path with lifecycle/recovery support if needed. Long recordings

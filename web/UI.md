@@ -16,9 +16,12 @@ reload clears it. There is no workspace, HTTP API or SSE connection. Canvas
 renderers and the timeline display frames read from an OPFS disc recording of the current canvas project.
 The capture interval increases when necessary to fit half the estimated unused storage quota.
 Only the selected picture is retained in memory; there is no RAM frame cache.
-Run starts a dedicated Wasm worker; Stop or edits outside display settings and colour schemes
+Run starts a dedicated Wasm worker; Stop or edits outside display settings, colour schemes and probe graph box/axis settings
 terminate it. Display and palette edits recolour frames while the run continues. Examples load
-from static JSON. Probe recordings and image scene delivery remain unconnected.
+from static JSON. Image scene delivery remains unconnected. Active probes sample through the shared
+engine; point histories include every step and line profiles follow the selected frame. Integrated
+intensity honours the probe's start step. Graph box/axis edits preserve the run; measurement edits
+cancel it and hide outdated recordings.
 Canvas scene images and glowing edges are painted independently in a scene worker. Both pictures
 show the scene before a run and overlay edges on frames of matching dimensions. Overlay switches
 and gains apply per picture; source and display edits reuse the cached geometry.
