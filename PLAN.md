@@ -25,6 +25,10 @@ The shared library and Windows desktop solution remain unchanged.
   Completion and Stop terminate the worker;
   edits cancel active work and mark retained frames outdated. Examples load from static JSON.
   Image scenes, probe recordings and shared colour-scheme loading remain unconnected.
+- Canvas scene previews run independently in a dedicated Wasm worker using the shared part painter
+  and glowing-edge detector. Geometry edits replace the preview; source, display and timeline edits
+  reuse it. Both pictures show the scene before a run and apply their configured edge overlays
+  to compatible retained frames. Scene workers terminate after rendering or when superseded.
 - The generated Zod project schema is retained as a snapshot for existing frontend types.
   Its old server-dependent generator and contract verification are not part of this branch.
 

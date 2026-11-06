@@ -95,9 +95,25 @@ frame budget without changing the input project. The run ends at its last sample
 and returns two binary half-float planes: field, then square-root intensity. `EndSimulation()`
 releases the engine and snapshot. Image scenes report an error until image delivery is connected.
 
+`RenderScene(projectJson)` independently normalises a canvas project and calls the shared
+`PartPainter.Paint` and `GlowingEdges.Compute`. It accepts either a complete project or just
+`scene` and `parts`. The result starts with two little-endian 32-bit integers (width, height),
+followed by two tightly packed RGBA planes: scene image, then glowing edges. An unpainted canvas
+returns only the eight-byte header. Image scenes fail explicitly. The browser does not need
+the server experiment's PNG encoding/decoding for these local pixels.
+
+`useScene` caches the current geometry independently of simulation results, ignoring source,
+display, timeline, object name and identity edits. A dedicated scene worker computes and transfers
+both planes without blocking the UI, then terminates to release its Wasm heap. Geometry changes
+terminate pending workers and immediately hide obsolete scene layers. The pictures show the scene
+when there is no wave frame; each layer's overlay switch and gain control the translucent glowing
+edges, including over retained frames of matching dimensions.
+
 Run `just check-wasm` to publish and exercise this export under Node. After an existing build,
 `npm --prefix web run check-wasm` checks the generated bundle without publishing again, including
 project submission, source edits, deterministic frames and the storage-driven frame interval.
+The same check compares scene and edge pixels against native .NET output for the server commit's
+scene fixture and checks geometry edits, empty canvases and independent simulation lifetimes.
 `just check-probe-graph` runs the retained graph calculation checks.
 
 The UI edits one Project in root Preact state and opens/saves JSON text without a server.

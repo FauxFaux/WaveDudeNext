@@ -17,7 +17,6 @@
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
-using System.Text.Json;
 using WaveDudeNext.Engine;
 using WaveDudeNext.Model;
 using WaveDudeNext.Parts;
@@ -48,11 +47,7 @@ public static partial class Program
 	{
 		EndSimulation();
 		ArgumentOutOfRangeException.ThrowIfLessThan(maxFrames, 1);
-		Project project = JsonSerializer.Deserialize(projectJson, ProjectJsonContext.Default.Project)
-			?? throw new ArgumentException("The project is empty.", nameof(projectJson));
-		project.Normalize();
-		if (project.Scene.Mode != SceneMode.Canvas)
-			throw new InvalidOperationException("Image scenes are not supported in the browser yet. Choose a canvas scene.");
+		Project project = ReadCanvasProject(projectJson);
 		Scene scene = project.Scene;
 		var image = PartPainter.Paint(null, scene.Width, scene.Height, scene.RefractiveIndex, project.Parts);
 		SceneData data = image == null

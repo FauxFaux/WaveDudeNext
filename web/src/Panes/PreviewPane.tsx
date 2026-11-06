@@ -1,3 +1,4 @@
+import { useScene } from '../Wasm/useScene'
 import type { FramePair, RunStatus } from '../Api/Frames'
 import type { Project, ProjectSelection } from '../Model/Project'
 import { IconView } from '../Controls/IconView'
@@ -22,6 +23,7 @@ interface PreviewPaneProps {
 }
 
 export function PreviewPane({ orientation, onOrientationChange, onRun, onStop, run, frame, project, canEdit, onSchemeChange, selection, onSelectProbe, position, onSeek: seek }: PreviewPaneProps) {
+  const { scene, error: sceneError } = useScene(project)
   const count = run?.frameCount ?? 0
   const last = Math.max(0, count - 1)
   const selected = position
@@ -31,10 +33,12 @@ export function PreviewPane({ orientation, onOrientationChange, onRun, onStop, r
     <section class="preview-pane" aria-label="Preview">
       <div class="preview-pictures">
         <div class={`pictures ${orientation}`}>
-          <PictureFrame layer="Field" frame={frame?.field} index={frame?.index} stale={run?.isStale}
+          <PictureFrame layer="Field" frame={frame?.field} index={frame?.index} stale={run?.isStale} error={sceneError}
+            scene={scene} canvasWidth={project?.scene.width} canvasHeight={project?.scene.height}
             settings={project?.display.field} projectSchemes={project?.colorSchemes ?? []} sharedSchemes={[]} canEdit={canEdit}
             onSchemeChange={name => onSchemeChange('field', name)} />
-          <PictureFrame layer="Intensity" frame={frame?.intensity} index={frame?.index} stale={run?.isStale}
+          <PictureFrame layer="Intensity" frame={frame?.intensity} index={frame?.index} stale={run?.isStale} error={sceneError}
+            scene={scene} canvasWidth={project?.scene.width} canvasHeight={project?.scene.height}
             settings={project?.display.intensity} projectSchemes={project?.colorSchemes ?? []} sharedSchemes={[]} canEdit={canEdit}
             onSchemeChange={name => onSchemeChange('intensity', name)} />
         </div>

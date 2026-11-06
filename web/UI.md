@@ -18,6 +18,9 @@ The capture interval increases when necessary to fit half the estimated unused s
 Only the selected picture is retained in memory; there is no RAM frame cache.
 Run starts a dedicated Wasm worker; Stop or project edits terminate it. Examples load
 from static JSON. Probe recordings and image scene delivery remain unconnected.
+Canvas scene images and glowing edges are painted independently in a scene worker. Both pictures
+show the scene before a run and overlay edges on frames of matching dimensions. Overlay switches
+and gains apply per picture; source and display edits reuse the cached geometry.
 
 `src/Wasm/Runtime.ts` lazily loads the new .NET runtime from Vite's static assets.
 Simulation uses `src/Wasm/Simulation.worker.ts` and the shared solver exports;
@@ -57,12 +60,11 @@ status, timeline, and transport visible as the window height changes; wrap
 transport controls when needed. The current desktop shell has a 600 px minimum
 width and 420 px minimum height. A phone-specific layout is not implemented.
 
-Each picture retains the 16:9 placeholder canvas aspect ratio and fits inside its
-viewport. The viewport is a CSS size container; `cqw`/`cqh` constrain the picture
+Each picture uses its frame's aspect ratio, or the current canvas dimensions before a run, and fits
+inside its viewport. The viewport is a CSS size container; `cqw`/`cqh` constrain the picture
 in both dimensions. The canvas is absolutely positioned inside that frame so
-its intrinsic 1920 × 1080 dimensions cannot force the grid larger. When scene
-sizes become dynamic, derive the aspect ratio and canvas backing size from
-actual frame metadata rather than retaining the placeholder dimensions.
+its intrinsic dimensions cannot force the grid larger. Scene and edge canvases use the shared
+painter's native dimensions; incompatible scene layers stay hidden over older wave frames.
 
 ## Component names and paths
 
