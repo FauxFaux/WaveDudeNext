@@ -12,6 +12,7 @@ const paths = {
   next: 'M19 5v14M6 5l9 7-9 7Z', last: 'M21 5v14M5 5l9 7-9 7Zm9 0v14',
   loop: 'M5 7h12l3 3M17 4l3 3-3 3M19 17H7l-3-3m3 6-3-3 3-3',
   stacked: 'M3 3h18v18H3Zm0 9h18', sideBySide: 'M3 3h18v18H3Zm9-9v18',
+  copy: 'M9 9h12v12H9ZM15 9V3H3v12h6',
 } as const
 
 export type IconName = keyof typeof paths

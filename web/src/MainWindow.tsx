@@ -15,9 +15,19 @@ import './MainWindow.css'
 
 const { exampleProjects } = await import('./example-projects');
 
+function readExample(id: string) {
+  const path = `./assets/examples/${id.replace(/\.wdproj$/, '.json')}`
+  return readProject(exampleProjects[path])
+}
+
 export function MainWindow() {
-  const [project, setProject] = useState(createProject)
+  const [linkedExample] = useState(() => {
+    const match = /^#\/do-run\?example=([1-9]\d*)$/.exec(window.location.hash)
+    return match ? examples.find(example => example.number === Number(match[1])) : undefined
+  })
+  const [project, setProject] = useState(() => linkedExample ? readExample(linkedExample.id) : createProject())
   const simulation = useSimulation(project)
+  const [copyLinkError, setCopyLinkError] = useState<string | null>(null)
   const [selection, setSelection] = useState<ProjectSelection>('project')
   const [sourceDrafts, setSourceDrafts] = useState<Record<string, SourceDraft>>({})
   const [isModified, setIsModified] = useState(false)
@@ -79,6 +89,10 @@ export function MainWindow() {
   }, [isModified])
 
   useEffect(() => {
+    if (linkedExample) void simulation.start()
+  }, [])
+
+  useEffect(() => {
     if (project && typeof selection !== 'string' && !selectedObject(project, selection)) setSelection(selection.collection)
   }, [project, selection])
 
@@ -122,10 +136,20 @@ export function MainWindow() {
   }
 
   function openExample(id: string) {
-    const path = `./assets/examples/${id.replace(/\.wdproj$/, '.json')}`
-    replaceProject(readProject(exampleProjects[path]))
+    replaceProject(readExample(id))
     closeMenus()
     document.querySelector<HTMLElement>('.main-menu > details > summary')?.focus()
+  }
+
+  async function copyExampleLink(number: number) {
+    const url = new URL(window.location.href)
+    url.hash = `/do-run?example=${number}`
+    setCopyLinkError(null)
+    try {
+      await navigator.clipboard.writeText(url.href)
+    } catch {
+      setCopyLinkError('Could not copy the example link. Check clipboard permissions and try again.')
+    }
   }
 
   function newProject() {
@@ -147,10 +171,13 @@ export function MainWindow() {
           <details><summary>File</summary><div class="menu-popup">
             <button onClick={newProject}>Reset project</button>
             <button onClick={() => showJsonDialog('open')}>Open project…</button>
-            <details class="examples-menu"><summary>Examples</summary><div class="menu-popup examples-popup">
-              {examples.map(example => <button key={example.id} onClick={() => openExample(example.id)}>
-                {example.number}. {example.title}
-              </button>)}
+            <details class="examples-menu"><summary>Examples<span class="submenu-indicator" aria-hidden="true">&gt;</span></summary><div class="menu-popup examples-popup">
+              {examples.map(example => <div class="example-row" key={example.id}>
+                <button onClick={() => openExample(example.id)}>{example.number}. {example.title}</button>
+                <button class="copy-example-link" title={`Copy link to example ${example.number}`} aria-label={`Copy link to example ${example.number}`}
+                  onClick={() => void copyExampleLink(example.number)}><IconView name="copy" /></button>
+              </div>)}
+              {copyLinkError && <p role="alert">{copyLinkError}</p>}
             </div></details>
             <button onClick={() => showJsonDialog('save')}>Save project…</button>
             <hr /><button disabled>Export…</button>

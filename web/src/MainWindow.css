@@ -153,5 +153,9 @@
 }
 
 .main-menu .examples-menu { position: relative; height: auto; }
-.main-menu .examples-menu > summary { padding: 6px 10px; }
+.main-menu .examples-menu > summary { justify-content: space-between; padding: 6px 10px; }
+.submenu-indicator { margin-left: 16px; }
 .examples-menu > .examples-popup { left: 100%; top: 0; width: max-content; max-width: 70vw; max-height: 75vh; overflow-y: auto; }
+.example-row { display: flex; }
+.example-row > button:first-child { flex: 1; }
+.example-row > .copy-example-link { flex-shrink: 0; align-items: center; justify-content: center; width: 32px; padding: 6px; }
